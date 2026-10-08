@@ -6,5 +6,6 @@
 - (void *)symbol:(const char *)name;
 - (BOOL)present;
 - (BOOL)capture:(NSString *)path;
+- (CGSize)drawableSize;
 - (void)close;
 @end

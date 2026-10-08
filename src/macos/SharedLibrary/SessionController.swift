@@ -207,6 +207,10 @@ final class PipeReader: @unchecked Sendable {
 
     public func togglePause() { send(state == "paused" ? "resume" : "pause") }
 
+    public func setPauseWhenInactive(_ enabled: Bool) {
+        send("set-pause-inactive", values: ["enabled": enabled])
+    }
+
     public func stop() {
         guard active, stopping == nil else { return }
         send("stop")

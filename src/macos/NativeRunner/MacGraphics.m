@@ -14,17 +14,20 @@
     PFNEGLGETPROCADDRESSPROC _proc;
     PFNEGLMAKECURRENTPROC _makeCurrent;
     PFNEGLSWAPBUFFERSPROC _swap;
+    PFNEGLQUERYSURFACEPROC _querySurface;
     PFNEGLDESTROYSURFACEPROC _destroySurface;
     PFNEGLDESTROYCONTEXTPROC _destroyContext;
     PFNEGLTERMINATEPROC _terminate;
     PFNGLREADPIXELSPROC _readPixels;
     PFNGLFINISHPROC _finish;
     BOOL _offscreen;
+    CGSize _renderSize;
 }
 - (instancetype)initWithLibrary:(NSString *)path layer:(CAMetalLayer *)layer error:(NSError **)error
 {
     if (!(self = [super init])) return nil;
     _offscreen = layer == nil;
+    _renderSize = layer ? layer.drawableSize : CGSizeMake(640, 400);
     const char *stage = "dlopen";
     _library = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
     if (!_library) goto failed;
@@ -38,10 +41,11 @@
     PFNEGLCREATEWINDOWSURFACEPROC windowSurface = dlsym(_library, "eglCreateWindowSurface");
     PFNEGLCREATEPBUFFERSURFACEPROC pbuffer = dlsym(_library, "eglCreatePbufferSurface");
     _makeCurrent = dlsym(_library, "eglMakeCurrent"); _swap = dlsym(_library, "eglSwapBuffers");
+    _querySurface = dlsym(_library, "eglQuerySurface");
     _destroySurface = dlsym(_library, "eglDestroySurface"); _destroyContext = dlsym(_library, "eglDestroyContext");
     _terminate = dlsym(_library, "eglTerminate");
     if (!getDisplay || !initialize || !choose || !createContext || !windowSurface || !pbuffer || !_makeCurrent ||
-        !_swap || !_destroySurface || !_destroyContext || !_terminate) goto failed;
+        !_swap || !_querySurface || !_destroySurface || !_destroyContext || !_terminate) goto failed;
     EGLint attributes[] = {EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE, EGL_NONE};
     stage = "display-initialize";
     _display = getDisplay(EGL_PLATFORM_ANGLE_ANGLE, NULL, attributes);
@@ -62,7 +66,7 @@
     PFNGLVIEWPORTPROC viewport = (void *)_proc("glViewport");
     _readPixels = (void *)_proc("glReadPixels"); _finish = (void *)_proc("glFinish");
     if (!viewport || !_readPixels || !_finish) goto failed;
-    viewport(0, 0, 640, 400);
+    viewport(0, 0, _renderSize.width, _renderSize.height);
     return self;
 failed:
     {
@@ -85,13 +89,21 @@ failed:
 - (BOOL)capture:(NSString *)path
 {
     if (!_readPixels) return NO;
-    NSMutableData *pixels = [NSMutableData dataWithLength:640 * 400 * 4];
-    _finish(); _readPixels(0, 0, 640, 400, GL_RGBA, GL_UNSIGNED_BYTE, pixels.mutableBytes);
-    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:640 pixelsHigh:400
-        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:640*4 bitsPerPixel:32];
-    for (int row = 0; row < 400; row++) memcpy(bitmap.bitmapData + row * 640 * 4, (char *)pixels.bytes + (399-row) * 640 * 4, 640 * 4);
+    NSUInteger width = _renderSize.width, height = _renderSize.height;
+    NSMutableData *pixels = [NSMutableData dataWithLength:width * height * 4];
+    _finish(); _readPixels(0, 0, (GLsizei)width, (GLsizei)height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.mutableBytes);
+    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width*4 bitsPerPixel:32];
+    for (NSUInteger row = 0; row < height; row++) memcpy(bitmap.bitmapData + row * width * 4, (char *)pixels.bytes + (height-1-row) * width * 4, width * 4);
     NSData *png = [bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     return png && [png writeToFile:path options:NSDataWritingAtomic error:NULL];
+}
+- (CGSize)drawableSize
+{
+    EGLint width = 0, height = 0;
+    if (!_querySurface || !_querySurface(_display, _surface, EGL_WIDTH, &width) ||
+        !_querySurface(_display, _surface, EGL_HEIGHT, &height)) return CGSizeZero;
+    return CGSizeMake(width, height);
 }
 - (void)close
 {

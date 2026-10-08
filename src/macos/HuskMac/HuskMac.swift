@@ -85,7 +85,13 @@ import ImageIO
     }
     func settings(_ game: LibraryGame, muted: Bool? = nil, pause: Bool? = nil) {
         guard let repository else { return }
-        Task { do { try await repository.update(game.id, muted: muted, pauseWhenInactive: pause); await reload() } catch { self.error = error.localizedDescription } }
+        Task {
+            do {
+                try await repository.update(game.id, muted: muted, pauseWhenInactive: pause)
+                if let pause, session.gameID == game.id { session.setPauseWhenInactive(pause) }
+                await reload()
+            } catch { self.error = error.localizedDescription }
+        }
     }
     func chooseVM() -> URL? {
         let panel = NSOpenPanel()
@@ -276,10 +282,10 @@ struct GameDetail: View {
                 }
                 GroupBox("游戏设置") {
                     VStack(alignment: .leading, spacing: 12) {
-                        Toggle("静音", isOn: Binding(get: { game.settings.muted }, set: { model.settings(game, muted: $0) }))
+                        Toggle("静音", isOn: Binding(get: { game.settings.muted }, set: { model.settings(game, muted: $0) })).disabled(running)
                         Toggle("游戏窗口失去焦点时暂停", isOn: Binding(get: { game.settings.pauseWhenInactive }, set: { model.settings(game, pause: $0) }))
-                        Text("设置在下次启动游戏时生效。").font(.caption).foregroundStyle(.secondary)
-                    }.padding(10).disabled(running)
+                        Text("失焦暂停立即生效；静音在下次启动游戏时生效。").font(.caption).foregroundStyle(.secondary)
+                    }.padding(10)
                 }
                 if model.vmAvailability.installed {
                     Button("在 Android 中安装并运行") { model.playVM(game) }

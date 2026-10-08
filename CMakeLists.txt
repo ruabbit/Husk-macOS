@@ -56,7 +56,8 @@ add_executable(MinecraftProbe tests/macos/MinecraftProbe.c)
 target_link_libraries(MinecraftProbe PRIVATE GameActivityRuntime)
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
-    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacTextInput.m)
+    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c
+    ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(NativeRunner PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(NativeRunner PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"
@@ -131,6 +132,13 @@ target_include_directories(MacTextInputTests PRIVATE ${MAC}/NativeRunner)
 target_compile_options(MacTextInputTests PRIVATE -fobjc-arc)
 target_link_libraries(MacTextInputTests PRIVATE "-framework AppKit")
 add_test(NAME macos-text-input COMMAND MacTextInputTests)
+add_executable(MacRenderSurfaceTests tests/macos/RenderSurface.m ${MAC}/NativeRunner/MacRenderView.m
+    ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m)
+target_include_directories(MacRenderSurfaceTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include)
+target_compile_options(MacRenderSurfaceTests PRIVATE -fobjc-arc)
+target_link_libraries(MacRenderSurfaceTests PRIVATE "-framework AppKit" "-framework QuartzCore" "-framework Metal")
+add_test(NAME macos-render-surface COMMAND MacRenderSurfaceTests "${HUSK_DEPS}/lib/libANGLE-shared.dylib")
+set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
 add_executable(QuadMathTests tests/macos/QuadMath.c)
 target_link_libraries(QuadMathTests PRIVATE GameActivityRuntime)
 add_test(NAME android-binary128 COMMAND QuadMathTests)

@@ -15,6 +15,7 @@
 #include "husk-tl-jni.h"
 #include "MacDiagnostics.h"
 #import "MacTextInput.h"
+#import "MacRenderView.h"
 #include <sys/stat.h>
 #include <stdatomic.h>
 #include <fcntl.h>
@@ -60,32 +61,11 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (void)clearInput;
 @end
 
-@interface GameView : MacTextInput
+@interface GameView : MacRenderView
 @property(weak) Runner *runner;
-@property CAMetalLayer *surface;
 @end
 @implementation GameView
-- (instancetype)initWithFrame:(NSRect)frame
-{
-    if((self=[super initWithFrame:frame])) {
-        self.wantsLayer=YES;self.layer.backgroundColor=NSColor.blackColor.CGColor;
-        self.surface=[CAMetalLayer layer]; self.surface.drawableSize=CGSizeMake(surfaceWidth,surfaceHeight);
-        [self.layer addSublayer:self.surface];
-        self.needsLayout=YES;
-    }
-    return self;
-}
-- (BOOL)isFlipped {return YES;}
-- (void)setFrameSize:(NSSize)size {[super setFrameSize:size];self.needsLayout=YES;}
 - (BOOL)acceptsFirstResponder {return YES;}
-- (void)layout
-{
-    [super layout];
-    CGFloat scale=MIN(self.bounds.size.width/surfaceWidth,self.bounds.size.height/surfaceHeight);
-    [CATransaction begin];[CATransaction setDisableActions:YES];
-    self.surface.frame=CGRectMake((self.bounds.size.width-surfaceWidth*scale)/2,(self.bounds.size.height-surfaceHeight*scale)/2,surfaceWidth*scale,surfaceHeight*scale);
-    self.surface.drawableSize=CGSizeMake(surfaceWidth,surfaceHeight);[CATransaction commit];
-}
 - (void)keyDown:(NSEvent *)event
 {
     if(minecraft&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
@@ -108,15 +88,17 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
         if(self.runner.cursorCaptured&&(event.type==NSEventTypeMouseMoved||event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged)) {
             tl_ga_mouse_relative(event.deltaX,event.deltaY,(int)NSEvent.pressedMouseButtons&7);self.runner.pointerEvents++;return;
         }
-        CGFloat scale=MIN(self.bounds.size.width/surfaceWidth,self.bounds.size.height/surfaceHeight);
-        float x=(point.x-(self.bounds.size.width-surfaceWidth*scale)/2)/scale;
-        float y=(point.y-(self.bounds.size.height-surfaceHeight*scale)/2)/scale;
+        NSPoint guest=[self renderPointForViewPoint:point];
+        float x=guest.x,y=guest.y;
         if(x<0||x>surfaceWidth||y<0||y>surfaceHeight){if(down||event.type==NSEventTypeMouseMoved)return;x=MAX(0,MIN(surfaceWidth,x));y=MAX(0,MIN(surfaceHeight,y));}
         int buttons=(int)NSEvent.pressedMouseButtons & 7;
         int action=event.type==NSEventTypeScrollWheel?8:event.type==NSEventTypeMouseMoved?7:
             event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged?2:down?0:1;
         tl_ga_mouse(action,x,y,buttons,event.scrollingDeltaY);
-    } else mac_input_pointer(&self.runner->input,point.x,point.y,self.bounds.size.width,self.bounds.size.height,down && [self.runner.state isEqual:@"running"]);
+    } else {
+        NSPoint guest=[self renderPointForViewPoint:point];
+        mac_input_pointer(&self.runner->input,guest.x,guest.y,surfaceWidth,surfaceHeight,down && [self.runner.state isEqual:@"running"]);
+    }
     self.runner.pointerEvents++;
 }
 - (void)mouseDown:(NSEvent *)event {[self.window makeFirstResponder:self];[self pointer:event down:YES];}
@@ -326,7 +308,7 @@ static int androidKey(unsigned code)
 {
     OrbitSave save={0};if(self.loaded&&!minecraft)self.save(&save);
     [self event:@"status" detail:@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
-        @"runtime":minecraft?@"minecraft":@"orbit",@"audioFrames":@(minecraft?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(minecraft?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
+        @"runtime":minecraft?@"minecraft":@"orbit",@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(minecraft?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(minecraft?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
         @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)}];
 }
 - (void)command:(NSDictionary *)message
@@ -339,6 +321,10 @@ static int androidKey(unsigned code)
     else if([command isEqual:@"pause"]&&[self.state isEqual:@"running"]) [self togglePause:nil];
     else if([command isEqual:@"resume"]&&[self.state isEqual:@"paused"]) [self togglePause:nil];
     else if([command isEqual:@"status"]) [self status];
+    else if([command isEqual:@"set-pause-inactive"]&&[message[@"enabled"] isKindOfClass:NSNumber.class]) {
+        pauseInactive=[message[@"enabled"] boolValue];
+        [self event:@"pause-policy" detail:@{@"pauseWhenInactive":@(pauseInactive)}];
+    }
     else if(automation&&[command isEqual:@"input"]&&[self.state isEqual:@"running"]) {
         NSString *source=message[@"source"];
         if([source isEqual:@"key"]) {[self guestKey:[message[@"code"] unsignedIntValue] down:[message[@"down"] boolValue] repeat:NO];}
@@ -356,7 +342,7 @@ static int androidKey(unsigned code)
         }
         else if([source isEqual:@"pointer"]) {mac_input_pointer(&input,[message[@"x"] floatValue],[message[@"y"] floatValue],640,400,[message[@"down"] boolValue]);self.pointerEvents++;}
         else if([source isEqual:@"controller"]) {mac_input_controller(&input,[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"restart"] boolValue]);self.controllerEvents++;}
-        else if([source isEqual:@"focus-lost"]) [self clearInput];
+        else if([source isEqual:@"focus-lost"]) [self windowDidResignKey:[NSNotification notificationWithName:NSWindowDidResignKeyNotification object:self.window]];
         [self event:@"input" detail:nil];
     }
     else if(automation&&!minecraft&&[command isEqual:@"step"]) {
@@ -439,9 +425,10 @@ static int androidKey(unsigned code)
     if(![self validateFixture]){[self finish:NO reason:@"游戏文件校验或运行入口检查未通过，请重新导入完整 APK。"];return;}
     CAMetalLayer *layer=nil;
     if(!headless) {
-        self.window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,500) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+        NSRect initialFrame=NSMakeRect(0,0,minecraft?960:800,minecraft?540:500);
+        self.window=[[NSWindow alloc] initWithContentRect:initialFrame styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
         self.window.acceptsMouseMovedEvents=YES;self.window.delegate=self;self.window.restorable=NO;self.window.releasedWhenClosed=NO;self.window.contentMinSize=NSMakeSize(minecraft?854:640,minecraft?480:400);
-        GameView *view=[[GameView alloc] initWithFrame:NSMakeRect(0,0,800,500)];view.runner=self;self.window.contentView=view;
+        GameView *view=[[GameView alloc] initWithFrame:initialFrame renderSize:NSMakeSize(surfaceWidth,surfaceHeight)];view.runner=self;self.window.contentView=view;
         self.textInput=view;
         [view layoutSubtreeIfNeeded];layer=view.surface;
         self.window.title=gameTitle;[self.window center];[self.window makeFirstResponder:view];

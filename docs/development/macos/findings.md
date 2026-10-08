@@ -86,3 +86,9 @@
 - 当前最终候选 11/11 CTest、P0 30/30、4 个合并 C 文件 iOS 条件编译及嵌套签名/依赖闭包通过。用户 APK 已实际渲染菜单、列出隔离复制的 P4 世界，继续做世界和退出检查。
 
 - 最终交付的实际日常记录已按当前组件可试运行，无需 index 数据迁移或重导；旧索引原字节保留。新候选只启动一次且保持运行。完整证据和边界见 docs/2026-10-08-upstream-sync-report.md 与 results.json。
+
+## 原生窗口尺寸契约（2026-10-09）
+
+- ANGLE `WindowSurfaceMtl::calcExpectedDrawableSize` 使用 `bounds.size × contentsScale`，`initialize` 会为传入的 CAMetalLayer 开启宽高 autoresizing，`checkIfLayerResized` 会在获取 drawable 时重设缓冲区。仅反复写 `drawableSize` 无法固定 guest 分辨率。
+- `MacRenderView` 让 Metal 图层及其直接父图层始终保持 guest 像素 bounds，父图层通过 transform 显示在 AppKit 内容区域中。由此避免渲染线程与主线程竞争同一 layer.bounds，也无需给现有 GameActivity/JNI 增加不完整的 resize 协议。
+- 默认失焦暂停为本地移植新增，旧配置将 true 持久化；仅更改 Swift 默认值不会改变已有游戏。本轮保留其他游戏选择，单独更改用户当前 Minecraft；默认值、持久化兼容及运行中策略分别验证。

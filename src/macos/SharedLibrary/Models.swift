@@ -8,7 +8,7 @@ public enum CompatibilityEvidence {
 
 public struct GameSettings: Codable, Equatable, Sendable {
     public var muted = false
-    public var pauseWhenInactive = true
+    public var pauseWhenInactive = false
     public init() {}
 }
 

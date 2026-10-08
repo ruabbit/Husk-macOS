@@ -32,6 +32,7 @@ struct CheckFailure: Error { let message: String }
             let repository = try LibraryRepository(paths: paths, trustedFixtureHash: hash)
             let first = try await repository.importGame(resource.appendingPathComponent("Fixtures/OrbitGarden.apk"))
             let second = try await repository.importGame(resource.appendingPathComponent("Fixtures/OrbitGardenDusk.apk"))
+            try check(!first.settings.pauseWhenInactive && !second.settings.pauseWhenInactive, "new-games-keep-running-without-focus")
             try check(first.playable && second.playable && first.id != second.id, "import-two-playable-fixtures")
             try check(FileManager.default.fileExists(atPath: paths.game(first.id).appendingPathComponent("icon.data").path), "import-preserves-icon")
             let duplicate = try await repository.importGame(cases.appendingPathComponent("compressed.xapk"))
@@ -55,7 +56,8 @@ struct CheckFailure: Error { let message: String }
             async let focusUpdate: Void = repository.update(first.id, pauseWhenInactive: true)
             _ = try await (muteUpdate, focusUpdate)
             let merged = try await reopened.games().first(where: { $0.id == first.id })?.settings
-            try check(merged == GameSettings(), "independent-setting-updates-preserve-both-fields")
+            var mergedExpected = GameSettings(); mergedExpected.pauseWhenInactive = true
+            try check(merged == mergedExpected, "independent-setting-updates-preserve-both-fields")
             try await repository.update(first.id, settings: settings)
             let brokenPaths = LibraryPaths(root: run.appendingPathComponent("BrokenLibrary"))
             let broken = try LibraryRepository(paths: brokenPaths, trustedFixtureHash: hash)
@@ -95,8 +97,26 @@ struct CheckFailure: Error { let message: String }
             try await event("step", values: ["frames": 8], kind: "status")
             try check((game()["x"] as? Double ?? 0) == 320, "controller-path-moves-guest-player")
             try await event("input", values: ["source": "focus-lost"], kind: "input")
+            let unfocusedTicks = session.latest["ticks"] as? Int ?? 0
             try await event("step", values: ["frames": 8], kind: "status")
             try check((game()["x"] as? Double ?? 0) == 320, "focus-loss-clears-controller-state")
+            try check(session.state == "running" && session.latest["ticks"] as? Int == unfocusedTicks + 8,
+                      "focus-loss-keeps-simulation-running-by-default")
+            session.setPauseWhenInactive(true)
+            try await event("status", kind: "status")
+            try check(session.latest["pauseWhenInactive"] as? Bool == true, "focus-policy-updates-without-restarting")
+            try await event("input", values: ["source": "key", "code": 124, "down": true], kind: "input")
+            try await event("input", values: ["source": "focus-lost"], kind: "input")
+            try check(session.state == "paused", "explicit-focus-pause-uses-window-delegate-policy")
+            session.setPauseWhenInactive(false)
+            try await event("status", kind: "status")
+            try check(session.state == "paused" && session.latest["pauseWhenInactive"] as? Bool == false,
+                      "policy-change-does-not-resume-a-paused-game")
+            try await event("resume", kind: "state")
+            try await event("input", values: ["source": "focus-lost"], kind: "input")
+            try await event("step", values: ["frames": 8], kind: "status")
+            try check(session.state == "running" && (game()["x"] as? Double ?? 0) == 320,
+                      "disabled-focus-pause-still-releases-held-key")
             for point in [[110,105],[250,85],[390,105],[530,85],[530,320],[390,300],[250,320],[110,300]] {
                 try await event("input", values: ["source": "pointer", "x": point[0], "y": point[1], "down": true], kind: "input")
                 try await event("step", values: ["frames": 180], kind: "status")
