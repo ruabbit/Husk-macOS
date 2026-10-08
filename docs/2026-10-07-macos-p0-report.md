@@ -18,7 +18,7 @@
 | 标准 MAP_JIT，仅 allow-jit | 开关线程写保护后，生成代码返回 42 | 证明标准 JIT 本身可用 |
 | 标准 MAP_JIT，执行代码时向同一 JIT 区域的数据地址写入 | SIGBUS | 不能直接替换当前 ELF 双映射契约 |
 
-选定的 [Runner entitlement](/Users/tanmy/Projects/Husk-macOS/src/macos-p0/NativeRunner.entitlements) 只有 `com.apple.security.cs.allow-unsigned-executable-memory=true`。代码仍通过 RW 地址写入，通过 RX 地址执行，并显式刷新指令缓存。两者距离保持固定且在 loader 的 ADRP 可达范围内。
+选定的 [Runner entitlement](../tests/macos-p0/harness/NativeRunner.entitlements) 只有 `com.apple.security.cs.allow-unsigned-executable-memory=true`。代码仍通过 RW 地址写入，通过 RX 地址执行，并显式刷新指令缓存。两者距离保持固定且在 loader 的 ADRP 可达范围内。
 
 这项 entitlement 放宽整个 Runner 的可执行内存限制；双别名也允许同一物理页同时具有可写和可执行的不同视图。P0 接受这一取舍以保留现有 loader 的地址模型。未来主界面不需要此权限，Native Runner 每次运行创建新进程。进程隔离用于生命周期和崩溃回收，不构成文件或网络安全沙箱。
 
@@ -36,7 +36,7 @@ Apple 文档依据：[unsigned executable memory entitlement](https://developer.
 | allocator 对零长度、round-up 溢出和环境大小参数缺少检查 | 可能返回重复地址或错误大小。现在拒绝无效参数，失败不修改分配输出 | 零长度、SIZE_MAX、非法 `TL_XMEM_MIB`、耗尽与原有映射完整性 |
 | 连续异常退出触发 AppKit 恢复窗口对话框 | 对话框在 didFinishLaunching 之前阻塞启动。一次性 Runner 窗口设为不恢复，并在进程内设置 `ApplePersistenceIgnoreState`，由监督器决定重启；不写全局 defaults | 保留原有崩溃历史后重跑，正常/故障重启和 20 次启停通过 |
 
-相关改动位于 [新版 loader](/Users/tanmy/Projects/Husk-macOS/src/translation-layer-next/husk-tl-ld.c)、[allocator](/Users/tanmy/Projects/Husk-macOS/src/translation-layer-next/husk-tl-xmem.c)、[classic loader](/Users/tanmy/Projects/Husk-macOS/src/translation-layer/husk-tl-load.c)。这些属于共享运行时代码；三个文件的 iOS arm64/16.4 语法检查通过，iOS 设备运行尚未验证。
+相关改动位于 [新版 loader](../src/translation-layer-next/husk-tl-ld.c)、[allocator](../src/translation-layer-next/husk-tl-xmem.c)、[classic loader](../src/translation-layer/husk-tl-load.c)。这些属于共享运行时代码；三个文件的 iOS arm64/16.4 语法检查通过，iOS 设备运行尚未验证。
 
 **两条 loader 的去向**
 
@@ -54,7 +54,7 @@ macOS 的原生 ELF 默认走新版 loader。classic 保留原有代码与 DEX �
 
 **Runner 的可观察契约**
 
-[NativeRunner.m](/Users/tanmy/Projects/Husk-macOS/src/macos-p0/NativeRunner.m) 负责 AppKit 窗口、菜单、guest tick 和 checkpoint；[session.py](/Users/tanmy/Projects/Husk-macOS/src/macos-p0/session.py) 是 P0 监督器，P1 将按同一契约接入原生主 App。
+[NativeRunner.m](../tests/macos-p0/harness/NativeRunner.m) 负责 AppKit 窗口、菜单、guest tick 和 checkpoint；[session.py](../tests/macos-p0/harness/session.py) 是 P0 监督器，P1 将按同一契约接入原生主 App。
 
 ```mermaid
 stateDiagram-v2
@@ -94,11 +94,11 @@ IPC 为专用 stdin/stdout 管道上的 JSON Lines，携带 protocol=1、UUID se
 ./scripts/test_macos_p0.sh
 ```
 
-前提、工具覆盖参数、suite 选择及手动窗口命令见 [测试说明](/Users/tanmy/Projects/Husk-macOS/tests/macos-p0/README.md)。脚本不获取依赖或 APK，生成并签名本机测试产物。Apple Silicon、macOS 27.0 / 26A428、Xcode 27.0 / 27A266a 是本轮实测环境。二进制声明最低 macOS 14.0，仅表示编译目标，不构成 14.0 的运行证据。
+前提、工具覆盖参数、suite 选择及手动窗口命令见 [测试说明](../tests/macos-p0/README.md)。脚本不获取依赖或 APK，生成并签名本机测试产物。Apple Silicon、macOS 27.0 / 26A428、Xcode 27.0 / 27A266a 是本轮实测环境。二进制声明最低 macOS 14.0，仅表示编译目标，不构成 14.0 的运行证据。
 
-最新默认后台运行保存在 [results.json](/Users/tanmy/Projects/Husk-macOS/build/macos-p0/results.json)，由同目录 `test-selection.json` 标识范围。修改前的完整 39 组交互/故障结果、环境和源码摘要已另存为 `interactive-results.json`、`interactive-environment.json`、`interactive-source-manifest.json`。图形与故障证据来自此前版本；新增后台入口已另行运行验证，没有重跑可见测试。
+最新默认后台运行保存在 [results.json](../build/macos-p0/results.json)，由同目录 `test-selection.json` 标识范围。修改前的完整 39 组交互/故障结果、环境和源码摘要已另存为 `interactive-results.json`、`interactive-environment.json`、`interactive-source-manifest.json`。图形与故障证据来自此前版本；新增后台入口已另行运行验证，没有重跑可见测试。
 
-最终默认运行 **30/30 组通过**：内存/ELF/classic 17 组、后台 Runner 5 组、core 与 iOS 语法 8 组。其中 scanner 仍包含 41 项断言，planner 9 项；组数不是所有底层断言的数量。可保存在版本控制中的摘要见 [P0 结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-macos-p0-results.json)。
+最终默认运行 **30/30 组通过**：内存/ELF/classic 17 组、后台 Runner 5 组、core 与 iOS 语法 8 组。其中 scanner 仍包含 41 项断言，planner 9 项；组数不是所有底层断言的数量。可保存在版本控制中的摘要见 [P0 结果快照](2026-10-07-macos-p0-results.json)。
 
 每次构建的工具、命令、source SHA-256、fixture SHA-256 与页布局分别存放在 environment、commands、source-manifest 和 fixtures JSON。每次会话独立保存 events、checkpoint 和进程 result，原型动态依赖由 `otool -L` 检查，签名由 `codesign --verify --strict` 和实际 runtime flag 检查。
 
@@ -125,7 +125,7 @@ IPC 为专用 stdin/stdout 管道上的 JSON Lines，携带 protocol=1、UUID se
 | StikJIT / idevice / rppairing | 现有 iOS legal 资源与 Cargo.lock | P0 原型不编译/链接/嵌入；保留原 iOS 来源与 notices |
 | Android guest、kernel、系统包 | 后续 guest 获取/构建产物 | P0 不下载/发布；P5/P6 按最终镜像确认来源、摘要、许可与对应源码 |
 
-旧 [licensing 文档](/Users/tanmy/Projects/Husk-macOS/docs/01-licensing.md) 是 iOS 阶段的决策记录，不能直接当成 macOS 组合的发行结论。尤其 QEMU 整体 GPLv2 与 MoltenVK Apache-2.0 的组合必须按实际链接/分发结构审查；进程拆分本身不自动解决所有许可问题。
+旧 [licensing 文档](01-licensing.md) 是 iOS 阶段的决策记录，不能直接当成 macOS 组合的发行结论。尤其 QEMU 整体 GPLv2 与 MoltenVK Apache-2.0 的组合必须按实际链接/分发结构审查；进程拆分本身不自动解决所有许可问题。
 
 **P1 的入口**
 

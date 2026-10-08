@@ -4,7 +4,7 @@
 
 Husk 已有可复用的 Android ARM64 加载器、运行时桥接和 macOS 测试工具，但目前没有原生 macOS App target。本次没有修改产品源码、合并分支、运行真实 APK 或启动虚拟机。仓库文档和截图中的游戏表现属于上游记录；下文单独列出本次实际验证结果。
 
-配套文件：[迁移计划](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-macos-migration-plan.md)、[验证证据与复现说明](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-husk-audit-evidence.md)。
+配套文件：[迁移计划](2026-10-07-macos-migration-plan.md)、[验证证据与复现说明](2026-10-07-husk-audit-evidence.md)。
 
 **分支范围与推荐基线**
 
@@ -43,9 +43,9 @@ fork 到上游 main 的 `src/`、`tools/`、`tests/` 完全相同。两个新提
 | macOS 先行代码 | `tools/unity-window.m` 已有 NSView/CAMetalLayer/鼠标；其他 tools 有离屏和引擎验证入口 | 是原型参考；路径、资源、退出与分发均需产品化 |
 | 工程与发行 | Xcode 仅 Husk iOS App + HuskJITHelper iOS extension；IPA 脚本和 iOS entitlement | 新增 macOS targets、依赖产物、签名/公证与安装验收 |
 
-重要依据：[project.yml](/Users/tanmy/Projects/Husk-macOS/src/app/project.yml:31)、[运行时路由](/Users/tanmy/Projects/Husk-macOS/src/app/Husk/TranslationLayer.swift:45)、[原生运行时接口](/Users/tanmy/Projects/Husk-macOS/src/translation-layer-next/husk-tl-unity-app.h:4)、[Mac 窗口原型](/Users/tanmy/Projects/Husk-macOS/tools/unity-window.m:25)。
+重要依据：[project.yml](../src/app/project.yml:31)、[运行时路由](../src/app/Husk/TranslationLayer.swift:45)、[原生运行时接口](../src/translation-layer-next/husk-tl-unity-app.h:4)、[Mac 窗口原型](../tools/unity-window.m:25)。
 
-基础 DEX 路径仍有对特定游戏类/方法的调用，例如 [husk-tl-load.c](/Users/tanmy/Projects/Husk-macOS/src/translation-layer/husk-tl-load.c:1882) 的初始化和启动逻辑。它不是已经完整移植的 ART/Android framework。旧的 `docs/04-translation-layer.md` 又停留在“尚不能运行 App”的早期设计，因此既不能照搬旧文档估计现况，也不能从几个引擎入口推导出通用 Android 兼容性。
+基础 DEX 路径仍有对特定游戏类/方法的调用，例如 [husk-tl-load.c](../src/translation-layer/husk-tl-load.c:1882) 的初始化和启动逻辑。它不是已经完整移植的 ART/Android framework。旧的 `docs/04-translation-layer.md` 又停留在“尚不能运行 App”的早期设计，因此既不能照搬旧文档估计现况，也不能从几个引擎入口推导出通用 Android 兼容性。
 
 **必须进入迁移计划的问题**
 
@@ -66,7 +66,7 @@ fork 到上游 main 的 `src/`、`tools/`、`tests/` 完全相同。两个新提
 
 P0 指会阻断可发行原生产品的事项；P1 指进入相应里程碑前必须处理的事项，不是漏洞严重性评级。
 
-可复核位置：[xmem macOS 分支](/Users/tanmy/Projects/Husk-macOS/src/translation-layer-next/husk-tl-xmem.c:139)、[单例启动](/Users/tanmy/Projects/Husk-macOS/src/translation-layer-next/husk-tl-unity-app.c:307)、[换游戏限制](/Users/tanmy/Projects/Husk-macOS/src/app/Husk/TLUnityView.swift:572)、[classic loader 的固定偏移回退](/Users/tanmy/Projects/Husk-macOS/src/translation-layer/husk-tl-load.c:519)、[资料目录](/Users/tanmy/Projects/Husk-macOS/src/app/Husk/TranslationLayer.swift:20)、[VM 加速参数](/Users/tanmy/Projects/Husk-macOS/src/app/Husk/QemuRunner.swift:1050)。固定偏移/指令猜测只属于 iOS 旧 JIT 回退，macOS adapter 应从接口层隔离，不继续依赖它。
+可复核位置：[xmem macOS 分支](../src/translation-layer-next/husk-tl-xmem.c:139)、[单例启动](../src/translation-layer-next/husk-tl-unity-app.c:307)、[换游戏限制](../src/app/Husk/TLUnityView.swift:572)、[classic loader 的固定偏移回退](../src/translation-layer/husk-tl-load.c:519)、[资料目录](../src/app/Husk/TranslationLayer.swift:20)、[VM 加速参数](../src/app/Husk/QemuRunner.swift:1050)。固定偏移/指令猜测只属于 iOS 旧 JIT 回退，macOS adapter 应从接口层隔离，不继续依赖它。
 
 **本次验证结果**
 

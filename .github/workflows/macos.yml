@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build-and-core:
-    runs-on: xcode-27
+    # Stable GitHub-hosted Apple Silicon image; remote execution is unverified.
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -29,7 +30,7 @@ jobs:
             build/macos-deps/include
             build/macos-deps/notices
             build/macos-deps/*.json
-          key: macos-arm64-xcode27-${{ hashFiles('dependencies/macos.lock.json', 'scripts/build_macos_graphics.py') }}
+          key: macos26-arm64-${{ hashFiles('dependencies/macos.lock.json', 'scripts/build_macos_graphics.py') }}
       - name: Native application and helpers
         env:
           ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
@@ -40,7 +41,7 @@ jobs:
         env:
           ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
         run: |
-          ctest --test-dir build/macos -R '^core-' --output-on-failure
+          ctest --test-dir build/macos -R '^(core-|macos-vm-controller$)' --output-on-failure
           ./scripts/test_macos_p0.sh --suite memory
           ./scripts/test_macos_p0.sh --suite core
       - name: Build evidence

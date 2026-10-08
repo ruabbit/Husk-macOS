@@ -4,11 +4,18 @@
 
 上游 main 已同步到 `75dc21f82c1fd748867ad4d4b5dfb0e981c2d468` 的源码，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现。详情见 [GUI / 上游同步报告](2026-10-08-upstream-sync-report.md)。上游新增 Godot、Geode、Unity 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
 
-本地验收、候选来源及待验收项见 [P1–P3 实施报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p1-p3-report.md) 和 [P4 Minecraft 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-report.md)。完整 DEX/ART、Unity、Unreal、Cocos、SDL、通用 NativeActivity 和 Rockstar 游戏还没有各自的 macOS 样本验收。
+本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md) 和 [P4 Minecraft 报告](2026-10-08-macos-p4-report.md)。完整 DEX/ART、Unity、Unreal、Cocos、SDL、通用 NativeActivity 和 Rockstar 游戏还没有各自的 macOS 样本验收。
 
 ## 构建与运行
 
-需要 Apple Silicon Mac、完整 Xcode、CMake 3.28+、Ninja、Python 3，以及可交叉编译 Android arm64 ELF 的 LLVM clang / ld.lld。当前验证环境为 macOS 27、Xcode 27、Apple clang 21、LLVM clang 23.1.2 和 NDK 26.3 的 lld 17。部署参数为 macOS 14.0，但旧系统和另一台 Mac 的运行验收仍在 P6。
+需要 Apple Silicon Mac、完整 Xcode、CMake 3.28+、Ninja、Python 3，以及可交叉编译 Android arm64 ELF 的 LLVM clang / ld.lld。当前验证环境为 macOS 27、Xcode 27、Apple clang 21、LLVM clang 23.1.2 和 NDK 26.3 的 lld 17。
+
+| 组件 | 最低系统声明 | 验收状态 |
+| --- | --- | --- |
+| 主 App、原生 NativeRunner 及图形库 | macOS 14.0 编译目标 | 本机 macOS 27 已测；14.0 和另一台 Mac 未测 |
+| 可选 Android VMRunner | 由实际依赖闭包计算；当前为 macOS 27.0.0 | 实验功能；P5 游戏与持续音频未通过，默认不打包 |
+
+两个组件有独立系统要求。主 App 读取 helper 的 `LSMinimumSystemVersion`；系统不足时显示原因并禁用 VM 启动，原生游戏入口仍可使用。最低系统与另一台 Mac 的实机验收属于 P6。
 
 ```sh
 ./scripts/build_macos.sh
@@ -53,13 +60,13 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 
 本地默认采用 ad-hoc Hardened Runtime：主 App **没有 entitlement**；Runner 的开发配置有 `allow-unsigned-executable-memory` 和 `disable-library-validation`。后一项仅用于无 Team ID 的本地 Runner 加载随附 ANGLE，已通过实际失败日志确认必要性。`NativeRunner.entitlements` 是同一 Team ID 正式签名的候选，只含执行内存项；打包器只有显式收到签名 identity 才选择它。没有自动选择用户证书，也没有执行 Developer ID 签名、公证或发布。
 
-独立进程负责生命周期和崩溃隔离，不是文件系统或网络沙箱。Minecraft 路径只提供该样本需要的 Android 兼容接口，不等于完整 Android 环境。其余引擎仍需独立样本；可选 QEMU/HVF 路径见下文，发行许可证组合及最低系统验收属于 P6。
+独立进程负责生命周期和崩溃隔离，不是文件系统或网络沙箱。Minecraft 路径只提供该样本需要的 Android 兼容接口，不等于完整 Android 环境。其余引擎仍需独立样本。macOS 的许可证边界、实际依赖与发行阻塞项见 [许可证说明](01-licensing.md#macos-distribution-status-2026-10-08)；当前开发产物没有通过 P6 发行门槛。
 
 ## 可选 Android VM 候选
 
 P5 已实现独立 VMRunner，但完整验收仍未通过。TCG/HVF 的 Android 冷启动、基本交互、网络、Minecraft 安装、正常关机与磁盘重开已有本机证据；Minecraft 在 VM 内黑屏，持续音频也未通过。完整情况见 [P5 报告](2026-10-08-macos-p5-report.md)。
 
-当前 VM 依赖要求 **macOS 27**。除上述原生工具链外，还需要 Git、Meson、pkg-config，以及 `dependencies/macos-vm.lock.json` 中固定版本的 GLib、pixman、slirp。打包器把动态依赖闭包嵌入 helper，运行时不依赖 Homebrew 安装。默认构建不启用 VM。
+当前 VM 依赖要求 **macOS 27**。除上述原生工具链外，还需要 Git、Meson、pkg-config，以及 `dependencies/macos-vm.lock.json` 中固定版本的 GLib、pixman、slirp。打包器把动态依赖闭包嵌入 helper，并将所有 Mach-O 最低版本中的最大值写入 helper 的 Info.plist，运行时不依赖 Homebrew 安装。签名验证同时检查声明与闭包一致。默认构建不启用 VM。
 
 ```sh
 python3 scripts/build_macos_vm.py
@@ -93,7 +100,7 @@ build/macos-p5-native/MacVMSession \
 
 测试包括资料库导入/去重/重启/设置/删除规则、损坏文件、伪造 fixture 拒绝、实际 ELF 游戏输入与目标完成、ANGLE 帧捕获、非零 PCM、暂停清键、存档恢复、换游戏和子进程失败后的恢复。`verify_macos_bundle.py` 核对签名、entitlement、macOS arm64、最低版本字段、rpath 和全部动态依赖位置。现有 P0 的入口仍为 `scripts/test_macos_p0.sh`；默认不显示窗口、不注入崩溃。
 
-P4 增加 AAudio 探测流/回调 STOP 后重启、Android binary128 数学 ABI、JNI UTF-8 文本状态及原生组合文本/UTF-16/字素删除测试。0.2.0 增加旧资料库能力升级、设置/存档保留、实验版本完整性及 Runner 独立入口检查：TL-only 为 10 组，启用 VM 后为 11 组。默认测试不需要 Minecraft APK，也不会自动启动它。
+P4 增加 AAudio 探测流/回调 STOP 后重启、Android binary128 数学 ABI、JNI UTF-8 文本状态及原生组合文本/UTF-16/字素删除测试。0.2.0 增加旧资料库能力升级、设置/存档保留、实验版本完整性及 Runner 独立入口检查。审查修复新增 VM 控制器进程回归：终止后延迟事件、两条输出的 EOF 顺序、错误保留、读管道超时及同对象重开，并覆盖系统要求判断。TL-only 为 11 组，启用 VM 后为 12 组。VM 控制器回归只启动有限时长的 CLI fixture；默认测试不启动 Android 或 Minecraft。
 
 较长验证是显式命令，均不创建可见窗口：
 
@@ -104,12 +111,12 @@ build/macos/MacSoak build/macos/Product/HuskMac.app build/macos/Soak 1800
 
 每次验收应使用新的输出目录。Soak 持续渲染并记录帧数和 RSS，结束时等待保存确认和 OS 子进程回收。离屏 ANGLE pbuffer 的 swap 不提交 Metal 命令，宿主必须显式完成每帧 GPU 工作；否则内存持续增长。此问题已由持续运行测试暴露并修复。
 
-Minecraft 是显式选择的独立验收入口，输出目录须为新目录：
+Minecraft 是显式选择的独立验收入口。先把 `MINECRAFT_APK` 环境变量设为你自己的完整 arm64 APK 路径，输出目录须为新目录：
 
 ```sh
 build/macos/MacMinecraftSession \
   build/macos/Product/HuskMac.app \
-  /Users/tanmy/Downloads/minecraft-1.26.52.3-arm64-v8a.apk \
+  "$MINECRAFT_APK" \
   build/macos-p4/library build/macos-p4/new-session --seconds 1800
 ```
 
@@ -117,6 +124,10 @@ build/macos/MacMinecraftSession \
 
 结束时发送 `python3 tests/macos/control_game.py build/macos-p4/new-session stop`，检查 `result.json` 的正常退出、存储关闭回执及 PID 回收。`--hidden-window` 仅建立不显示、不激活的 AppKit/CAMetalLayer 窗口，用来单独检查实际窗口 surface；仍不捕获系统鼠标。此模式关闭会强制离屏的帧截图诊断，使用事件及 EGL surface 日志检查，不能用 capture 获取 PNG。
 
-`.github/workflows/macos.yml` 在 Apple Silicon `xcode-27` runner 上定义构建、核心测试和签名自检。Metal/AudioQueue/完整运行及 30 分钟测试单列在显式选择的物理 `husk-metal` runner，避免把无 GPU 的托管环境视为图形验收。当前工作区没有推送，不能把本地验证写成远程 CI 已通过。
+**CI 配置未验证，远程运行尚未发生。** [工作流](../.github/workflows/macos.yml) 使用稳定的 GitHub 托管 Apple Silicon `macos-26`，定义构建、核心测试、无图形 VM 控制器回归和签名自检。旧 `xcode-27` 在 [GitHub 官方 runner 列表](https://github.com/actions/runner-images#available-images) 中确实是公开 arm64 预览标签；本次改用稳定镜像以减少预览环境变动。
+
+Metal/AudioQueue/完整运行及 30 分钟测试单列在显式选择的物理 `husk-metal` runner。该自托管标签需要仓库维护者注册，本轮未验证其存在。`.github/actionlint.yaml` 仅声明 lint 可接受这个自定义标签，不负责创建 runner。本地 lint、构建通过不能替代远程 CI；当前修改仅提交在本地。
+
+实施工作笔记保存在 [docs/development/macos](development/macos/task_plan.md)，历史结果快照保留当时的源码、机器路径和提交状态。产品说明以本指南为准；本轮逐项处理结果见 [审查修复报告](2026-10-08-macos-review-report.md)。
 
 实体手柄热插拔、可听音质、音频设备切换、全屏/多显示器和完整前台交互仍需实际设备验收。一次主窗口导入操作有本地记录，但随后原生 UI 自动化连接中断；离屏 SwiftUI 材质导出也不作为视觉通过证据。

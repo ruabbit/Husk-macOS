@@ -1,5 +1,9 @@
 # 审计进度
 
+## 2026-10-08 审查修复
+
+八项审查修复：已创建全部迁移工作的本地检查点 `9573597`；运行时修复已提交 `fd9c470`。新候选 `build/macos-review-20261008/Product/HuskMac.app` 构建、12/12 CTest、17 个 Mach-O 的签名/rpath/最低系统校验通过。P0 harness 迁移后 30/30；actionlint 通过。测试均后台静音，没有启动 Android 或 Minecraft，没有重启日常 GUI。
+
 ## 2026-10-08 P4 / Minecraft
 
 - 最终交付：本轮指定 Minecraft 样本的 P4 后台闭环完成。session11 实际世界采样 600.1678 秒、35,920 帧、59.8499 fps、RSS 1,784.25–1,823.23 MiB；20 次 Activity 暂停/恢复通过，41 次已记录 mixerResume 均返回 0。世界内恢复后的非零 PCM 继续增长。

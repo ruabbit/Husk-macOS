@@ -1,7 +1,17 @@
 # Husk macOS 迁移实施
 
-日期：2026-10-08。当前：GUI 导入游戏的运行入口及上游同步已完成本机交付；0.2.0 已后台启动。P5 仍未通过。用户在 P3 交付后明确授权执行 P4，指定 `/Users/tanmy/Downloads/minecraft-1.26.52.3-arm64-v8a.apk` 为测试样本。此前审计与 P0–P3 记录保留。
+日期：2026-10-08。八项审查问题的代码修复与文档核对已完成；已有迁移工作保存为 `9573597`，VM / Minecraft 修复保存为 `fd9c470`。P5 的 Minecraft 黑屏、ANR 和持续音频仍未通过，P6 尚未验收。本文后面的阶段表是历史记录。
 
+
+## 审查修复
+
+| 工作 | 状态 | 证据 |
+| --- | --- | --- |
+| 保存所有未提交迁移工作 | complete | 本地检查点 `9573597`，237 文件 |
+| VM 退出竞态、系统要求、Minecraft 样本哈希 | complete | `fd9c470`；12/12 CTest，17 个 Mach-O 签名与闭包核验 |
+| CI 标签与仓库卫生 | complete（本地） | 稳定 macos-26；actionlint 通过；P0 harness 迁入 tests 后 30/30 |
+| macOS 许可证说明 | complete（审计文档） | QEMU → libssh → OpenSSL 3、缺失 notices/对应源码列为发行阻塞 |
+| 审查记录、最终提交 | complete（本地） | [审查报告](../../2026-10-08-macos-review-report.md) 与结果快照；源文件/文档链接检查通过，所有修复纳入本地提交 |
 
 ## GUI / 上游同步交付
 
@@ -30,15 +40,15 @@
 
 | 当前实施 | 状态 | 验收 |
 | --- | --- | --- |
-| P1：正式原生工程、共享核心、固定图形依赖、签名及 CI | complete（本地） | 325 文件干净源码导出重建及 5/5 组通过；macOS arm64/签名/rpath 通过；CI 配置已完成，远程运行待首次推送 |
+| P1：正式原生工程、共享核心、固定图形依赖、签名及 CI | complete（本地） | 325 文件干净源码导出重建及 5/5 组通过；macOS arm64/签名/rpath 通过；CI 配置未验证，远程运行待首次推送 |
 | P2：SwiftUI 资料库、导入扫描、图标/设置与持久化 | complete（内部原型） | 31 项端到端检查包含导入、重启、设置、数据保留及错误；主界面无 entitlement；完整前台视觉/拖放验收尚未完成 |
 | P3：自建可玩 ELF 游戏与原生运行闭环 | complete（后台验收） | 真正 ELF/GLES/PCM、输入、暂停/恢复、存档与隔离通过；20 次后台生命周期通过；修复候选 30 分钟与最终候选 5 分钟均保存/回收通过；前台/实体外设验收边界见报告 |
 
 执行约束：不点系统崩溃提示；测试默认无窗口、无声音、无主动崩溃；不反复抢焦点。复用已有证据，只有新增变更/缺口触发相应复测。用户在 P4 后要求继续推进；当前执行 P5，P6 发行仍留待单独推进。
 
-P5 交付：[P5 VM 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p5-report.md) 与 [结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p5-results.json)。P5 尚未通过，后续先解决 VM 中游戏启动和持续音频，P6 未开始。
+P5 交付：[P5 VM 报告](../../2026-10-08-macos-p5-report.md) 与 [结果快照](../../2026-10-08-macos-p5-results.json)。P5 尚未通过，后续先解决 VM 中游戏启动和持续音频，P6 未开始。
 
-此前交付：[P4 Minecraft 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-report.md)、[P4 结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-results.json)、[P1–P3 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p1-p3-report.md)、[构建指南](/Users/tanmy/Projects/Husk-macOS/docs/macos.md)。本轮指定 Minecraft 样本的后台闭环已完成；原计划的其他引擎、完整前台/设备验收、远程 CI 和发行门槛仍待对应验证。
+此前交付：[P4 Minecraft 报告](../../2026-10-08-macos-p4-report.md)、[P4 结果快照](../../2026-10-08-macos-p4-results.json)、[P1–P3 报告](../../2026-10-08-macos-p1-p3-report.md)、[构建指南](../../macos.md)。本轮指定 Minecraft 样本的后台闭环已完成；原计划的其他引擎、完整前台/设备验收、远程 CI 和发行门槛仍待对应验证。
 
 | P0 工作 | 状态 | 验收 |
 | --- | --- | --- |

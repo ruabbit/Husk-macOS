@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "date": "2026-10-08",
+  "branch": "codex/macos-p0",
+  "checkpointCommit": "9573597846bea1023de55f65fe2a1ae7ca6fb9c6",
+  "runtimeFixCommit": "fd9c470cefb13a0194de09c7a8f2d261cd144eaa",
+  "candidate": "build/macos-review-20261008/Product/HuskMac.app",
+  "validation": {
+    "ctest": {
+      "passed": 12,
+      "total": 12,
+      "seconds": 16.21
+    },
+    "libraryCompatibilityChecks": 8,
+    "p0": {
+      "passed": 30,
+      "total": 30,
+      "selection": {
+        "suite": "all",
+        "gui": false,
+        "faults": false,
+        "cycles": 2,
+        "build_only": false
+      }
+    },
+    "bundleMachOBinaries": 17,
+    "actionlint": "1.7.12 passed",
+    "minimumSystem": {
+      "main": "14.0",
+      "VM": "27.0.0"
+    },
+    "remoteCI": "not run in this review; unverified",
+    "androidGuestLaunched": false,
+    "minecraftLaunched": false,
+    "visibleWindowsOpened": false
+  },
+  "openGates": [
+    "P5 Minecraft guest black screen and GameActivity ANR",
+    "P5 sustained guest PCM",
+    "P6 QEMU/libssh/OpenSSL 3 license combination",
+    "P6 NativeRunner/MoltenVK GPL version and compiled dependency audit",
+    "P6 complete notices and corresponding sources",
+    "remote CI and physical runner registration",
+    "older OS, fresh Mac, signing/notarization and foreground/device acceptance"
+  ],
+  "runtimeSourceSHA256": {
+    "CMakeLists.txt": "c492b52a29fe8813e1564084601fa82ba33bc3507b008eb95c24ba47d93298f1",
+    "scripts/package_macos_vm.py": "6b5d476ba2733a27ced49604023885596d74fc2bdc2c21dda7b962011b5ab3af",
+    "scripts/verify_macos_bundle.py": "5396be7e0e0e6757d947c96445bb7ed0b3f5abceba6619c8f7b366da4dbdf120",
+    "src/macos/HuskMac/HuskMac.swift": "f446cefaf5796b9f404e9d67b26a4028096f4d46f226487cab47255594538fef",
+    "src/macos/SharedCore/HuskCore.h": "184f28169bf5d60aa293d6af67095d1a4bacb91e4d81c48882c997c1fbc06ffc",
+    "src/macos/SharedLibrary/Models.swift": "531af9853119f1d22d3111ce0269655f6aec691fce4b8fb5ce7980189cf5fccd",
+    "src/macos/SharedLibrary/VMController.swift": "9f38ee50d20fe2c1b8bd5b8de70b4adf575998df86a183b3ea68b228c971c06a",
+    "src/macos/VMRunner/Info.plist.in": "6fe60cf27e0263d561f7e76cf0dbec670f2a83618f9759e4351b0e955c28884f",
+    "tests/macos/LibraryCompatibility.swift": "f5b7872eeadb18ecff8053c752c810c612fbbc933491617b41e70ca180f90e79",
+    "tests/macos/VMControllerTests.swift": "2f0288e1a1e4c99f2499db6c412113db8cff92ff5a803abc0752d467abb5d8f1",
+    "tests/macos/VMExitFixture.m": "22c4d1c7d7f002e78c6c4c77385344f17ca739850e10577579a06c208497a049"
+  },
+  "logSHA256": {
+    "build/review-20261008/configure.log": "3e034f844c965a7b18f7d28045684bef2889f37b07b8d0a6fe9e4d07e398b343",
+    "build/review-20261008/build.log": "d26b9b9ce29444033123698db7668ff8998f1057b0c535f63e40207b27e8fc56",
+    "build/review-20261008/ctest.log": "03c284f4db3abbff9806cf4ffebabc2a12936862c6fab5e3d7d1e5a68274568e",
+    "build/review-20261008/bundle.json": "86050e87761043505902ddf10b6227ae3ea1152c6a4a0bb2de50b02f620a8fe8",
+    "build/review-20261008/p0.log": "a33453d828f9af5acfbfca4516050fe51e146ce15dc1be2dbeee930cd0a97ef7",
+    "build/review-20261008/actionlint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "vmLicenseChain": [
+    "VMRunner",
+    "libqemu-aarch64-softmmu.dylib",
+    "libssh.4.12.0.dylib",
+    "libcrypto.3.dylib"
+  ],
+  "candidateBinarySHA256": {
+    "Contents/MacOS/HuskMac": "6839dd97cde12242e28926bbaf33c048830fd40fb5c08ace1e18591508cf85c0",
+    "Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner": "e724c623fb273a06e010b5bba608b8bbbc3fb9932a3ea870d6ba22cc7d2bf2a2",
+    "Contents/Frameworks/libANGLE-shared.dylib": "01181bf05243355f103044c595ae80378a79cce47040bca4cfa202afe5192fa6",
+    "Contents/Frameworks/MoltenVK.framework/Versions/A/MoltenVK": "605e803a32cb2363f387b05fe5f60943613495612d85094fe82f7f70d177d0c6",
+    "Contents/Helpers/VMRunner.app/Contents/MacOS/VMRunner": "bf7104f28cb846da0198a914ed5d5f81c38413065c1f1d848760c7bfc6e8671c",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libANGLE-shared.dylib": "01181bf05243355f103044c595ae80378a79cce47040bca4cfa202afe5192fa6",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libcrypto.3.dylib": "e8afe1212d5f942772d9cf0c2986486c3c7a52c8265def05bc0305b7a939c0bb",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libgio-2.0.0.dylib": "8401e6898cab0e2fa6b12b41458a91d62c8efe2711e6b4ea5d6db9bfd5348f39",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libglib-2.0.0.dylib": "c2813808fd5a5b5552ea4ad9355a36605c28200ecc130370988b14f3f1e91dba",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libgmodule-2.0.0.dylib": "a2718cc1c957df23e7c116eb0fc2a1208cf242c5dc0e76f971bbc80d4d2e6d00",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libgobject-2.0.0.dylib": "6e7a29ff5dabcabd8b641eaa0caf377224180f21e4ceeb133fcb7d9c218d11db",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libintl.8.dylib": "fe0385fd56d86229e03c782df55e3bfc5c203d1cb339538948022118476a28c5",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libpcre2-8.0.dylib": "871a0df086e84b8511d337c363f9ffed99116658a24f72cb380b5daa588a880b",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libpixman-1.0.dylib": "413d4d583f9507182508e34b78c843cd8c9dde84782c2b77acc3bfac28a9d27b",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libqemu-aarch64-softmmu.dylib": "57d8f62ff5f9dd46f7b4119e4c2cf05260b21252d1a5ccb4d8113a0b71ccf7c8",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libslirp.0.dylib": "93cb1c099bd71176d6760f0736f89d32881e96efda09d13d58d8b80a1f20e843",
+    "Contents/Helpers/VMRunner.app/Contents/Frameworks/libssh.4.12.0.dylib": "fe3759e3a7ab5d46667330473f40cbf903507576f676c840e0b12a23526201ca"
+  }
+}

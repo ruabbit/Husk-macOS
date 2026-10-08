@@ -2,6 +2,8 @@
 
 本目录使用仓库自建 ARM64 ELF 验证可执行内存、真实 loader 和 Runner。需要 Apple Silicon Mac、完整 Xcode、Python 3.9+、支持 Android target 的 upstream LLVM clang 与 lld。默认在后台运行，不创建窗口、不激活 AppKit、不注入崩溃，也不下载依赖或加载外部 APK。
 
+`harness/` 保留 P0 的合成 Runner 和 Python 监督器，只承担内存、loader、隔离及协议回归。它不参与 CMake 的产品打包，也不是第二个生产 Runner。正式游戏进程唯一入口在 `src/macos/NativeRunner`，监督器在 `src/macos/SharedLibrary/SessionController.swift`。P0 测试仍在 CI 中保留，以覆盖正式产品没有暴露的底层内存组合。
+
 在仓库根目录执行：
 
 ```sh
@@ -15,10 +17,10 @@
 ./scripts/test_macos_p0.sh --suite runner
 ./scripts/test_macos_p0.sh --suite core
 ./scripts/test_macos_p0.sh --build-only
-python3 src/macos-p0/session.py --seconds 20
+python3 tests/macos-p0/harness/session.py --seconds 20
 ```
 
-最后一条命令也是后台模式。确实需要人工检查时，使用 `python3 src/macos-p0/session.py --show-window --seconds 20` 显示一个窗口；Command-P 暂停/恢复，Command-Q 或关闭窗口会保存合成 checkpoint 并退出。
+最后一条命令也是后台模式。确实需要人工检查时，使用 `python3 tests/macos-p0/harness/session.py --show-window --seconds 20` 显示一个窗口；Command-P 暂停/恢复，Command-Q 或关闭窗口会保存合成 checkpoint 并退出。
 
 `--gui` 显式启用窗口/焦点/菜单检查，默认循环次数为 1；`--cycles N` 显式选择压力次数。`--faults` 单独启用 deliberate abort、SIGKILL、MAP_JIT 非法写入及父进程故障测试，系统可能弹出崩溃报告。不能同时使用 `--gui` 和 `--faults`。这些参数供独立测试环境使用，不作为用户日常桌面上的默认验收。预期信号退出只能证明故障用例符合断言，不能代表桌面没有受到影响。
 
@@ -41,4 +43,4 @@ python3 src/macos-p0/session.py --seconds 20
 
 `loader-test.c` 链接真实 `husk-tl-ld`。`host-adapter.c` 只提供日志和一个有确定返回值的 `p0_import`，不冒充完整 bionic/JNI 环境；线程由 macOS harness 创建，再调用真实 guest 指令。`classic-test.c` 直接包含 classic 实现，验证其静态 ELF 核心；不启动 NativeActivity/DEX。`probe-adapter.c` 仅供 scanner，返回“本机没有 iOS StikDebug 预热区域”。
 
-Runner 的 guest 工作负载是合成计数器，checkpoint 只证明存档确认协议及文件提交顺序。图形引擎、真实游戏存档、音频、游戏输入、DEX/VM、Developer ID、公证和最低系统实测都不属于本入口的通过含义。详细决策与结果见 [P0 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-macos-p0-report.md)。
+Runner 的 guest 工作负载是合成计数器，checkpoint 只证明存档确认协议及文件提交顺序。图形引擎、真实游戏存档、音频、游戏输入、DEX/VM、Developer ID、公证和最低系统实测都不属于本入口的通过含义。详细决策与结果见 [P0 报告](../../docs/2026-10-07-macos-p0-report.md)。

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""P0 process supervisor. P1 will move this contract into the native main app."""
+"""Synthetic P0 process supervisor; production uses SharedLibrary/SessionController."""
 import argparse
 import json
 import os
@@ -187,7 +187,7 @@ class Session:
 
 
 def main():
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     out = root / "build/macos-p0"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seconds", type=float, default=20)

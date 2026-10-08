@@ -27,6 +27,14 @@ Metal output and an independent VMRunner. Its current dependencies require
 macOS 27. Minecraft installation works in the VM, but gameplay remains blocked
 by a black screen; sustained guest audio is also unverified. See the
 [P5 report](docs/2026-10-08-macos-p5-report.md) before enabling this mode.
+The main app and native runner have a provisional macOS 14 build target; the
+optional VM declares the minimum required by its packaged dependencies and is
+disabled on older systems. GitHub CI is configured on stable `macos-26` but has
+not run remotely. macOS release licensing remains open; see the
+[license audit](docs/01-licensing.md#macos-distribution-status-2026-10-08) and
+[review fixes](docs/2026-10-08-macos-review-report.md). Development notes are under
+[`docs/development/macos`](docs/development/macos/task_plan.md); the P0 runner is
+retained only as a [test harness](tests/macos-p0/README.md).
 The iOS source and documentation remain below.
 
 <p align="center">

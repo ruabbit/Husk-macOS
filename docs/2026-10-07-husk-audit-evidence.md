@@ -1,6 +1,6 @@
 # Husk 审计验证记录
 
-日期：2026-10-07。对应[审计报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-audit-Husk-report.md)与[迁移计划](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-macos-migration-plan.md)。本文件保存必要的复现条件与结果；完整本地日志和生成的 fixtures 位于 ignored [audit 目录](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07)。
+日期：2026-10-07。对应[审计报告](2026-10-07-audit-Husk-report.md)与[迁移计划](2026-10-07-macos-migration-plan.md)。本文件保存必要的复现条件与结果；完整本地日志和生成的 fixtures 位于 ignored [audit 目录](../build/audit-2026-10-07)。
 
 **版本与环境**
 
@@ -25,7 +25,7 @@ git diff --quiet 5a7d2df9a568ccb93e3395270e430da649a85874 82f33e858952f9fda3cf22
 git rev-list --left-right --count 82f33e858952f9fda3cf224e839f4385894e2d5b...756c8d0c9d81ffcf7e282cac98a69af1ff299522
 ```
 
-第一个命令退出 0；第二个输出 `86 4`。完整计数见 [inventory.json](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/inventory.json)。
+第一个命令退出 0；第二个输出 `86 4`。完整计数见 [inventory.json](../build/audit-2026-10-07/inventory.json)。
 
 **源码与工程检查**
 
@@ -35,9 +35,9 @@ git rev-list --left-right --count 82f33e858952f9fda3cf224e839f4385894e2d5b...756
 /usr/bin/clang -fsyntax-only -std=gnu11 -Isrc/translation-layer -Isrc/translation-layer-next FILE
 ```
 
-其中 `FILE` 是逐个枚举出的 translation unit；Objective-C 另加 `-fobjc-arc`。结果 51/51 通过，部分 warnings 保留在 [macos-c-syntax.json](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/macos-c-syntax.json)。此检查没有链接或执行，也没有把 iOS SwiftUI 编译成 macOS。
+其中 `FILE` 是逐个枚举出的 translation unit；Objective-C 另加 `-fobjc-arc`。结果 51/51 通过，部分 warnings 保留在 [macos-c-syntax.json](../build/audit-2026-10-07/macos-c-syntax.json)。此检查没有链接或执行，也没有把 iOS SwiftUI 编译成 macOS。
 
-`xcodebuild -list -project src/app/Husk.xcodeproj` 成功，仅列出 Husk、HuskJITHelper。平台来自 `project.yml`/工程配置，均为 iOS；[原始输出](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/xcode-targets.log)。
+`xcodebuild -list -project src/app/Husk.xcodeproj` 成功，仅列出 Husk、HuskJITHelper。平台来自 `project.yml`/工程配置，均为 iOS；[原始输出](../build/audit-2026-10-07/xcode-targets.log)。
 
 **保留的失败与后续区分**
 
@@ -66,7 +66,7 @@ void tl_log_line(const char *fmt, ...) {
 }
 ```
 
-本地实际文件：[host-adapter.c](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/host-adapter.c)。编译 scanner 的命令：
+本地实际文件：[host-adapter.c](../build/audit-2026-10-07/host-adapter.c)。编译 scanner 的命令：
 
 ```sh
 cd /Users/tanmy/Projects/Husk-macOS
@@ -86,7 +86,7 @@ PATH="$PWD/build/audit-2026-10-07/fixture-tools:$PATH" \
 
 本地 `fixture-tools` 是指向上表指定版本的 4 个工具的 symlink 目录，未改系统 PATH 或安装工具。跨机器复现应先提供这些版本；不要把 PATH 差异混入 parser 正确性结论。
 
-日志：[main 原始失败](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/fork-main-host-tests.log)、[topic 首次结果](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/topic-host-tests.log)、[LLVM 23 输出差异](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/topic-llvm-tests.log)、[main 最终 scanner](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/main-adapted-scanner-final.log)、[topic 最终 scanner](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/topic-scanner-final.log)。
+日志：[main 原始失败](../build/audit-2026-10-07/fork-main-host-tests.log)、[topic 首次结果](../build/audit-2026-10-07/topic-host-tests.log)、[LLVM 23 输出差异](../build/audit-2026-10-07/topic-llvm-tests.log)、[main 最终 scanner](../build/audit-2026-10-07/main-adapted-scanner-final.log)、[topic 最终 scanner](../build/audit-2026-10-07/topic-scanner-final.log)。
 
 Linux qemu-user 设备探测没有在本轮执行；扫描器的 host 测试通过不代表手机寄存器/JIT 探测通过。
 
@@ -112,7 +112,7 @@ build/audit-2026-10-07/va-adapted
 build/audit-2026-10-07/pacer
 ```
 
-四个运行均 exit 0。pacer 仅链接所需函数，`-dead_strip` 不构成整个 DEX runtime 的链接验证。日志：[prefs](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/prefs.log)、[blit](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/blit.log)、[va](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/va-adapted.log)、[pacer](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/pacer.log)。
+四个运行均 exit 0。pacer 仅链接所需函数，`-dead_strip` 不构成整个 DEX runtime 的链接验证。日志：[prefs](../build/audit-2026-10-07/prefs.log)、[blit](../build/audit-2026-10-07/blit.log)、[va](../build/audit-2026-10-07/va-adapted.log)、[pacer](../build/audit-2026-10-07/pacer.log)。
 
 **JIT 发行配置实验**
 
@@ -129,7 +129,7 @@ tl_xmem_flush(rx, sizeof(code));
 int value = ((int (*)(void))rx)();
 ```
 
-完整测试程序与命令分别保存在 [xmem-smoke.c](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/xmem-smoke.c)、[xmem-smoke.log](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/xmem-smoke.log)。先编译正常开发态二进制，再复制一份以 ad-hoc 身份签名，增加 `--options runtime` 和仅含 `com.apple.security.cs.allow-jit=true` 的 entitlement。
+完整测试程序与命令分别保存在 [xmem-smoke.c](../build/audit-2026-10-07/xmem-smoke.c)、[xmem-smoke.log](../build/audit-2026-10-07/xmem-smoke.log)。先编译正常开发态二进制，再复制一份以 ad-hoc 身份签名，增加 `--options runtime` 和仅含 `com.apple.security.cs.allow-jit=true` 的 entitlement。
 
 | 构建/运行配置 | 结果 |
 | --- | --- |
@@ -138,4 +138,4 @@ int value = ((int (*)(void))rx)();
 | 后者 `codesign --verify --strict --verbose=2` | valid on disk；satisfies its Designated Requirement |
 | 系统诊断 | `EXC_BAD_ACCESS`；`SIGKILL (Code Signature Invalid)`；`termination.namespace=CODESIGNING`；`code=2`；`indicator=Invalid Page` |
 
-系统诊断指出故障页处于测试创建的 64 MiB RX shared-memory 区，另有相邻 RW alias。仅抽取异常/终止字段，见 [xmem-crash-excerpt.json](/Users/tanmy/Projects/Husk-macOS/build/audit-2026-10-07/xmem-crash-excerpt.json)。该证据说明**当前默认 allocator 在这个 Hardened Runtime 配置下不可用**，不证明所有 macOS JIT 方案都不可行，也不替代 Developer ID、公证与其他系统版本验证。
+系统诊断指出故障页处于测试创建的 64 MiB RX shared-memory 区，另有相邻 RW alias。仅抽取异常/终止字段，见 [xmem-crash-excerpt.json](../build/audit-2026-10-07/xmem-crash-excerpt.json)。该证据说明**当前默认 allocator 在这个 Hardened Runtime 配置下不可用**，不证明所有 macOS JIT 方案都不可行，也不替代 Developer ID、公证与其他系统版本验证。

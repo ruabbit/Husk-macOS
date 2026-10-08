@@ -1,6 +1,6 @@
 # Husk 原生 macOS 迁移计划
 
-日期：2026-10-07；实施状态更新于 2026-10-08。状态：**P0 已完成；P1–P3 原生内部原型及本机后台验收已完成；P4 指定 Minecraft 样本的后台闭环已完成，其他引擎待样本；P5 基础实现及 Android 验证已推进，Minecraft VM 黑屏与持续音频仍阻塞验收；P6 未开始**。审计依据见[审计报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-audit-Husk-report.md)，P0 结果见 [P0 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-07-macos-p0-report.md)，后续结果见 [P1–P3 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p1-p3-report.md) 、[P4 Minecraft 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-report.md) 与 [P5 VM 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p5-report.md)，用法见[原生构建指南](/Users/tanmy/Projects/Husk-macOS/docs/macos.md)。
+日期：2026-10-07；实施状态更新于 2026-10-08。状态：**P0 已完成；P1–P3 原生内部原型及本机后台验收已完成；P4 指定 Minecraft 样本的后台闭环已完成，其他引擎待样本；P5 基础实现及 Android 验证已推进，Minecraft VM 黑屏与持续音频仍阻塞验收；P6 未开始**。审计依据见[审计报告](2026-10-07-audit-Husk-report.md)，P0 结果见 [P0 报告](2026-10-07-macos-p0-report.md)，后续结果见 [P1–P3 报告](2026-10-08-macos-p1-p3-report.md) 、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 与 [P5 VM 报告](2026-10-08-macos-p5-report.md)，用法见[原生构建指南](macos.md)。
 
 P0 已选定新版 ELF loader 和双映射内存；同 Team ID Runner 候选仅带 unsigned-executable-memory。P1 的本地 ad-hoc Runner 为加载无 Team ID 的随附 ANGLE 另加 disable-library-validation，主 App 无 entitlement。当前 P0 默认测试为无窗口、无故障注入的后台入口，30 组通过；早先 39 组图形/故障验证另存为历史证据。可见测试曾影响用户桌面，今后需要显式选择，不自动循环启动窗口。
 
@@ -123,4 +123,4 @@ P3 是内部可用原型，P4 可以形成翻译层预览版，P6 才是相应�
 - guest 来源及用户数据版本独立于上游 iOS 更新源。macOS 未验证的 iOS snapshot 不自动下载应用；镜像下载沿用摘要校验，并补全发行者自己的来源/许可记录。
 - 公开发行前重审 QEMU、MoltenVK、ANGLE、guest kernel、证书包及 notices/源码提供。进程拆分不自动解决所有许可证问题。
 
-P0–P5 的本地实现保留在 `codex/macos-p0`，尚未提交或推送。用户随后授权 P4 并指定 Minecraft，再要求继续推进 P5。P4 的指定样本已完成后台世界闭环；P5 原生 VM、Android 冷启动、安装、输入、网络、关机和持久化已有证据，但 Minecraft VM 黑屏/ANR 与持续音频仍阻塞整阶段验收。P6 尚未执行。
+P0–P5 与上游同步的本地实现已保存为 `codex/macos-p0` 上的检查点 `9573597`，尚未推送；审查修复见 [处理报告](2026-10-08-macos-review-report.md)。用户随后授权 P4 并指定 Minecraft，再要求继续推进 P5。P4 的指定样本已完成后台世界闭环；P5 原生 VM、Android 冷启动、安装、输入、网络、关机和持久化已有证据，但 Minecraft VM 黑屏/ANR 与持续音频仍阻塞整阶段验收。P6 尚未执行。

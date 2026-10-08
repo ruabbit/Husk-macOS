@@ -1,10 +1,12 @@
 # Husk macOS P1–P3 实施与验收
 
+> 后续状态（2026-10-08）：本报告和配套 JSON 保留验收当时的版本、机器路径与提交状态。全部已有工作现已保存为本地检查点 `9573597`；后续修复见 [审查修复报告](2026-10-08-macos-review-report.md)。本地提交未推送。
+
 2026-10-08。原生工程、资料库与第一款自建 ELF 游戏已实现，本地构建、功能回归及后台稳定性验收通过，达到 P3 内部可运行原型。远程 CI、完整前台交互及实体外设等门槛仍按下文保留为待验收项。本轮授权截至 P3，P4–P6 未开始。
 
-开发产物：[HuskMac.app](/Users/tanmy/Projects/Husk-macOS/build/macos/Product/HuskMac.app)。构建与使用见[原生 macOS 指南](/Users/tanmy/Projects/Husk-macOS/docs/macos.md)。工作保留在 `codex/macos-p0`，基线 `82f33e858952f9fda3cf224e839f4385894e2d5b`；原 `main` 仍为 `5a7d2df9a568ccb93e3395270e430da649a85874`。全部为本地未提交改动，未推送、发布或使用用户的签名证书。
+开发产物：[HuskMac.app](../build/macos/Product/HuskMac.app)。构建与使用见[原生 macOS 指南](macos.md)。工作保留在 `codex/macos-p0`，基线 `82f33e858952f9fda3cf224e839f4385894e2d5b`；原 `main` 仍为 `5a7d2df9a568ccb93e3395270e430da649a85874`。全部为本地未提交改动，未推送、发布或使用用户的签名证书。
 
-[验收结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p1-p3-results.json) 包含最终二进制 SHA-256、实现文件 hash、31 项检查名、20 次会话、两份持续运行候选的完整采样和日志摘要。长测与最终候选分开记录，269 个实现文件已与干净源码导出逐项核对。
+[验收结果快照](2026-10-08-macos-p1-p3-results.json) 包含最终二进制 SHA-256、实现文件 hash、31 项检查名、20 次会话、两份持续运行候选的完整采样和日志摘要。长测与最终候选分开记录，269 个实现文件已与干净源码导出逐项核对。
 
 **已交付范围**
 
@@ -20,12 +22,12 @@ P3 使用仓库自建 **Orbit Garden** 和 **Orbit Garden · Dusk**。玩法、G
 
 | 模块 | 当前职责 |
 | --- | --- |
-| [CMakeLists.txt](/Users/tanmy/Projects/Husk-macOS/CMakeLists.txt) | macOS arm64 编译目标、依赖路径、资源、打包及 CTest |
-| [SharedCore](/Users/tanmy/Projects/Husk-macOS/src/macos/SharedCore) | 复用原 ZIP、ELF scanner、JSON、prefs、blit；补充 bundle 条目列举和提取 |
-| [SharedLibrary](/Users/tanmy/Projects/Husk-macOS/src/macos/SharedLibrary) | Foundation 资料库服务、原元数据/rank 模型、原子索引与 Swift Process 会话监督器 |
-| [HuskMac.swift](/Users/tanmy/Projects/Husk-macOS/src/macos/HuskMac/HuskMac.swift) | 原生 SwiftUI 导航、详情、导入、图标、设置与退出联动 |
-| [NativeRunner](/Users/tanmy/Projects/Husk-macOS/src/macos/NativeRunner) | AppKit/CAMetalLayer、键鼠/GameController、AudioQueue、ELF fixture ABI、存档及协议 |
-| [fixture](/Users/tanmy/Projects/Husk-macOS/tests/macos/fixture) | 自建游戏源码；移动、收集八颗星星、障碍、分数、完成轮数与音频 |
+| [CMakeLists.txt](../CMakeLists.txt) | macOS arm64 编译目标、依赖路径、资源、打包及 CTest |
+| [SharedCore](../src/macos/SharedCore) | 复用原 ZIP、ELF scanner、JSON、prefs、blit；补充 bundle 条目列举和提取 |
+| [SharedLibrary](../src/macos/SharedLibrary) | Foundation 资料库服务、原元数据/rank 模型、原子索引与 Swift Process 会话监督器 |
+| [HuskMac.swift](../src/macos/HuskMac/HuskMac.swift) | 原生 SwiftUI 导航、详情、导入、图标、设置与退出联动 |
+| [NativeRunner](../src/macos/NativeRunner) | AppKit/CAMetalLayer、键鼠/GameController、AudioQueue、ELF fixture ABI、存档及协议 |
+| [fixture](../tests/macos/fixture) | 自建游戏源码；移动、收集八颗星星、障碍、分数、完成轮数与音频 |
 
 每次游戏启动创建独立进程。主界面只发送命令并接收有 session UUID、PID、协议版本和严格序号的事件。旧会话不能改写新状态；暂停确认发生在停止 guest 更新之后；正常结束必须先有原子存档确认，再有终态事件和操作系统回收。输出读取与错误日志有限制；失联会触发停止期限和子进程回收。Runner 同时独立监视父进程消失。
 
@@ -44,7 +46,7 @@ P3 使用仓库自建 **Orbit Garden** 和 **Orbit Garden · Dusk**。玩法、G
 | 本地开发 Runner | `allow-unsigned-executable-memory` 和 `disable-library-validation` |
 | 同 Team ID Runner 模板 | 仅 `allow-unsigned-executable-memory`；未用真实证书验收 |
 
-图形依赖在 [macos.lock.json](/Users/tanmy/Projects/Husk-macOS/dependencies/macos.lock.json) 固定提交，缓存同时记录二进制 SHA-256。Bundle 带许可证、ANGLE 下游 notices 和 MoltenVK ExternalRevisions。动态库解析只指向系统或 bundle，未带 StikJIT、iOS pairing、QEMU guest 或开发者 Steam/Homebrew 运行依赖。
+图形依赖在 [macos.lock.json](../dependencies/macos.lock.json) 固定提交，缓存同时记录二进制 SHA-256。Bundle 带许可证、ANGLE 下游 notices 和 MoltenVK ExternalRevisions。动态库解析只指向系统或 bundle，未带 StikJIT、iOS pairing、QEMU guest 或开发者 Steam/Homebrew 运行依赖。
 
 发现 ad-hoc Hardened Runtime Runner 加载 ad-hoc ANGLE 时因缺少匹配 Team ID 被系统拒绝，故把 `disable-library-validation` 限定在开发模板；这是实际失败后的必要例外。正式签名模板与开发模板分开，打包器不会自动选择证书。Developer ID、公证、安装更新和完整发行许可审查仍在 P6。
 
@@ -52,20 +54,20 @@ Swift 构建曾遗漏最低系统 target，产物出现 `minos 27.0`；已显式
 
 最终源码导出包含 325 个非 ignored 文件，位于 `build/macos-p3-clean-source`；独立构建在 `build/macos-p3-clean`，只复用已按提交和 SHA-256 校验的图形缓存。全部实现文件与导出清单一致，重建及 5/5 CTest 通过。这证明本机干净源码/构建目录可复现，不代表另一台无开发环境的 Mac 已验收，也不承诺逐字节可重复二进制。
 
-[CI 配置](/Users/tanmy/Projects/Husk-macOS/.github/workflows/macos.yml) 固定 action commit，托管 `xcode-27` arm64 job 执行构建、核心与签名检查。真实 Metal/AudioQueue、会话和 30 分钟运行只在显式选择的物理 `husk-metal` runner 执行。Context7 返回的 GitHub runner-images 文档确认该标签当前为 preview；本地未推送，因此远程 CI 门槛仍是待验收项。
+[CI 配置](../.github/workflows/macos.yml) 固定 action commit，托管 `xcode-27` arm64 job 执行构建、核心与签名检查。真实 Metal/AudioQueue、会话和 30 分钟运行只在显式选择的物理 `husk-metal` runner 执行。Context7 返回的 GitHub runner-images 文档确认该标签当前为 preview；本地未推送，因此远程 CI 门槛仍是待验收项。
 
 **功能与稳定性证据**
 
 | 检查 | 结果 | 证据 |
 | --- | --- | --- |
-| 正式工程 CTest | 5/5 组通过 | [最终日志](/Users/tanmy/Projects/Husk-macOS/build/macos-final-tests.log) |
-| 资料库/会话端到端 | 31/31，通过同一份最终产物 | [latest.json](/Users/tanmy/Projects/Husk-macOS/build/macos/TestResults/latest.json) |
-| 干净源码重建 | 构建、签名、5/5 组（含 31 项）通过 | [重建日志](/Users/tanmy/Projects/Husk-macOS/build/macos-p3-clean-build.log) |
-| 最终产物平台/签名/rpath | 四个 Mach-O 全部通过 | [bundle-verification.json](/Users/tanmy/Projects/Husk-macOS/build/macos/bundle-verification.json) |
-| 反复启动/换游戏 | 20/20 次；每次运行 60 帧、保存并确认 PID 已消失 | [cycles result](/Users/tanmy/Projects/Husk-macOS/build/macos/Cycles-final-20261008/result.json) |
-| P0 既有回归 | 当前默认后台 30/30；未运行 GUI/主动故障选项 | [P0 日志](/Users/tanmy/Projects/Husk-macOS/build/macos-p0-final.log) |
-| 30 分钟持续渲染 | 1,800.07 秒通过，107,860 帧，约 59.9 fps；RSS 采样 25.5–30.4 MiB；正常保存/回收 | [长测结果](/Users/tanmy/Projects/Husk-macOS/build/macos-soak-submitted-20261008/run/result.json) |
-| 最终候选持续检查 | 300.05 秒通过，17,974 帧，约 59.9 fps；RSS 采样 30.4–30.5 MiB；正常保存/回收 | [最终候选结果](/Users/tanmy/Projects/Husk-macOS/build/macos-final-candidate/run/result.json) |
+| 正式工程 CTest | 5/5 组通过 | [最终日志](../build/macos-final-tests.log) |
+| 资料库/会话端到端 | 31/31，通过同一份最终产物 | [latest.json](../build/macos/TestResults/latest.json) |
+| 干净源码重建 | 构建、签名、5/5 组（含 31 项）通过 | [重建日志](../build/macos-p3-clean-build.log) |
+| 最终产物平台/签名/rpath | 四个 Mach-O 全部通过 | [bundle-verification.json](../build/macos/bundle-verification.json) |
+| 反复启动/换游戏 | 20/20 次；每次运行 60 帧、保存并确认 PID 已消失 | [cycles result](../build/macos/Cycles-final-20261008/result.json) |
+| P0 既有回归 | 当前默认后台 30/30；未运行 GUI/主动故障选项 | [P0 日志](../build/macos-p0-final.log) |
+| 30 分钟持续渲染 | 1,800.07 秒通过，107,860 帧，约 59.9 fps；RSS 采样 25.5–30.4 MiB；正常保存/回收 | [长测结果](../build/macos-soak-submitted-20261008/run/result.json) |
+| 最终候选持续检查 | 300.05 秒通过，17,974 帧，约 59.9 fps；RSS 采样 30.4–30.5 MiB；正常保存/回收 | [最终候选结果](../build/macos-final-candidate/run/result.json) |
 
 31 项端到端包括导入/图标/压缩 bundle/去重、损坏与不支持输入、伪造 fixture 拒绝、重启持久化、设置字段合并、真实 guest 键盘/手柄/鼠标输入路径、完成游戏目标、非零 PCM、暂停清键、焦点丢失清输入、保存顺序、移除再导入恢复、换游戏、子进程意外退出后恢复、存档损坏/读取失败以及隐藏 AppKit/CAMetalLayer 绘制。
 
@@ -77,7 +79,7 @@ Swift 构建曾遗漏最低系统 target，产物出现 `minos 27.0`；已显式
 
 长测使用修复离屏提交后的冻结候选，其后又增加隐藏窗口验证及最终 UI/存档边界修复，因此其 NativeRunner SHA-256 与最终产品不同。最终产品另有 5 分钟冻结候选检查，56 个普通文件均与该冻结候选相同；不能把早期候选的 30 分钟记录写成最终每个字节均已运行 30 分钟。候选清单及最终产物 hash 已随结果快照保留。
 
-实际 ANGLE 输出已检查，并保存为可审阅文件：[初始画面](/Users/tanmy/Projects/Husk-macOS/docs/macos-evidence/orbit-initial.png)、[隐藏 AppKit 窗口绘制](/Users/tanmy/Projects/Husk-macOS/docs/macos-evidence/orbit-native-window.png)、[Dusk](/Users/tanmy/Projects/Husk-macOS/docs/macos-evidence/orbit-dusk.png)。它们是游戏渲染证据，不是主资料库窗口截图。NSHostingView 离屏导出无法正确呈现 AppKit 材质的尝试已舍弃，相关临时 target 已删除。
+实际 ANGLE 输出已检查，并保存为可审阅文件：[初始画面](macos-evidence/orbit-initial.png)、[隐藏 AppKit 窗口绘制](macos-evidence/orbit-native-window.png)、[Dusk](macos-evidence/orbit-dusk.png)。它们是游戏渲染证据，不是主资料库窗口截图。NSHostingView 离屏导出无法正确呈现 AppKit 材质的尝试已舍弃，相关临时 target 已删除。
 
 **尚未通过的验收与下一阶段**
 

@@ -5,7 +5,7 @@
   "integratedRevision": "75dc21f82c1fd748867ad4d4b5dfb0e981c2d468",
   "checkedOn": "2026-10-08",
   "commitCount": 27,
-  "integration": "Source changes applied with three-way reconciliation; local macOS changes retained. Git HEAD is not advanced while migration work remains uncommitted.",
+  "integration": "Source changes applied with three-way reconciliation; local macOS changes retained. Preserved in local migration checkpoint 9573597; upstream ancestry was not merged.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522"
 }

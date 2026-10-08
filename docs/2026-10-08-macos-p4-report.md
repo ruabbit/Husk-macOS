@@ -1,10 +1,12 @@
 # P4：Minecraft 的原生 macOS 运行闭环
 
+> 后续状态（2026-10-08）：本报告和配套 JSON 保留验收当时的版本、机器路径与提交状态。全部已有工作现已保存为本地检查点 `9573597`；后续修复见 [审查修复报告](2026-10-08-macos-review-report.md)。本地提交未推送。
+
 日期：2026-10-08。分支 `codex/macos-p0`，基线 `82f33e858952f9fda3cf224e839f4385894e2d5b`，本地修改尚未提交或推送。
 
 用户指定的 Minecraft APK 已接入正式 NativeRunner 和资料库会话管理。当前交付范围是这一精确样本的本地 Creative 世界：导入、启动、图形、输入、静音真实音频、Activity 暂停/恢复、正常保存及重开。P4 原计划的其他引擎仍需要各自的样本；P5 VM 与 P6 发行工作没有开始。
 
-机器可读结果、候选哈希及采样见 [P4 结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-results.json)。构建和测试命令见 [macOS 指南](/Users/tanmy/Projects/Husk-macOS/docs/macos.md)。
+机器可读结果、候选哈希及采样见 [P4 结果快照](2026-10-08-macos-p4-results.json)。构建和测试命令见 [macOS 指南](macos.md)。
 
 ## 样本与候选
 
@@ -22,7 +24,7 @@
 
 APK 原文件最终复核 hash 一致。样本由用户提供，其官方/未修改来源未被本轮鉴定。APK、解包库和游戏数据保存在 ignored `build/macos-p4`，不随 Husk 打包。资料库准备阶段与 Runner 启动阶段都检查 APK 全文件 hash；另一份同名或同版本 APK 需要单独验收。
 
-产物为 [HuskMac.app](/Users/tanmy/Projects/Husk-macOS/build/macos/Product/HuskMac.app)。本轮没有替换正在运行的旧主界面实例，也没有把测试数据写入日常 Application Support 资料库。
+产物为 [HuskMac.app](../build/macos/Product/HuskMac.app)。本轮没有替换正在运行的旧主界面实例，也没有把测试数据写入日常 Application Support 资料库。
 
 ## 实现内容
 
@@ -59,9 +61,9 @@ APK 原文件最终复核 hash 一致。样本由用户提供，其官方/未修
 
 文字追加后的实际游戏字段：
 
-![Minecraft Unicode 编辑](/Users/tanmy/Projects/Husk-macOS/docs/macos-evidence/minecraft-p4-text.png)
+![Minecraft Unicode 编辑](macos-evidence/minecraft-p4-text.png)
 
-世界持续运行结束与重开的画面分别保留为 [关闭前](/Users/tanmy/Projects/Husk-macOS/docs/macos-evidence/minecraft-p4-world-before-close.png) 和 [重开后](/Users/tanmy/Projects/Husk-macOS/docs/macos-evidence/minecraft-p4-world-restored.png)。
+世界持续运行结束与重开的画面分别保留为 [关闭前](macos-evidence/minecraft-p4-world-before-close.png) 和 [重开后](macos-evidence/minecraft-p4-world-restored.png)。
 
 ## 回归与复现
 

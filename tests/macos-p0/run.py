@@ -146,10 +146,10 @@ def build():
         plistlib.dump(dict(CFBundleIdentifier="org.husk.macos.p0.runner", CFBundleName="Husk P0 Runner",
                           CFBundleExecutable="NativeRunner", CFBundlePackageType="APPL",
                           CFBundleVersion="1", NSHighResolutionCapable=True, LSMinimumSystemVersion="14.0"), f)
-    command([*common, "-mmacosx-version-min=14.0", "-fobjc-arc", ROOT / "src/macos-p0/NativeRunner.m",
+    command([*common, "-mmacosx-version-min=14.0", "-fobjc-arc", ROOT / "tests/macos-p0/harness/NativeRunner.m",
              *modern, "-framework", "AppKit", "-framework", "Security", "-lz",
              "-o", app / "Contents/MacOS/NativeRunner"])
-    sign(app, ROOT / "src/macos-p0/NativeRunner.entitlements")
+    sign(app, ROOT / "tests/macos-p0/harness/NativeRunner.entitlements")
     runtime = app / "Contents/MacOS/NativeRunner"
     dependencies = command(["otool", "-L", runtime])
     assert all(line.strip().startswith(("/usr/lib/", "/System/Library/")) for line in dependencies.splitlines()[1:]), dependencies
@@ -157,7 +157,7 @@ def build():
     entitlement_xml = command(["codesign", "-d", "--entitlements", "-", "--xml", runtime])
     assert plistlib.loads(entitlement_xml.encode()) == {"com.apple.security.cs.allow-unsigned-executable-memory": True}
     (OUT / "runner-dependencies.txt").write_text(dependencies + "\n")
-    sources = [ROOT / "scripts/test_macos_p0.sh", *HERE.glob("*"), *(ROOT / "src/macos-p0").glob("*"),
+    sources = [ROOT / "scripts/test_macos_p0.sh", *HERE.glob("*"), *(ROOT / "tests/macos-p0/harness").glob("*"),
                *NEXT.glob("*.h"), *CLASSIC.glob("*.h"), *modern, CLASSIC / "husk-tl-load.c"]
     manifest = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sources if p.is_file()}

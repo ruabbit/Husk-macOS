@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # Optional physical runner; must be registered before dispatching hardware.
+  labels:
+    - husk-metal

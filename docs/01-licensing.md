@@ -1,4 +1,57 @@
-# Licensing and distribution: decided
+# Licensing and distribution
+
+## macOS distribution status (2026-10-08)
+
+**The macOS artifacts are local development candidates. P6 distribution clearance is incomplete.** The earlier iOS decision below does not clear a macOS `.app`, `.zip` or `.dmg` for release. This section describes the current CMake targets, packaging scripts, pinned source licenses and actual packaged dependency closure.
+
+### Executable boundaries
+
+| Executable | In-process components | Distribution consequence |
+| --- | --- | --- |
+| `HuskMac` | Husk UI, SharedLibrary and SharedCore | Husk-authored code is GPL-2.0-or-later; no QEMU or StikJIT links in this process |
+| `NativeRunner` | Husk translation layer, ANGLE; MoltenVK when Vulkan is loaded | ANGLE is BSD-3-Clause with additional third-party notices; MoltenVK is Apache-2.0 with its own dependency notices. `dlopen` is still in-process integration, not separate-program aggregation |
+| Optional `VMRunner` | Husk VM bridge, QEMU 10.0.12-utm, static virgl/libepoxy, ANGLE and the dylib closure below | QEMU's top-level `LICENSE` specifies GPL version 2 for the emulator as a whole. The combined VM executable and its corresponding source must satisfy that license and every dependency's terms |
+
+The parent communicates with each helper using JSON over pipes. The current VM helper neither links nor loads MoltenVK; the Vulkan translation layer resides in NativeRunner. Storing MoltenVK in the parent bundle's `Frameworks` directory does not imply the parent loads it. These facts support treating the independently executed helpers as an aggregation within one app bundle, but a process boundary alone is not a blanket license exemption. Each executable's complete dependency combination must first be distributable.
+
+For the translation-layer executable, a GPLv3 distribution path may be available under the project's `GPL-2.0-or-later` grant, since Apache-2.0 is compatible with GPLv3, not GPLv2. **This is a proposed release path, not a completed per-file license audit or a repository relicensing decision.** P6 must confirm the licenses of every compiled translation-layer and graphics dependency and include the GPLv3 text if that option is selected. Applying GPLv3 to the QEMU executable cannot be assumed from Husk's own `-or-later` headers.
+
+### Actual VM dependency closure
+
+The review candidate's `VMRunner.app/Contents/Resources/dependencies.json` records each source dylib and SHA-256. The packager currently embeds these components, including dependencies found indirectly through Homebrew:
+
+| Component | Observed version / source | License evidence and remaining obligation |
+| --- | --- | --- |
+| QEMU | 10.0.12-utm; archive hash in [VM lock](../dependencies/macos-vm.lock.json) | `LICENSE`, `COPYING`, `COPYING.LIB`; provide modified corresponding source and build/install scripts |
+| virglrenderer / libepoxy | Commits `482f9d8` / `bf98587`, statically linked | Their `COPYING` files contain permissive notices; retain them and publish Husk patches with the VM source |
+| ANGLE | WebKit commit `f488eac`, [graphics lock](../dependencies/macos.lock.json) | BSD-3-Clause plus bundled third-party licenses; audit the compiled dependency subset as well as collecting notices |
+| GLib, GObject, GIO, GModule | 2.90.0 | LGPL-2.1-or-later; source and LGPL replacement/relinking obligations apply. The installed Homebrew keg has no license file, so it is not a sufficient notice source |
+| pixman | 0.46.4 | MIT; retain `COPYING` |
+| libslirp | 4.9.5 | BSD-3-Clause and component notices in `LICENSE` |
+| PCRE2 | 10.49 | `LICENCE.md`: BSD-3-Clause WITH PCRE2-exception, plus the JIT's BSD-2-Clause terms |
+| libintl | gettext 1.0 | LGPL-2.1-or-later; use `gettext-runtime/intl/COPYING.LIB`. The gettext package's top-level GPLv3 `COPYING` describes other components and cannot substitute for this library's license |
+| libssh | 0.12.2 | LGPL-2.1-or-later; currently auto-detected by QEMU's build |
+| OpenSSL libcrypto | 3.6.5, loaded by libssh | Apache-2.0; **unresolved conflict with the current GPLv2 QEMU distribution route** |
+
+The observed chain is `VMRunner → libqemu-aarch64-softmmu → libssh → libcrypto.3`. It shares one address space. Separating QEMU from NativeRunner does not remove this issue. The checked QEMU top-level license supplies no blanket OpenSSL linking exception; no exception covering this exact combination has been established. Before distributing the VM, disable the unused SSH block backend and rebuild/recheck its closure, or establish an applicable license grant for the exact linked work. Merely omitting `libcrypto` from the bundle would create a broken application.
+
+The graphics package currently copies ANGLE/MoltenVK notices and MoltenVK dependency revisions. The VM builder copies only QEMU, virgl and libepoxy notices. It does **not** yet gather all GLib/PCRE2/libintl/libssh/OpenSSL/slirp/pixman notices and source obligations. Host package versions are partly locked, but the entire transitive dependency source set is not. These are explicit release blockers, not evidence of completed compliance. Keeping both helpers in one `.app` does not remove notice obligations for either.
+
+### Before distributing a macOS binary
+
+1. Resolve each executable's license combination, including the QEMU/libssh/OpenSSL chain and the NativeRunner/MoltenVK GPL version choice. Repeat the closure audit after rebuilding; review ANGLE's compiled dependencies separately.
+2. Ship the applicable license texts, copyright statements and NOTICE files with the app. Include a readable source/version manifest covering direct, static and transitive dependencies. Preserve modified-file notices required by their licenses.
+3. Provide the **complete corresponding source for the exact shipped binaries**, including pinned dependency sources, all applied patches, generated-source inputs and scripts controlling compilation and installation. A moving GitHub branch, download URL or the current lock files alone is insufficient. Choose and fulfill a valid GPLv2 §3 / LGPL source-delivery method; if using a written offer, meet its duration and recipient requirements. No source offer is created by this document.
+4. Preserve recipients' ability to modify/relink LGPL components and satisfy the relevant license's reverse-engineering requirements. Document how to rebuild and re-sign a modified macOS app; the current ad-hoc signing check is not a release-license acceptance test.
+5. Review every distributed guest/firmware artifact separately. The app does not currently contain Android disks or user Minecraft APKs. The optional preparation script downloads LineageOS and extracts EDK2/seed files from a pinned upstream IPA. If those bytes are later redistributed, obtain the exact kernel/system/firmware sources, license notices and build information; an upstream binary hash proves identity, not redistribution compliance.
+
+P6 must produce this source/notice package alongside the signed binary before publication. The current VM packager already refuses non-ad-hoc signing, but that guard is not a compliance certificate. No macOS release, notarization or source offer has been published by this review.
+
+Primary evidence: [macOS targets](../CMakeLists.txt), [VM builder](../scripts/build_macos_vm.py), [VM packager](../scripts/package_macos_vm.py), [native packager](../scripts/package_macos.py), [QEMU source](https://github.com/utmapp/qemu/tree/v10.0.12-utm), [GLib 2.90.0 license](https://github.com/GNOME/glib/blob/2.90.0/LICENSES/LGPL-2.1-or-later.txt), [libintl license](https://github.com/autotools-mirror/gettext/blob/v1.0/gettext-runtime/intl/COPYING.LIB), [GNU Apache-2.0 compatibility explanation](https://www.gnu.org/licenses/license-list.html#apache2), and the license files from the installed versions listed above. Historical P5 candidate hashes remain in the [P5 results](2026-10-08-macos-p5-results.json); the [review report](2026-10-08-macos-review-report.md) records the newer build's validation scope.
+
+## Historical iOS licensing decision
+
+The remainder is the upstream iOS/IPA analysis retained for context. Its “resolved” and “distribution” statements refer to that earlier decision, not the current macOS candidates or their full transitive dependencies.
 
 The brief asked for this to be resolved before substantial original code gets
 written. It is resolved. Every claim below was checked against the actual

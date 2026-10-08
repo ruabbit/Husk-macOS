@@ -10,7 +10,7 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "src/macos-p0"))
+sys.path.insert(0, str(ROOT / "tests/macos-p0/harness"))
 from session import Session
 
 
