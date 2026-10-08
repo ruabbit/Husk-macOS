@@ -139,6 +139,15 @@ target_compile_options(MacRenderSurfaceTests PRIVATE -fobjc-arc)
 target_link_libraries(MacRenderSurfaceTests PRIVATE "-framework AppKit" "-framework QuartzCore" "-framework Metal")
 add_test(NAME macos-render-surface COMMAND MacRenderSurfaceTests "${HUSK_DEPS}/lib/libANGLE-shared.dylib")
 set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
+add_executable(MacNativeMouseTests tests/macos/NativeMouse.m ${MAC}/NativeRunner/MacRenderView.m
+    ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m ${MAC}/NativeRunner/MacAudio.m
+    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(MacNativeMouseTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include tests/macos/fixture)
+target_compile_options(MacNativeMouseTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
+target_link_libraries(MacNativeMouseTests PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"
+    "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox")
+add_test(NAME macos-native-mouse COMMAND MacNativeMouseTests)
+set_tests_properties(macos-native-mouse PROPERTIES TIMEOUT 15)
 add_executable(QuadMathTests tests/macos/QuadMath.c)
 target_link_libraries(QuadMathTests PRIVATE GameActivityRuntime)
 add_test(NAME android-binary128 COMMAND QuadMathTests)

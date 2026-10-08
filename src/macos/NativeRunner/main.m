@@ -42,6 +42,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property NSString *state;
 @property NSUInteger sequence, ticks;
 @property NSUInteger keyEvents, pointerEvents, controllerEvents;
+@property NSDictionary *lastClick;
 @property BOOL loaded, changingPause, lifecycleDestroyed;
 @property NSMutableSet<NSNumber *> *heldKeys;
 @property MacTextInput *textInput;
@@ -63,9 +64,11 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 
 @interface GameView : MacRenderView
 @property(weak) Runner *runner;
+@property int mouseButtons;
 @end
 @implementation GameView
 - (BOOL)acceptsFirstResponder {return YES;}
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {(void)event;return YES;}
 - (void)keyDown:(NSEvent *)event
 {
     if(minecraft&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
@@ -83,18 +86,39 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 {
     NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];
     self.inputAnchor=point;
+    BOOL press=event.type==NSEventTypeLeftMouseDown||event.type==NSEventTypeRightMouseDown||event.type==NSEventTypeOtherMouseDown;
+    BOOL release=event.type==NSEventTypeLeftMouseUp||event.type==NSEventTypeRightMouseUp||event.type==NSEventTypeOtherMouseUp;
+    BOOL drag=event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged||event.type==NSEventTypeOtherMouseDragged;
     if(minecraft) {
         if(![self.runner.state isEqual:@"running"])return;
-        if(self.runner.cursorCaptured&&(event.type==NSEventTypeMouseMoved||event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged)) {
-            tl_ga_mouse_relative(event.deltaX,event.deltaY,(int)NSEvent.pressedMouseButtons&7);self.runner.pointerEvents++;return;
+        int button=0;
+        if(press||release||drag) {
+            NSInteger number=event.buttonNumber;
+            if(number<0||number>=5)return;
+            button=1<<(int)number;
+            // Ignore releases/drags for a press rejected in the black bars,
+            // while paused, or cleared when the window lost focus.
+            if((release||drag)&&!(self.mouseButtons&button))return;
+        }
+        if(self.runner.cursorCaptured&&(event.type==NSEventTypeMouseMoved||drag)) {
+            tl_ga_mouse_relative(event.deltaX,event.deltaY,self.mouseButtons);self.runner.pointerEvents++;return;
         }
         NSPoint guest=[self renderPointForViewPoint:point];
         float x=guest.x,y=guest.y;
-        if(x<0||x>surfaceWidth||y<0||y>surfaceHeight){if(down||event.type==NSEventTypeMouseMoved)return;x=MAX(0,MIN(surfaceWidth,x));y=MAX(0,MIN(surfaceHeight,y));}
-        int buttons=(int)NSEvent.pressedMouseButtons & 7;
+        if(x<0||x>=surfaceWidth||y<0||y>=surfaceHeight) {
+            if(press||event.type==NSEventTypeMouseMoved||event.type==NSEventTypeScrollWheel)return;
+            x=MAX(0,MIN(surfaceWidth,x));y=MAX(0,MIN(surfaceHeight,y));
+        }
+        // Track the delivered stream: global pressedMouseButtons may already
+        // be released when AppKit dispatches a queued mouse-down event.
+        if(press)self.mouseButtons|=button;
+        if(release)self.mouseButtons&=~button;
+        if(press||release)self.runner.lastClick=@{@"type":@(event.type),@"windowX":@(event.locationInWindow.x),@"windowY":@(event.locationInWindow.y),
+            @"x":@(x),@"y":@(y),@"buttons":@(self.mouseButtons),@"viewWidth":@(self.bounds.size.width),@"viewHeight":@(self.bounds.size.height)};
         int action=event.type==NSEventTypeScrollWheel?8:event.type==NSEventTypeMouseMoved?7:
-            event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged?2:down?0:1;
-        tl_ga_mouse(action,x,y,buttons,event.scrollingDeltaY);
+            drag?2:down?0:1;
+        // AppKit raises for scrollingDeltaY on ordinary mouse events.
+        tl_ga_mouse(action,x,y,self.mouseButtons,event.type==NSEventTypeScrollWheel?event.scrollingDeltaY:0);
     } else {
         NSPoint guest=[self renderPointForViewPoint:point];
         mac_input_pointer(&self.runner->input,guest.x,guest.y,surfaceWidth,surfaceHeight,down && [self.runner.state isEqual:@"running"]);
@@ -108,6 +132,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (void)rightMouseDragged:(NSEvent *)event {[self pointer:event down:YES];}
 - (void)rightMouseUp:(NSEvent *)event {[self pointer:event down:NO];}
 - (void)otherMouseDown:(NSEvent *)event {[self pointer:event down:YES];}
+- (void)otherMouseDragged:(NSEvent *)event {[self pointer:event down:YES];}
 - (void)otherMouseUp:(NSEvent *)event {[self pointer:event down:NO];}
 - (void)mouseMoved:(NSEvent *)event {if(minecraft)[self pointer:event down:NO];}
 - (void)scrollWheel:(NSEvent *)event {if(minecraft)[self pointer:event down:NO];}
@@ -246,6 +271,7 @@ static int androidKey(unsigned code)
 }
 - (void)clearInput {
     [self releaseCursor];
+    if([self.textInput isKindOfClass:GameView.class])((GameView *)self.textInput).mouseButtons=0;
     mac_input_clear(&input);
     if(minecraft&&self.loaded){
         for(NSNumber *key in self.heldKeys)tl_ga_key(key.intValue,false,0);
@@ -309,7 +335,7 @@ static int androidKey(unsigned code)
     OrbitSave save={0};if(self.loaded&&!minecraft)self.save(&save);
     [self event:@"status" detail:@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
         @"runtime":minecraft?@"minecraft":@"orbit",@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(minecraft?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(minecraft?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
-        @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)}];
+        @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"lastClick":self.lastClick?:@{},@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)}];
 }
 - (void)command:(NSDictionary *)message
 {

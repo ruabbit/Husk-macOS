@@ -92,3 +92,10 @@
 - ANGLE `WindowSurfaceMtl::calcExpectedDrawableSize` 使用 `bounds.size × contentsScale`，`initialize` 会为传入的 CAMetalLayer 开启宽高 autoresizing，`checkIfLayerResized` 会在获取 drawable 时重设缓冲区。仅反复写 `drawableSize` 无法固定 guest 分辨率。
 - `MacRenderView` 让 Metal 图层及其直接父图层始终保持 guest 像素 bounds，父图层通过 transform 显示在 AppKit 内容区域中。由此避免渲染线程与主线程竞争同一 layer.bounds，也无需给现有 GameActivity/JNI 增加不完整的 resize 协议。
 - 默认失焦暂停为本地移植新增，旧配置将 true 持久化；仅更改 Swift 默认值不会改变已有游戏。本轮保留其他游戏选择，单独更改用户当前 Minecraft；默认值、持久化兼容及运行中策略分别验证。
+
+## 原生鼠标事件（2026-10-09）
+
+- 旧 GameView 对所有普通鼠标事件读取 `scrollingDeltaY`。本机 NSEvent 在左键按下时抛出 `NSInternalInconsistencyException: Invalid message sent to event`，调用尚未进入 `tl_ga_mouse`。后台捕获异常的小测试与正式响应方法的反向回归均复现；不能因 Runner 没有进程崩溃就认定没有输入异常。
+- Apple 的 [`pressedMouseButtons` 文档](https://developer.apple.com/documentation/appkit/nsevent/pressedmousebuttons)明确表示它读取调用时的全局状态，与事件队列无关。排队的按下事件可能读到已松开的状态；现在按被接纳的 down/up 维护按钮，失焦清除，黑边内开始的按压不进入游戏。
+- 原生 NSEvent 工厂即使指定 right/other 类型，也会默认生成 buttonNumber 0。回归测试需在私有 CGEvent 副本上指定按钮；所有对象仅直接交给隐藏 GameView，不向系统投递。隐藏 NSWindow 的 sendEvent 没有触发 responder，不能把该测试夹具失败当成产品复现。
+- 当前回归直接覆盖正式 GameView 到 Android 输入边界；真实菜单操作另由 CUA 与用户手动点击验证。计数器、坐标换算和画面渲染本身都不证明可见点击可用。

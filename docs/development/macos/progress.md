@@ -158,3 +158,12 @@
 - 实际用户 Minecraft APK 在既有隔离测试库中通过一次静音隐藏窗口检查：EGL 1280×720、收到失焦事件后继续从 2073 帧前进至 2327 帧、正常 storage-closed/exited、PID 回收。日志在 `build/logs/current-minecraft-window`，未修改日常游戏存档。
 - 原日常游戏自行正常退出后更新同一 `build/macos` 候选。初次窗口截图已观察；随后 CUA 原生 pipe 断开，重置后仍失败，新候选可见窗口截图/拖拽验收未完成。没有循环启动可见测试游戏。
 - 最后修正设置区原有的整组禁用：运行时可切换失焦暂停，静音仍在下次启动生效。UI 编译及最终签名通过；以原子替换更新候选主程序，保留已开的资料库进程。该进程需重新打开一次才能加载最后这项设置界面调整；游戏 helper 已是通过验证的新版。
+
+## 鼠标点击修复（2026-10-09）
+
+- 用户确认手动 Settings 点击无响应。旧会话 `CFE11150-5A50-4E33-858F-0FAAEFFA2A5E` 的鼠标计数停在 53，而 Tab 可以改变选择。此前隐藏画布与坐标测试没有覆盖真实点击链路，这属于验证遗漏。
+- 修复 GameView 对非滚轮事件读取 `scrollingDeltaY` 引起的 AppKit 异常；改用事件序列维护鼠标按钮，支持首次点击激活窗口及中键拖动。暂停、失焦、黑边起始按压与跨边界松开均有处理，状态事件保留一份 lastClick 供诊断；临时本地事件监听器已移除。
+- 新增 `macos-native-mouse`，用正式 GameView 响应方法和真实 NSEvent 对象验证六类输入场景。临时恢复旧的无条件滚轮属性读取后，首次左键点击捕获同样异常、输入边界事件数为 0；恢复修复后全部通过。该过程仅构建后台测试，不重启可见游戏、不制造崩溃提示。
+- 用户启动并点击的会话 `12FB5AFA-7AA6-4EB9-B759-3BD50C1BE057` 已显示 Settings。随后通过 CUA 点击 Keyboard & Mouse；原生 zoom 调整到 1920×956 点后点击 Accessibility 并返回主菜单，再恢复 960×540 点。保存的 Settings、Keyboard & Mouse、返回主菜单截图位于 `build/logs/current-mouse`；没有操作设置开关、创建世界或登录。
+- 现场可见验证使用带临时监听器的诊断版本。磁盘候选随后去掉监听器，并完善黑边起始按压、滚轮属性访问和失焦后拖动的过滤；这些收尾由后台回归验证。两版 helper 的哈希保存在 `build/logs/current-mouse/candidate.json`。更新时保留游戏进程；随后该会话收到 controller-stop，正常完成 storage-closed / exited，两个 App 进程均消失，没有新增崩溃报告。本轮没有再启动可见游戏，下次启动加载最终 helper。
+- 最终候选覆盖同一 `build/macos/Product/HuskMac.app`，对被映射的可执行文件原子替换后重新签名，未复制额外 App。14/14 CTest 与 17 个 Mach-O 签名/依赖闭包检查通过；日志为 `build/logs/current-tests.log`、`current-mouse-regression-before.log`、`current-mouse-regression-after.log`，包检查为 `build/macos/bundle-verification.json`。世界内视角捕获和完整玩法未在本轮验收。

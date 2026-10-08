@@ -106,9 +106,13 @@ build/macos/MacVMSession \
 
 测试包括资料库导入/去重/重启/设置/删除规则、损坏文件、伪造 fixture 拒绝、实际 ELF 游戏输入与目标完成、ANGLE 帧捕获、非零 PCM、暂停清键、存档恢复、换游戏和子进程失败后的恢复。`verify_macos_bundle.py` 核对签名、entitlement、macOS arm64、最低版本字段、rpath 和全部动态依赖位置。现有 P0 的入口仍为 `scripts/test_macos_p0.sh`；默认不显示窗口、不注入崩溃。
 
-P4 增加 AAudio 探测流/回调 STOP 后重启、Android binary128 数学 ABI、JNI UTF-8 文本状态及原生组合文本/UTF-16/字素删除测试。0.2.0 增加旧资料库能力升级、设置/存档保留、实验版本完整性及 Runner 独立入口检查。审查修复新增 VM 控制器进程回归：终止后延迟事件、两条输出的 EOF 顺序、错误保留、读管道超时及同对象重开，并覆盖系统要求判断。TL-only 为 12 组，启用 VM 后为 13 组。VM 控制器回归只启动有限时长的 CLI fixture；默认测试不启动 Android 或 Minecraft。
+P4 增加 AAudio 探测流/回调 STOP 后重启、Android binary128 数学 ABI、JNI UTF-8 文本状态及原生组合文本/UTF-16/字素删除测试。0.2.0 增加旧资料库能力升级、设置/存档保留、实验版本完整性及 Runner 独立入口检查。审查修复新增 VM 控制器进程回归：终止后延迟事件、两条输出的 EOF 顺序、错误保留、读管道超时及同对象重开，并覆盖系统要求判断。TL-only 为 13 组，启用 VM 后为 14 组。VM 控制器回归只启动有限时长的 CLI fixture；默认测试不启动 Android 或 Minecraft。
 
 窗口回归 `macos-render-surface` 使用真实 ANGLE/CAMetalLayer，在隐藏窗口中检查 1280×720 和 640×400 两种画布、初始尺寸、宽/高窗口及模拟 1×/2× backing scale，共 24 个组合。检查项包含实际 EGL 缓冲区尺寸、四角像素、图层居中和鼠标映射。资料库集成回归另行覆盖默认失焦继续运行、运行中更改策略、显式暂停与清除输入。隐藏窗口测试不替代可见窗口、全屏和多显示器验收。
+
+鼠标回归 `macos-native-mouse` 用原生 NSEvent 对象调用正式 GameView 响应方法，记录 Android 输入边界，检查点击、组合按钮、拖动、滚轮、失焦清键及黑边处理。窗口保持隐藏，不向系统投递鼠标事件。旧代码在普通点击中读取 `scrollingDeltaY` 会抛出 AppKit 异常；恢复该错误的反向检查已确认测试在首次点击失败。此前坐标换算与隐藏渲染检查没有覆盖这条路径。
+
+2026-10-09 的可见窗口验证使用用户已启动的 Minecraft：实际鼠标打开 Settings、切换 Keyboard & Mouse，放大窗口后切换 Accessibility、返回主菜单，再恢复窗口尺寸。此项验证覆盖菜单点击和缩放后的命中；世界内视角捕获、实体手柄及多显示器仍不在本次结论内。现场日志和截图保存在 `build/logs/current-mouse`，详细边界见 [开发记录](development/macos/progress.md)。
 
 较长验证是显式命令，均不创建可见窗口：
 
