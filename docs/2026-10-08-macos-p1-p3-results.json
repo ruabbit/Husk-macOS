@@ -1,0 +1,634 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-08T01:27:09.022172+08:00",
+  "scope": "P1-P3 internal macOS prototype",
+  "baseline": "82f33e858952f9fda3cf224e839f4385894e2d5b",
+  "branch": "codex/macos-p0",
+  "uncommitted": true,
+  "environment": {
+    "macOS": "27.0",
+    "architecture": "arm64",
+    "cpu": "Apple M1 Ultra"
+  },
+  "bundle": {
+    "passed": true,
+    "app": "/Users/tanmy/Projects/Husk-macOS/build/macos/Product/HuskMac.app",
+    "binaries": {
+      "Contents/MacOS/HuskMac": {
+        "sha256": "aca90af0274ad8a4f9705412a8fbfbbeb4beb40059cdf7cb017658f9959f9e64",
+        "architecture": "arm64",
+        "minimumOS": [
+          "14.0"
+        ],
+        "dependencies": [
+          "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+          "/System/Library/Frameworks/SwiftUI.framework/Versions/A/SwiftUI",
+          "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+          "/usr/lib/libz.1.dylib",
+          "/usr/lib/libSystem.B.dylib",
+          "/System/Library/Frameworks/Combine.framework/Versions/A/Combine",
+          "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+          "/System/Library/Frameworks/CryptoKit.framework/Versions/A/CryptoKit",
+          "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+          "/System/Library/Frameworks/ImageIO.framework/Versions/A/ImageIO",
+          "/usr/lib/libobjc.A.dylib",
+          "/usr/lib/swift/libswiftCore.dylib",
+          "/usr/lib/swift/libswiftCoreAudio.dylib",
+          "/usr/lib/swift/libswiftCoreFoundation.dylib",
+          "/usr/lib/swift/libswiftCoreImage.dylib",
+          "/usr/lib/swift/libswiftDarwin.dylib",
+          "/usr/lib/swift/libswiftDispatch.dylib",
+          "/usr/lib/swift/libswiftIOKit.dylib",
+          "/usr/lib/swift/libswiftMetal.dylib",
+          "/usr/lib/swift/libswiftOSLog.dylib",
+          "/usr/lib/swift/libswiftObjectiveC.dylib",
+          "/usr/lib/swift/libswiftQuartzCore.dylib",
+          "/usr/lib/swift/libswiftSpatial.dylib",
+          "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib",
+          "/usr/lib/swift/libswiftXPC.dylib",
+          "/usr/lib/swift/libswift_Concurrency.dylib",
+          "/usr/lib/swift/libswiftos.dylib",
+          "/usr/lib/swift/libswiftsimd.dylib"
+        ],
+        "rpaths": [
+          "/usr/lib/swift",
+          "@executable_path/../Frameworks"
+        ],
+        "entitlements": {},
+        "hardenedRuntime": true
+      },
+      "Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner": {
+        "sha256": "543bed7b14677458225d380a8d8024c8ef5e0f4fc92c3427a640bdb2a7a4161f",
+        "architecture": "arm64",
+        "minimumOS": [
+          "14.0"
+        ],
+        "dependencies": [
+          "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+          "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+          "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+          "/System/Library/Frameworks/Security.framework/Versions/A/Security",
+          "/System/Library/Frameworks/GameController.framework/Versions/A/GameController",
+          "/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox",
+          "/usr/lib/libz.1.dylib",
+          "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+          "/usr/lib/libSystem.B.dylib",
+          "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+          "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+          "/usr/lib/libobjc.A.dylib"
+        ],
+        "rpaths": [
+          "@executable_path/../Frameworks"
+        ],
+        "entitlements": {
+          "com.apple.security.cs.allow-unsigned-executable-memory": true,
+          "com.apple.security.cs.disable-library-validation": true
+        },
+        "hardenedRuntime": true
+      },
+      "Contents/Frameworks/libANGLE-shared.dylib": {
+        "sha256": "01181bf05243355f103044c595ae80378a79cce47040bca4cfa202afe5192fa6",
+        "architecture": "arm64",
+        "minimumOS": [
+          "14.0"
+        ],
+        "dependencies": [
+          "@rpath/libANGLE-shared.dylib",
+          "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+          "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+          "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+          "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+          "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+          "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+          "/usr/lib/libz.1.dylib",
+          "/usr/lib/libobjc.A.dylib",
+          "/usr/lib/libc++.1.dylib",
+          "/usr/lib/libSystem.B.dylib",
+          "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation"
+        ],
+        "rpaths": [],
+        "entitlements": {},
+        "hardenedRuntime": true
+      },
+      "Contents/Frameworks/MoltenVK.framework/Versions/A/MoltenVK": {
+        "sha256": "605e803a32cb2363f387b05fe5f60943613495612d85094fe82f7f70d177d0c6",
+        "architecture": "arm64",
+        "minimumOS": [
+          "12.0"
+        ],
+        "dependencies": [
+          "@rpath/MoltenVK.framework/MoltenVK",
+          "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+          "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+          "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+          "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+          "/usr/lib/libc++.1.dylib",
+          "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+          "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+          "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+          "/usr/lib/libSystem.B.dylib",
+          "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+          "/usr/lib/libobjc.A.dylib"
+        ],
+        "rpaths": [],
+        "entitlements": {},
+        "hardenedRuntime": true
+      }
+    },
+    "signing": "local ad-hoc unless an explicit identity was supplied"
+  },
+  "integration": {
+    "count": 31,
+    "deliberateCrash": false,
+    "modes": [
+      "headless",
+      "hidden-AppKit-window"
+    ],
+    "passed": [
+      "import-two-playable-fixtures",
+      "import-preserves-icon",
+      "compressed-bundle-and-deduplication",
+      "reject-damaged.apk",
+      "reject-duplicate.apks",
+      "unsupported-import-has-clear-status",
+      "forged-fixture-cannot-execute",
+      "restart-preserves-library-and-settings",
+      "independent-setting-updates-preserve-both-fields",
+      "corrupt-library-is-preserved",
+      "no-window-created",
+      "keyboard-moves-guest-player",
+      "pause-stops-guest-simulation",
+      "pause-clears-held-key",
+      "controller-path-moves-guest-player",
+      "focus-loss-clears-controller-state",
+      "pointer-play-reaches-game-objective",
+      "guest-produces-nonzero-PCM",
+      "checkpoint-ack-before-reaped-exit",
+      "ANGLE-renders-different-game-states",
+      "remove-game-preserves-save",
+      "reimport-and-restart-restores-game-progress",
+      "switch-game-uses-fresh-process-and-save",
+      "unexpected-child-exit-isolated-from-library",
+      "unexpected-exit-preserves-last-save",
+      "new-session-works-after-child-failure",
+      "AppKit-window-host-stays-hidden",
+      "ANGLE-CAMetalLayer-window-surface-renders",
+      "explicit-save-deletion",
+      "corrupt-save-is-rejected-without-overwrite",
+      "unreadable-save-reports-failure-without-crashing"
+    ],
+    "physicalController": false,
+    "run": "/Users/tanmy/Projects/Husk-macOS/build/macos/TestResults/035E1073-677B-4133-A3AA-599B6EFC706E",
+    "speakerOutput": false,
+    "visibleWindows": false
+  },
+  "ctestGroups": {
+    "passed": 5,
+    "total": 5
+  },
+  "cleanBuild": {
+    "sourceFiles": 325,
+    "implementationFilesCompared": 269,
+    "implementationMatchesFinal": true,
+    "externalPinnedGraphicsCacheReused": true,
+    "ctestGroupsPassed": 5,
+    "integrationCount": 31,
+    "run": "/Users/tanmy/Projects/Husk-macOS/build/macos-p3-clean/TestResults/3E1A1636-2097-4EC7-B52E-FECBE70093C1",
+    "sourceManifestSHA256": "a91e69b4817c134abaf9165c7a858163e365e2256ff6affc93a8f263c13e4d0e"
+  },
+  "cycles": {
+    "cycles": 20,
+    "passed": true,
+    "records": [
+      {
+        "cycle": 1,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34025,
+        "reaped": true,
+        "session": "78030855-C3B6-417B-AFDA-4704A9DA176A"
+      },
+      {
+        "cycle": 2,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34030,
+        "reaped": true,
+        "session": "DB71DFB3-C36E-4038-8F50-8FC2ECD27770"
+      },
+      {
+        "cycle": 3,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34034,
+        "reaped": true,
+        "session": "EA4056C8-D7D6-4515-9876-41BBCFC778A4"
+      },
+      {
+        "cycle": 4,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34035,
+        "reaped": true,
+        "session": "2C1D6643-42ED-4581-93E8-4960A843A28A"
+      },
+      {
+        "cycle": 5,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34037,
+        "reaped": true,
+        "session": "79F16CC5-8197-4203-9836-6D832215A78F"
+      },
+      {
+        "cycle": 6,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34040,
+        "reaped": true,
+        "session": "5DEF2E98-FC41-4453-9108-CD8F66758CF0"
+      },
+      {
+        "cycle": 7,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34042,
+        "reaped": true,
+        "session": "941C4A89-5897-4CA3-B7B1-4C382B2F1479"
+      },
+      {
+        "cycle": 8,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34044,
+        "reaped": true,
+        "session": "9ECC495B-DC41-4109-B958-E9ACE28948D9"
+      },
+      {
+        "cycle": 9,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34047,
+        "reaped": true,
+        "session": "89790F54-868A-4B98-8E56-9EE3493FE87B"
+      },
+      {
+        "cycle": 10,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34048,
+        "reaped": true,
+        "session": "A58A541E-84BE-4EBE-8C73-9164CC9A57B8"
+      },
+      {
+        "cycle": 11,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34049,
+        "reaped": true,
+        "session": "E36BBC27-913E-486C-A8F0-0FEA21695C36"
+      },
+      {
+        "cycle": 12,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34050,
+        "reaped": true,
+        "session": "9DDA63E9-EA28-4861-8879-AC6AC4E8D53C"
+      },
+      {
+        "cycle": 13,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34051,
+        "reaped": true,
+        "session": "94117413-4286-4BC5-BFC8-E4F2D4AC87FB"
+      },
+      {
+        "cycle": 14,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34052,
+        "reaped": true,
+        "session": "CD1B1838-82A4-471D-9380-AF96B4D74A59"
+      },
+      {
+        "cycle": 15,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34057,
+        "reaped": true,
+        "session": "B2C1A203-FB3D-41DF-9D8F-58836BD7A99A"
+      },
+      {
+        "cycle": 16,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34059,
+        "reaped": true,
+        "session": "3EDD2544-BB76-4302-973C-55981E262F6A"
+      },
+      {
+        "cycle": 17,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34060,
+        "reaped": true,
+        "session": "C53DE450-FA1E-4893-A7C6-E26AB232F538"
+      },
+      {
+        "cycle": 18,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34061,
+        "reaped": true,
+        "session": "4B1842EE-4964-4725-8EE3-C50B3D2B07C7"
+      },
+      {
+        "cycle": 19,
+        "game": "360e00041349c6b895c012dbf5058c8202df3afb124b94dbec1cdf3db2279b42",
+        "pid": 34062,
+        "reaped": true,
+        "session": "AD61A5AB-D23E-495F-ACB9-F8FE81752BC4"
+      },
+      {
+        "cycle": 20,
+        "game": "6263f96e5a0020fc0247c52c735478f0f6c8b73293be57d83bc7430938554506",
+        "pid": 34063,
+        "reaped": true,
+        "session": "5E81D212-DE29-4D1B-8D34-B415FF7465FC"
+      }
+    ],
+    "visibleWindows": false
+  },
+  "p0": {
+    "count": 30,
+    "allPassed": true,
+    "selection": {
+      "suite": "all",
+      "gui": false,
+      "faults": false,
+      "cycles": 2,
+      "build_only": false
+    }
+  },
+  "longSoak": {
+    "passed": true,
+    "candidate": "/Users/tanmy/Projects/Husk-macOS/build/macos-soak-submitted-20261008/HuskMac.app",
+    "durationSeconds": 1800.074371933937,
+    "frames": 107860,
+    "averageFPS": 59.919746473652076,
+    "minRSSMiB": 25.515625,
+    "maxRSSMiB": 30.421875,
+    "samples": [
+      {
+        "elapsed": 0.5330820083618164,
+        "rssKB": 30944,
+        "ticks": 0
+      },
+      {
+        "elapsed": 60.64515697956085,
+        "rssKB": 31056,
+        "ticks": 3600
+      },
+      {
+        "elapsed": 121.03233397006989,
+        "rssKB": 31104,
+        "ticks": 7200
+      },
+      {
+        "elapsed": 181.3080279827118,
+        "rssKB": 31152,
+        "ticks": 10860
+      },
+      {
+        "elapsed": 241.7946310043335,
+        "rssKB": 31152,
+        "ticks": 14460
+      },
+      {
+        "elapsed": 302.1345989704132,
+        "rssKB": 31152,
+        "ticks": 18060
+      },
+      {
+        "elapsed": 362.46190798282623,
+        "rssKB": 31152,
+        "ticks": 21720
+      },
+      {
+        "elapsed": 422.6951229572296,
+        "rssKB": 27248,
+        "ticks": 25320
+      },
+      {
+        "elapsed": 482.98588395118713,
+        "rssKB": 26160,
+        "ticks": 28920
+      },
+      {
+        "elapsed": 543.2192269563675,
+        "rssKB": 26160,
+        "ticks": 32520
+      },
+      {
+        "elapsed": 603.3540469408035,
+        "rssKB": 26192,
+        "ticks": 36120
+      },
+      {
+        "elapsed": 663.5073959827423,
+        "rssKB": 26192,
+        "ticks": 39720
+      },
+      {
+        "elapsed": 723.9269149303436,
+        "rssKB": 26192,
+        "ticks": 43320
+      },
+      {
+        "elapsed": 784.2609609365463,
+        "rssKB": 26176,
+        "ticks": 46980
+      },
+      {
+        "elapsed": 844.6431659460068,
+        "rssKB": 26176,
+        "ticks": 50580
+      },
+      {
+        "elapsed": 904.7565469741821,
+        "rssKB": 26176,
+        "ticks": 54180
+      },
+      {
+        "elapsed": 965.172464966774,
+        "rssKB": 26176,
+        "ticks": 57780
+      },
+      {
+        "elapsed": 1025.3430750370026,
+        "rssKB": 26176,
+        "ticks": 61440
+      },
+      {
+        "elapsed": 1085.7202219963074,
+        "rssKB": 26176,
+        "ticks": 65040
+      },
+      {
+        "elapsed": 1146.0605039596558,
+        "rssKB": 26192,
+        "ticks": 68640
+      },
+      {
+        "elapsed": 1206.3572080135345,
+        "rssKB": 26176,
+        "ticks": 72240
+      },
+      {
+        "elapsed": 1266.8563640117645,
+        "rssKB": 26176,
+        "ticks": 75900
+      },
+      {
+        "elapsed": 1326.890676021576,
+        "rssKB": 26192,
+        "ticks": 79500
+      },
+      {
+        "elapsed": 1387.2279080152512,
+        "rssKB": 26192,
+        "ticks": 83100
+      },
+      {
+        "elapsed": 1447.5615420341492,
+        "rssKB": 26192,
+        "ticks": 86760
+      },
+      {
+        "elapsed": 1507.885102033615,
+        "rssKB": 26192,
+        "ticks": 90360
+      },
+      {
+        "elapsed": 1567.9931709766388,
+        "rssKB": 26144,
+        "ticks": 93900
+      },
+      {
+        "elapsed": 1628.2969850301743,
+        "rssKB": 26144,
+        "ticks": 97560
+      },
+      {
+        "elapsed": 1688.467651963234,
+        "rssKB": 26144,
+        "ticks": 101160
+      },
+      {
+        "elapsed": 1748.663125038147,
+        "rssKB": 26128,
+        "ticks": 104760
+      }
+    ],
+    "session": "62C8C6F4-AF8D-4C7A-B6F7-6DC7596F2641",
+    "pid": 21208,
+    "checkpointAcknowledged": true,
+    "reaped": true,
+    "headless": true,
+    "muted": true,
+    "runnerSHA256": "badf169b2cbecd9c347df9ef983d73e33f7230359c471a32ff937c8d936a3011",
+    "candidateManifestSHA256": "99cf02f76fe81311a75648842896b2a7bb5da38a9d544c150ffdbdf013864a7d"
+  },
+  "finalCandidateSoak": {
+    "passed": true,
+    "candidate": "/Users/tanmy/Projects/Husk-macOS/build/macos-final-candidate/HuskMac.app",
+    "durationSeconds": 300.0472470521927,
+    "frames": 17974,
+    "averageFPS": 59.903899057848896,
+    "minRSSMiB": 30.375,
+    "maxRSSMiB": 30.515625,
+    "samples": [
+      {
+        "elapsed": 0.5304650068283081,
+        "rssKB": 31104,
+        "ticks": 0
+      },
+      {
+        "elapsed": 60.535635113716125,
+        "rssKB": 31152,
+        "ticks": 3600
+      },
+      {
+        "elapsed": 120.69776105880737,
+        "rssKB": 31248,
+        "ticks": 7200
+      },
+      {
+        "elapsed": 181.07046008110046,
+        "rssKB": 31200,
+        "ticks": 10860
+      },
+      {
+        "elapsed": 241.39723801612854,
+        "rssKB": 31184,
+        "ticks": 14460
+      }
+    ],
+    "session": "B99FC6EF-1DCC-49B0-8B9A-6AED72277E0E",
+    "pid": 34575,
+    "checkpointAcknowledged": true,
+    "reaped": true,
+    "headless": true,
+    "muted": true,
+    "runnerSHA256": "543bed7b14677458225d380a8d8024c8ef5e0f4fc92c3427a640bdb2a7a4161f",
+    "candidateManifestSHA256": "f51889f6cd4b413ac9abc7835b66ac22f06093d1dac70486b03f5f60d6967d43"
+  },
+  "provenanceLimit": "The 30-minute candidate predates hidden-window and final UI/save-error changes; final candidate has a separate 5-minute result. Do not claim 30 minutes on final bytes.",
+  "implementationSHA256": {
+    ".github/workflows/macos.yml": "5129631cbfb4a09f4b6c5b894919f9fab9657f2fe6050ffc34a34d465ada63e6",
+    "CMakeLists.txt": "901f3d21dcca3843cc9c6a28163a6bfacdd13f3de887b3b810541f2eed85301e",
+    "dependencies/macos.lock.json": "88e88f0dcdc5aba8259b2d1fc26f7135dda3128b994c5cb02150f10d901afe09",
+    "scripts/build_macos.sh": "54278e5cdce40fb306fa58213a5d21ab8e82d067985df02ba6dec694f72187e4",
+    "scripts/build_macos_fixture.py": "5f45fd36a4071c50e23cc0947527ddba170e842d44a44c438ed19d5211d2600e",
+    "scripts/build_macos_graphics.py": "f3b9aebff5fd7628718284a170204f5ccf5c7c9419d0a5b589d94c89022bc8d2",
+    "scripts/build_macos_validation.sh": "713f7bdeef2b12a418ae63d4f99497fdc413967fd224737d7beb15d52ee8c133",
+    "scripts/package_macos.py": "9ccd9dd69e840cd5e33b1046ea413d53c56d0eaf6d96934e7126f15dff59985a",
+    "scripts/test_macos.sh": "27eea8513e55462fe3c5c48feb7707c02eefadf62497ba19f9a38afa598163f0",
+    "scripts/test_macos_p0.sh": "64c31e04d247664011c62ba76801fcb6d19b66e778d593f6256e4e0b62c9356c",
+    "scripts/verify_macos_bundle.py": "cf69842a32446f2e33845a30bdebe5493e47c486c8bd8a4fd556a17bd9724c9b",
+    "src/macos/HuskMac/HuskMac.swift": "1949ad0a5c81c2c3cc32eb1e89695a9e9c3fee38b3831b76bc43c9a57b9d15ab",
+    "src/macos/HuskMac/Info.plist.in": "95a33ae5d0827b61c68293af6d3f062aa7a6c2bd4642ffcd7cd33aa9459d9ea2",
+    "src/macos/NativeRunner/FixtureHost.c": "89118902122faa67fdd2ced89fdd34436152bc5ed48924e7a9015ae9df0552a6",
+    "src/macos/NativeRunner/Info.plist.in": "a110e7909b157a3a6d19b2472cd0b8b6b975f59dc80cbc132eb3ebf949bdb4a2",
+    "src/macos/NativeRunner/MacAudio.h": "c9f1801055257cc8d601ecd445c54bb4faa826c68ae23aac57d89532a539ad65",
+    "src/macos/NativeRunner/MacAudio.m": "f710807cfa32ceb0061c12752725dfe389959450b941d2b94fee3ce708540858",
+    "src/macos/NativeRunner/MacGraphics.h": "89675bd6e9f288c16ba7e28a552c24cda4e44b6e333a4038ccb8c6f3b59accf6",
+    "src/macos/NativeRunner/MacGraphics.m": "290ef1aef448965c72823d89a7a01354cc5a7071f723f494ed11fdb9928a0ba2",
+    "src/macos/NativeRunner/MacInput.c": "22648e59a5691b191919570dc0db40d31703aed9d1650e972c3f83b515a89ceb",
+    "src/macos/NativeRunner/MacInput.h": "162f76a886f205810162f558387727a49423244ef852ccb45fecca33992b2613",
+    "src/macos/NativeRunner/NativeRunner.development.entitlements": "da489da7fc61d03611850a0adc70f92be24957ac1962d1b4ec0a3edf86361df2",
+    "src/macos/NativeRunner/NativeRunner.entitlements": "329d9fb59048780d1ec5e8fa8acdfdeeb3bf20960c99ff63d4071c86c0659cf4",
+    "src/macos/NativeRunner/main.m": "565ffb608f153102c0ee036da85dcf6eb29c6e49de8a68db5fd0ac345afcc21f",
+    "src/macos/SharedCore/Archive.c": "fe49fa0d0007b108d3b6909ed20216a60c243ea1c16fbcc39068a93e72ab8142",
+    "src/macos/SharedCore/HuskCore.h": "184f28169bf5d60aa293d6af67095d1a4bacb91e4d81c48882c997c1fbc06ffc",
+    "src/macos/SharedCore/module.modulemap": "1b6a6cb807bfe7b9ece5a47c60fb5b32f50ebf8181c8556b8e1cc7f5935edf08",
+    "src/macos/SharedLibrary/AtomicFile.swift": "2c5fb4f47488282fed53006b4cbd2d3e141a84e6c4f44c85056b4c75b16a8112",
+    "src/macos/SharedLibrary/LibraryRepository.swift": "8aea50eb3d4089faced3341cff81043d65773c2a8eeab89d2a02b69febf892bf",
+    "src/macos/SharedLibrary/Models.swift": "b05c5200a99928d10523fd6d6f3ea08a98f0e533e3e5e77072f502343f2f2383",
+    "src/macos/SharedLibrary/SessionController.swift": "6df29c0e7d4564da7d36223e776d9ecf32688f87edf2d32e52e998a8c88a4035",
+    "src/translation-layer-next/husk-tl-ld.c": "530adc58893745b9af81ca3855350f8b928f7191089d43b359f5bdc88c4d7793",
+    "src/translation-layer-next/husk-tl-xmem.c": "2bf23edea69a5271ff63ad7c8bf03e7ad530053e240e44b6f2dcf480211e52da",
+    "src/translation-layer-next/husk-tl-xmem.h": "c8785b271fd54b609060048bccae1b95c6ba429fcc7676c5752ee32c4ec1ec7b",
+    "src/translation-layer/husk-tl-load.c": "f587147bf3e10969610717bea6491f18eeb5125690b59da02fe8a6438baa5052",
+    "tests/macos/Cycles.swift": "ed6262c94a0ea7129fd762e0ee0cbc11aa385218a71c1ae5a5c74996f655764f",
+    "tests/macos/HostTests.m": "0e3ec949edb948bbaafad1b7aa8b94e8ce6864b8a94206b5654a5b7f4ccffa64",
+    "tests/macos/Integration.swift": "17161ea9580dcef16c5bebf02329fd31c660398ceef277a7c0e845f811a22c39",
+    "tests/macos/Soak.swift": "67ca14c944d4dab0823c29d230cada5cc582786eb6aee7afc55bc19b9b8c27ab",
+    "tests/macos/fixture/orbit.c": "36508c007db5378d7eac4576ecd4053655d5191f4ad4e975f37e08bcbb9b2fd6",
+    "tests/macos/fixture/orbit.h": "049d8b19c8ac56e2d2c4e4e46f57316e003ce315f1c4684eadde5600ea0170a6",
+    "tests/macos/prepare_cases.py": "3a63d00315a89c28a28e4d478608a58ba01f58c11061f17486e1f5fa60567a6b",
+    "tests/translation-layer/test_scan.py": "0af6d4dd3a9d916497c486f577c8c976d43d3e129035255a17525e775d492196"
+  },
+  "logSHA256": {
+    "build/macos-final-tests.log": "410ce6f33c14eb542892ad5e43fb787008b3879e0a4596966fb751ea98ccb104",
+    "build/macos-p3-clean-build.log": "86bf127e200f3d115844928631a44e70d39860e4af8661cc439cf05b031dfaa1",
+    "build/macos-p0-final.log": "a33453d828f9af5acfbfca4516050fe51e146ce15dc1be2dbeee930cd0a97ef7",
+    "build/macos-cycles-final.log": "7b7b950fee0dbe9ef3c0d63e0f313cfa5d2803062aaeb1fa8afa31266eea727a"
+  },
+  "unverified": [
+    "remote CI",
+    "full foreground UI and drag-and-drop acceptance",
+    "physical controller and hotplug",
+    "audible quality and audio-device switching",
+    "fullscreen/multi-monitor/sleep-wake",
+    "macOS 14 runtime",
+    "another clean Mac",
+    "Developer ID/notarization/distribution",
+    "P4 engine compatibility",
+    "P5 VM mode"
+  ]
+}

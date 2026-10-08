@@ -66,7 +66,16 @@ x86 = build("libx86.so", "plain.c", target="x86_64-linux-android29")
 
 
 def readelf_relocs(lib):
-    return len(re.findall(r"R_AARCH64_\w+", sh("llvm-readelf", "-r", lib)))
+    output = sh("llvm-readelf", "-r", lib)
+    count = len(re.findall(r"R_AARCH64_\w+", output))
+    # LLVM 23 displays expanded RELR addresses without R_AARCH64_RELATIVE.
+    # Older LLVM prints typed relocations, already counted above. Count only
+    # rows in the new Index/Entry/Address table, not the packed RELR words.
+    for section in re.split(r"(?=Relocation section )", output):
+        if "'.relr" in section and "Index: Entry" in section:
+            count += sum(bool(re.match(r"^(?:[0-9a-f]+:\s+[0-9a-f]+\s+|\s+)[0-9a-f]{16}\s+", line))
+                         for line in section.splitlines())
+    return count
 
 
 def readelf_imports(lib):

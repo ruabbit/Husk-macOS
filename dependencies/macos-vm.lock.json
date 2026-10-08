@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "qemu": {
+    "url": "https://github.com/utmapp/qemu/releases/download/v10.0.12-utm/qemu-10.0.12-utm.tar.xz",
+    "sha256": "7c9605290b34152debb842e965a55d2e4fbba4793e536ab677b4027e5dc0ba1a",
+    "version": "10.0.12-utm"
+  },
+  "epoxy": {"repository": "https://github.com/utmapp/libepoxy.git", "commit": "bf98587477fe68d07b93319ece7b40a7d0e2eabe"},
+  "virgl": {"repository": "https://github.com/utmapp/virglrenderer.git", "commit": "482f9d8b8c2d2288efa10a027116216909d2c226"},
+  "hostPackages": {"glib-2.0": "2.90.0", "pixman-1": "0.46.4", "slirp": "4.9.5"},
+  "graphicsLock": "macos.lock.json",
+  "guest": {
+    "generation": "v12",
+    "url": "https://github.com/Leviidev/Husk/releases/download/lineage-v2/vda-v12.qcow2",
+    "sha256": "a8dbaecc8fdcd682991b078d6bbb7df6972e459208634fa8dcbad24f17208d6a",
+    "size": 2057568256,
+    "seedArchive": {
+      "url": "https://github.com/Leviidev/Husk/releases/download/0.9.0/Husk.ipa",
+      "sha256": "9482b76aad39898683e1f2edbb74c631c998aed6ac9968dba6f43f5811ea73f5"
+    },
+    "seeds": {
+      "edk2-aarch64-code.fd": "ee769c4bf42a5350d33345fc1b16d00156fe0c25fb3c68debd003bd844e4e3fa",
+      "lineage-efi-vars-seed.fd": "1b7af784841125887e688254229e282829e17245d0e47fe7280da9b68a30d9e1",
+      "lineage-vdb-seed.qcow2": "de001102cbc8ff7aa8eb6c69d750cf22b94104935a0de6277ec5f24509927745"
+    }
+  }
+}

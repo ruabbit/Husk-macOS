@@ -226,6 +226,7 @@ typedef struct aa_stream {
     atomic_bool run;
     pthread_t thread;
     bool thread_started;
+    pthread_mutex_t lifecycle;
 } aa_stream;
 
 static int b_AAudio_createStreamBuilder(void **builder) { aa_builder *b = calloc(1, sizeof(*b)); *builder = b; return b ? AA_OK : AA_UNAVAILABLE; }
@@ -237,12 +238,18 @@ static void b_AAudioStreamBuilder_setErrorCallback(aa_builder *b, void *cb, void
 
 static int b_AAudioStreamBuilder_openStream(aa_builder *b, aa_stream **out)
 {
-    if (b->direction != 0 || !b->cb) return AA_UNAVAILABLE;           /* output with a data callback only */
+    *out = NULL;
+    if (b->direction != 0) return AA_UNAVAILABLE; /* recording is not offered */
+    /* A data callback is optional at open. FMOD opens a callback-free stream
+     * to inspect the output format before creating its playback stream, also
+     * after mixerResume. Rejecting the probe makes output reinitialization fail. */
     aa_stream *s = calloc(1, sizeof(*s));
+    if(!s){*out=NULL;return AA_UNAVAILABLE;}
+    pthread_mutex_init(&s->lifecycle,NULL);
     s->cb = b->cb; s->user = b->user;
     atomic_store(&s->state, AA_STATE_OPEN); atomic_store(&s->buffer_size, AA_BURST * 2);
     *out = s;
-    tl_log_line("aaudio: stream opened (%d Hz, %d channels, burst %d)", AA_RATE, AA_CHANNELS, AA_BURST);
+    tl_log_line("aaudio: stream opened (%d Hz, %d channels, burst %d, callback=%d)", AA_RATE, AA_CHANNELS, AA_BURST, s->cb != NULL);
     return AA_OK;
 }
 
@@ -258,29 +265,47 @@ static void *aa_pump(void *arg)
         { static bool said; if (!said) { for (int i = 0; i < AA_BURST * AA_CHANNELS; i++) if (buf[i]) { said = true; tl_log_line("aaudio: the game's first non-silent burst (sample %d = %d)", i, buf[i]); break; } } }
         if (tl_cocos_audio_hook) tl_cocos_audio_hook(buf, AA_BURST, AA_CHANNELS, AA_RATE);
         else { struct timespec ts = { 0, (long)((double)AA_BURST * 1e9 / AA_RATE) }; nanosleep(&ts, NULL); }
-        if (r != 0) break;
+        if (r != 0) { tl_log_line("aaudio: callback requested stop (%d)",r); break; }
     }
     free(buf);
+    atomic_store(&s->run, false);
+    atomic_store(&s->state, AA_STATE_STOPPED);
     return NULL;
 }
 
 static int b_AAudioStream_requestStart(aa_stream *s)
 {
-    if (atomic_exchange(&s->run, true)) return AA_OK;
+    /* Blocking read/write playback is not implemented. Configuration probes
+     * may be opened and queried, but must never reach the callback pump. */
+    if (!s->cb) return AA_UNAVAILABLE;
+    pthread_mutex_lock(&s->lifecycle);
+    if (atomic_load(&s->run)) { pthread_mutex_unlock(&s->lifecycle); return AA_OK; }
+    /* A callback can return STOP without a requestStop call. Reap that pump
+     * before restarting; its previous run flag must not suppress a new start. */
+    if (s->thread_started) { pthread_join(s->thread,NULL); s->thread_started=false; }
+    atomic_store(&s->run,true);
     atomic_store(&s->state, AA_STATE_STARTED);
     pthread_attr_t a; pthread_attr_init(&a); pthread_attr_setstacksize(&a, 1u << 20);
     s->thread_started = pthread_create(&s->thread, &a, aa_pump, s) == 0;
     pthread_attr_destroy(&a);
-    return AA_OK;
+    if(!s->thread_started){atomic_store(&s->run,false);atomic_store(&s->state,AA_STATE_STOPPED);}
+    int result=s->thread_started?AA_OK:AA_UNAVAILABLE;
+    pthread_mutex_unlock(&s->lifecycle);
+    tl_log_line("aaudio: start -> %d",result);
+    return result;
 }
 static int aa_stop(aa_stream *s, int state)
 {
-    if (atomic_exchange(&s->run, false) && s->thread_started) { pthread_join(s->thread, NULL); s->thread_started = false; }
+    tl_log_line("aaudio: stop -> %d",state);
+    pthread_mutex_lock(&s->lifecycle);
+    atomic_store(&s->run,false);
+    if (s->thread_started) { pthread_join(s->thread, NULL); s->thread_started = false; }
     atomic_store(&s->state, state);
+    pthread_mutex_unlock(&s->lifecycle);
     return AA_OK;
 }
 static int b_AAudioStream_requestStop(aa_stream *s) { return aa_stop(s, AA_STATE_STOPPED); }
-static int b_AAudioStream_close(aa_stream *s) { aa_stop(s, AA_STATE_CLOSED); free(s); return AA_OK; }
+static int b_AAudioStream_close(aa_stream *s) { aa_stop(s, AA_STATE_CLOSED); pthread_mutex_destroy(&s->lifecycle); free(s); return AA_OK; }
 static int b_AAudioStream_getSampleRate(aa_stream *s) { (void)s; return AA_RATE; }
 static int b_AAudioStream_getChannelCount(aa_stream *s) { (void)s; return AA_CHANNELS; }
 static int b_AAudioStream_getFormat(aa_stream *s) { (void)s; return AA_FORMAT_I16; }

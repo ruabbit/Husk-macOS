@@ -39,7 +39,18 @@ static struct {
     jobj *activity, *surface;
     int64_t handle;
     atomic_bool paused;
+    atomic_bool ready, failed, stopping;
+    bool surface_ready; /* activity UI thread only */
 } G;
+
+static tl_ga_input_host input_host;
+void tl_ga_set_input_host(const tl_ga_input_host *host) { input_host=host?*host:(tl_ga_input_host){0}; }
+bool tl_ga_has_input_host(void) { return input_host.text_state != NULL; }
+void tl_ga_notify_text_state(const char *text,int start,int end,int cs,int ce) {
+    if(input_host.text_state)input_host.text_state(input_host.context,text,start,end,cs,ce);
+}
+void tl_ga_notify_text_active(bool active) { if(input_host.text_active)input_host.text_active(input_host.context,active); }
+void tl_ga_notify_cursor_locked(bool locked) { if(input_host.cursor_locked)input_host.cursor_locked(input_host.context,locked); }
 
 static void load_library(const char *name)
 {
@@ -48,6 +59,16 @@ static void load_library(const char *name)
 }
 
 static void register_pad_sink(void);
+
+static int trace_mixer(void *system, const char *symbol)
+{
+    int (*fn)(void *)=tl_ld_sym(tl_ld_find_lib("libfmod.so"),symbol);
+    int result=fn?fn(system):-1;
+    tl_log_line("minecraft: %s -> %d",symbol,result);
+    return result;
+}
+static int trace_mixer_resume(void *system) {return trace_mixer(system,"_ZN4FMOD6System11mixerResumeEv");}
+static int trace_mixer_suspend(void *system) {return trace_mixer(system,"_ZN4FMOD6System12mixerSuspendEv");}
 
 bool tl_ga_start(const tl_ga_config *cfg)
 {
@@ -65,6 +86,10 @@ bool tl_ga_start(const tl_ga_config *cfg)
     int n = tl_dexidx_open(cfg->apk_path);
     tl_log_line("minecraft: %d classes in the APK's DEX", n);
     if (!tl_ld_add_apk(cfg->apk_path)) return false;
+    if(getenv("TL_GAME_DIAGNOSTICS")) {
+        tl_ld_interpose("_ZN4FMOD6System11mixerResumeEv",trace_mixer_resume);
+        tl_ld_interpose("_ZN4FMOD6System12mixerSuspendEv",trace_mixer_suspend);
+    }
     tl_egl_es31_shim(true);
     if (cfg->angle_egl && !tl_egl_init(cfg->angle_egl, cfg->angle_gles, cfg->frame_dir, cfg->frame_every)) return false;
     tl_jni_init();
@@ -154,7 +179,7 @@ static void *ui_main(void *arg)
     init_fn init = (init_fn)native_of(CLS_GA, "initializeNativeCode",
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/res/AssetManager;[BLandroid/content/res/Configuration;)J",
         "Java_com_google_androidgamesdk_GameActivity_initializeNativeCode");
-    if (!init) return NULL;
+    if (!init) { atomic_store(&G.failed, true); return NULL; }
     char files[600], obb[600], ext[700];
     snprintf(files, sizeof(files), "%s/files", G.data);
     snprintf(obb, sizeof(obb), "%s/obb", G.data);
@@ -162,7 +187,7 @@ static void *ui_main(void *arg)
     tl_log_line("minecraft: initializeNativeCode");
     G.handle = init(env, activity, tl_jni_new_string(files), tl_jni_new_string(obb), tl_jni_new_string(ext), tl_hle_assets(), NULL, tl_hle_config());
     tl_log_line("minecraft: initializeNativeCode -> %#llx", (unsigned long long)G.handle);
-    if (!G.handle || tl_jni_pending()) { tl_log_line("minecraft: the game's native code did not initialise"); return NULL; }
+    if (!G.handle || tl_jni_pending()) { tl_log_line("minecraft: the game's native code did not initialise"); atomic_store(&G.failed, true); return NULL; }
 
     typedef void (*set_input_fn)(void *env, void *self, int64_t h, void *conn);
     set_input_fn set_input = (set_input_fn)GA_NATIVE("setInputConnectionNative", "(JLcom/google/androidgamesdk/gametextinput/InputConnection;)V");
@@ -189,11 +214,13 @@ static void *ui_main(void *arg)
     surf_changed_fn changed = (surf_changed_fn)GA_NATIVE("onSurfaceChangedNative", "(JLandroid/view/Surface;III)V");
     focus_fn focus = (focus_fn)GA_NATIVE("onWindowFocusChangedNative", "(JZ)V");
     if (created) created(env, activity, G.handle, surface);
+    G.surface_ready = created != NULL;
     tl_log_line("minecraft: surface created");
     if (changed) changed(env, activity, G.handle, surface, 1 /* PixelFormat.RGBA_8888 */, G.cfg.width, G.cfg.height);
     tl_log_line("minecraft: surface changed %dx%d", G.cfg.width, G.cfg.height);
     if (focus) focus(env, activity, G.handle, 1);
     tl_log_line("minecraft: focus gained");
+    atomic_store(&G.ready, true);
 
     /* The message loop: the looper serves what the game's native glue registered on it (its main-work pipe), and
      * the jobs posted with tl_ga_post run in between. */
@@ -221,16 +248,21 @@ bool tl_ga_run(void)
     pthread_attr_t a;
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, 8u << 20);
-    if (pthread_create(&UI.thread, &a, ui_main, NULL) != 0) return false;
+    int result = pthread_create(&UI.thread, &a, ui_main, NULL);
+    pthread_attr_destroy(&a);
+    if (result != 0) { atomic_store(&G.failed, true); return false; }
     UI.started = true;
     return true;
 }
+
+bool tl_ga_ready(void) { return atomic_load(&G.ready); }
+bool tl_ga_failed(void) { return atomic_load(&G.failed); }
 
 /* ----------------------------------------------------------------- touch */
 
 extern jobj *tl_input_motion_event(int action, int count, const int *ids, const float *xs, const float *ys, int64_t down_ms, int64_t event_ms);
 
-typedef struct { jobj *ev; int pointers, action, device, source; int64_t down_ms, event_ms; } touch_job;
+typedef struct { jobj *ev; int pointers, action, device, source, buttons, action_button; int64_t down_ms, event_ms; } touch_job;
 
 /* GameActivity.onTouchEventNative: the Java side hands over the event with its header fields already read out. The arguments past the
  * eighth go on the stack, one eight-byte slot each on the guest's ABI, so they are declared eight bytes wide here. */
@@ -243,9 +275,70 @@ static void touch_run(void *arg)
                                 float precision_x, float precision_y);
     touch_fn fn = (touch_fn)GA_NATIVE("onTouchEventNative", "(JLandroid/view/MotionEvent;IIIIIJJIIIIIIFF)Z");
     if (fn && G.handle) fn(tl_jni_env(), G.activity, G.handle, t->ev, t->pointers, 0, t->device, t->source, (uint64_t)t->action,
-                           t->event_ms, t->down_ms, 0, 0, 0, 0, 0, 0, 1.0f, 1.0f);
+                           t->event_ms, t->down_ms, 0, 0, t->action_button, t->buttons, 0, 0, 1.0f, 1.0f);
     tl_jni_unref(t->ev);
     free(t);
+}
+
+extern jobj *tl_input_mouse_event(int action, float x, float y, int buttons, float scroll, int64_t now, bool relative);
+static void mouse_event(int action, float x, float y, int buttons, int changed, float scroll, bool relative)
+{
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+    int64_t now = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    touch_job *job = calloc(1, sizeof(*job));
+    job->ev = tl_input_mouse_event(action, x, y, buttons, scroll, now, relative);
+    job->pointers=1; job->action=action; job->source=relative?0x20004:0x2002; job->buttons=buttons;
+    job->action_button=changed;
+    job->down_ms=now; job->event_ms=now;
+    tl_ga_post(touch_run, job);
+}
+static struct { pthread_mutex_t lock; int buttons; float x,y; } mouse_state={.lock=PTHREAD_MUTEX_INITIALIZER};
+void tl_ga_mouse(int action, float x, float y, int buttons, float scroll)
+{
+    pthread_mutex_lock(&mouse_state.lock);
+    int changed=buttons^mouse_state.buttons;mouse_state.buttons=buttons;mouse_state.x=x;mouse_state.y=y;
+    if(action==0)mouse_event(7,x,y,0,0,0,false); /* establish the cursor before clicking */
+    mouse_event(action,x,y,buttons,changed,scroll,false);
+    if(action==0||action==1)mouse_event(action==0?11:12,x,y,buttons,changed,0,false);
+    pthread_mutex_unlock(&mouse_state.lock);
+}
+void tl_ga_mouse_relative(float dx,float dy,int buttons) { mouse_event(2,dx,dy,buttons,0,0,true); }
+void tl_ga_mouse_cancel(void) {
+    pthread_mutex_lock(&mouse_state.lock);
+    int held=mouse_state.buttons;
+    for(int bit=1;bit<=16;bit<<=1)if(held&bit){
+        mouse_state.buttons&=~bit;
+        mouse_event(1,mouse_state.x,mouse_state.y,mouse_state.buttons,bit,0,false);
+        mouse_event(12,mouse_state.x,mouse_state.y,mouse_state.buttons,bit,0,false);
+    }
+    mouse_event(3,mouse_state.x,mouse_state.y,0,0,0,false);
+    pthread_mutex_unlock(&mouse_state.lock);
+}
+
+typedef struct { char *text;int start,end,cs,ce; } text_job;
+static void text_run(void *arg) {
+    text_job *t=arg;
+    jobj *state=tl_jni_new_object(tl_jni_class("com/google/androidgamesdk/gametextinput/State"));
+    tl_jni_set_field(state,"text","Ljava/lang/String;",(jvalue){.l=tl_jni_new_string(t->text)});
+    tl_jni_set_field(state,"selectionStart","I",(jvalue){.i=t->start});
+    tl_jni_set_field(state,"selectionEnd","I",(jvalue){.i=t->end});
+    tl_jni_set_field(state,"composingRegionStart","I",(jvalue){.i=t->cs});
+    tl_jni_set_field(state,"composingRegionEnd","I",(jvalue){.i=t->ce});
+    typedef void (*fn_t)(void *,void *,int64_t,void *);
+    fn_t fn=(fn_t)GA_NATIVE("onTextInputEventNative","(JLcom/google/androidgamesdk/gametextinput/State;)V");
+    if(fn&&G.handle)fn(tl_jni_env(),G.activity,G.handle,state);
+    /* Minecraft's Java text proxy also forwards committed edits to its own
+     * textbox callback. GameActivity's IME state alone does not update the
+     * game's legacy settings screens. Use the exported JNI ABI, not offsets. */
+    typedef void (*mc_text_fn)(void *,void *,void *,int,int);
+    mc_text_fn textbox=(mc_text_fn)MAIN_NATIVE("nativeSetTextboxText","(Ljava/lang/String;II)V");
+    if(textbox&&G.handle&&t->cs<0)textbox(tl_jni_env(),G.activity,tl_jni_get_field(state,"text","Ljava/lang/String;").l,t->start,t->end);
+    if(getenv("TL_GAME_DIAGNOSTICS"))tl_log_line("minecraft: text event bytes=%zu selection=%d:%d native=%d exception=%d",strlen(t->text),t->start,t->end,fn!=NULL,tl_jni_pending());
+    tl_jni_unref(state);free(t->text);free(t);
+}
+void tl_ga_text(const char *text,int start,int end,int cs,int ce) {
+    text_job *t=calloc(1,sizeof(*t));t->text=strdup(text?text:"");t->start=start;t->end=end;t->cs=cs;t->ce=ce;
+    tl_ga_post(text_run,t);
 }
 
 void tl_ga_touch(int phase, int id, float x, float y)
@@ -291,6 +384,155 @@ void tl_ga_touch(int phase, int id, float x, float y)
     tl_ga_post(touch_run, t);
 }
 
+/* -------------------------------------------------------------- keyboard */
+
+/*
+ * GameTextInput, the text side of GameActivity (Minecraft's chat, sign and world-name fields). On Android the IME edits a
+ * copy of the field and hands the whole of it back -- text, selection, composing region -- through onTextInputEventNative.
+ * Here the iPhone's keyboard does the IME's part: the game's field is kept from setTextInputState, each key edits it, and
+ * the new state goes back the same way. Indices are UTF-16 code units, as Java's are.
+ */
+static struct {
+    pthread_mutex_t lock;
+    uint16_t text[4096];
+    int len, sel_start, sel_end;
+    int action;                      /* the IME action Return performs (EditorInfo.imeOptions & IME_MASK_ACTION) */
+    void (*hook)(int action);        /* the app: 1 = show the keyboard, 2 = hide it */
+} K = { PTHREAD_MUTEX_INITIALIZER, {0}, 0, 0, 0, 6, NULL };
+
+void tl_ga_set_keyboard_handler(void (*hook)(int action)) { K.hook = hook; }
+
+static int utf8_to_utf16(const char *s, uint16_t *out, int cap)
+{
+    int n = 0;
+    const unsigned char *p = (const unsigned char *)s;
+    while (*p && n < cap) {
+        uint32_t c; int extra;
+        if (*p < 0x80) { c = *p; extra = 0; }
+        else if ((*p & 0xE0) == 0xC0) { c = *p & 0x1F; extra = 1; }
+        else if ((*p & 0xF0) == 0xE0) { c = *p & 0x0F; extra = 2; }
+        else { c = *p & 0x07; extra = 3; }
+        p++;
+        for (int i = 0; i < extra && (*p & 0xC0) == 0x80; i++, p++) c = (c << 6) | (*p & 0x3F);
+        if (c >= 0x10000) { if (n + 1 >= cap) break; c -= 0x10000; out[n++] = (uint16_t)(0xD800 | (c >> 10)); out[n++] = (uint16_t)(0xDC00 | (c & 0x3FF)); }
+        else out[n++] = (uint16_t)c;
+    }
+    return n;
+}
+
+static void utf16_to_utf8(const uint16_t *s, int n, char *out, size_t cap)
+{
+    size_t o = 0;
+    for (int i = 0; i < n && o + 5 < cap; i++) {
+        uint32_t c = s[i];
+        if (c >= 0xD800 && c < 0xDC00 && i + 1 < n) { c = 0x10000 + ((c - 0xD800) << 10) + (s[i + 1] - 0xDC00); i++; }
+        if (c < 0x80) out[o++] = (char)c;
+        else if (c < 0x800) { out[o++] = (char)(0xC0 | (c >> 6)); out[o++] = (char)(0x80 | (c & 0x3F)); }
+        else if (c < 0x10000) { out[o++] = (char)(0xE0 | (c >> 12)); out[o++] = (char)(0x80 | ((c >> 6) & 0x3F)); out[o++] = (char)(0x80 | (c & 0x3F)); }
+        else { out[o++] = (char)(0xF0 | (c >> 18)); out[o++] = (char)(0x80 | ((c >> 12) & 0x3F)); out[o++] = (char)(0x80 | ((c >> 6) & 0x3F)); out[o++] = (char)(0x80 | (c & 0x3F)); }
+    }
+    out[o] = 0;
+}
+
+/* The game says what its field holds now (GameActivity.setTextInputState / InputConnection.setState). */
+void tl_ga_text_state(const char *utf8, int sel_start, int sel_end)
+{
+    pthread_mutex_lock(&K.lock);
+    K.len = utf8 ? utf8_to_utf16(utf8, K.text, 4096) : 0;
+    K.sel_start = sel_start < 0 || sel_start > K.len ? K.len : sel_start;
+    K.sel_end = sel_end < K.sel_start || sel_end > K.len ? K.sel_start : sel_end;
+    pthread_mutex_unlock(&K.lock);
+}
+
+void tl_ga_keyboard(bool show) { if (K.hook) K.hook(show ? 1 : 2); }
+
+void tl_ga_text_copy(char *out, size_t cap)
+{
+    pthread_mutex_lock(&K.lock);
+    utf16_to_utf8(K.text, K.len, out, cap);
+    pthread_mutex_unlock(&K.lock);
+}
+void tl_ga_ime_options(int ime_options) { int a = ime_options & 0xFF; K.action = a ? a : 6; }
+
+typedef struct { char *text; int sel; int action; } keyboard_text_job;
+
+static void keyboard_text_run(void *arg)
+{
+    keyboard_text_job *j = arg;
+    if (j->action) {
+        typedef void (*act_fn)(void *env, void *self, int64_t h, int32_t action);
+        act_fn fn = (act_fn)GA_NATIVE("onEditorActionNative", "(JI)V");
+        if (fn && G.handle) fn(tl_jni_env(), G.activity, G.handle, j->action);
+    } else {
+        typedef void (*text_fn)(void *env, void *self, int64_t h, void *state);
+        text_fn fn = (text_fn)GA_NATIVE("onTextInputEventNative", "(JLcom/google/androidgamesdk/gametextinput/State;)V");
+        if (fn && G.handle) {
+            jobj *st = tl_jni_new_object(tl_jni_class("com/google/androidgamesdk/gametextinput/State"));
+            jvalue v;
+            v.j = 0; v.l = tl_jni_new_string(j->text); tl_jni_set_field(st, "text", "Ljava/lang/String;", v);
+            v.j = 0; v.i = j->sel; tl_jni_set_field(st, "selectionStart", "I", v); tl_jni_set_field(st, "selectionEnd", "I", v);
+            v.j = 0; v.i = -1; tl_jni_set_field(st, "composingRegionStart", "I", v); tl_jni_set_field(st, "composingRegionEnd", "I", v);
+            fn(tl_jni_env(), G.activity, G.handle, st);
+            if (tl_jni_pending()) tl_jni_clear();
+        }
+    }
+    free(j->text);
+    free(j);
+}
+
+/* Send the field's state as it is now, from the game's UI thread. */
+static void send_state_locked(void)
+{
+    keyboard_text_job *j = calloc(1, sizeof(*j));
+    j->text = malloc(4096 * 4 + 1);
+    utf16_to_utf8(K.text, K.len, j->text, 4096 * 4 + 1);
+    j->sel = K.sel_start;
+    tl_ga_post(keyboard_text_run, j);
+}
+
+/* The keyboard typed this: it replaces the selection, and the caret goes after it. */
+void tl_ga_insert_text(const char *utf8)
+{
+    uint16_t add[512];
+    int n = utf8_to_utf16(utf8, add, 512);
+    pthread_mutex_lock(&K.lock);
+    int keep_after = K.len - K.sel_end;
+    if (K.sel_start + n + keep_after <= 4096) {
+        memmove(K.text + K.sel_start + n, K.text + K.sel_end, (size_t)keep_after * 2);
+        memcpy(K.text + K.sel_start, add, (size_t)n * 2);
+        K.len = K.sel_start + n + keep_after;
+        K.sel_start = K.sel_end = K.sel_start + n;
+        send_state_locked();
+    }
+    pthread_mutex_unlock(&K.lock);
+}
+
+/* Backspace: the selection, or the character before the caret (both halves of a surrogate pair). */
+void tl_ga_delete_backward(void)
+{
+    pthread_mutex_lock(&K.lock);
+    int from = K.sel_start, to = K.sel_end;
+    if (from == to && from > 0) {
+        from--;
+        if (from > 0 && K.text[from] >= 0xDC00 && K.text[from] < 0xE000 && K.text[from - 1] >= 0xD800 && K.text[from - 1] < 0xDC00) from--;
+    }
+    if (from != to) {
+        memmove(K.text + from, K.text + to, (size_t)(K.len - to) * 2);
+        K.len -= to - from;
+        K.sel_start = K.sel_end = from;
+        send_state_locked();
+    }
+    pthread_mutex_unlock(&K.lock);
+}
+
+/* Return: the field's IME action (send, done, go), as the game asked for it. */
+void tl_ga_editor_action(void)
+{
+    keyboard_text_job *j = calloc(1, sizeof(*j));
+    j->action = K.action;
+    tl_ga_post(keyboard_text_run, j);
+}
+
 /* ------------------------------------------------------------- controller */
 
 typedef struct { jobj *ev; bool down; } key_job;
@@ -304,6 +546,16 @@ static void key_run(void *arg)
     if (fn && G.handle) fn(tl_jni_env(), G.activity, G.handle, k->ev);
     tl_jni_unref(k->ev);
     free(k);
+}
+
+void tl_ga_key(int keycode, bool down, int repeat)
+{
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+    int64_t now = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    key_job *key = calloc(1, sizeof(*key));
+    key->ev = tl_input_key_event(down ? 0 : 1, keycode, 0, 0x101, repeat, now, now);
+    key->down = down;
+    tl_ga_post(key_run, key);
 }
 
 static void pad_key(jobj *ev, int device, int action, int keycode, int64_t down_ms, int64_t event_ms)
@@ -358,3 +610,33 @@ void tl_ga_set_paused(bool paused)
     tl_ga_post(pause_run, paused ? (void *)1 : NULL);
 }
 unsigned long tl_ga_frames(void) { return tl_egl_frames_presented(); }
+
+typedef struct { void (*completed)(void *, bool); void *arg; } stop_job;
+static void stop_run(void *arg)
+{
+    stop_job *job = arg;
+    typedef void (*life_fn)(void *, void *, int64_t);
+    life_fn destroy_surface = (life_fn)GA_NATIVE("onSurfaceDestroyedNative", "(J)V");
+    life_fn destroy = (life_fn)GA_NATIVE("terminateNativeCode", "(J)V");
+    bool ok = G.handle && destroy_surface && destroy;
+    if (ok) {
+        if (!atomic_exchange(&G.paused, true)) pause_run((void *)1);
+        if(G.surface_ready){destroy_surface(tl_jni_env(), G.activity, G.handle);G.surface_ready=false;}
+        tl_log_line("minecraft: surface destroyed");
+        destroy(tl_jni_env(), G.activity, G.handle);
+        G.handle = 0;
+        ok = !tl_jni_pending();
+        tl_log_line("minecraft: terminateNativeCode completed (%s)", ok ? "ok" : "JNI exception");
+    }
+    atomic_store(&G.ready, false);
+    if (job->completed) job->completed(job->arg, ok);
+    free(job);
+}
+
+void tl_ga_stop(void (*completed)(void *, bool), void *arg)
+{
+    if (atomic_exchange(&G.stopping, true)) return;
+    stop_job *job = calloc(1, sizeof(*job));
+    job->completed = completed; job->arg = arg;
+    tl_ga_post(stop_run, job);
+}

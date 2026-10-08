@@ -9,6 +9,7 @@
 #include <crt_externs.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <fenv.h>
 #include <fnmatch.h>
 #include <getopt.h>
 #include <locale.h>
@@ -437,6 +438,55 @@ static v2u64 b_strtold(const char *s, char **end) { TL_ERRNO_BEGIN(); double d =
 static v2u64 b_strtold_l(const char *s, char **end, locale_t l) { TL_ERRNO_BEGIN(); double d = strtod_l(s, end, l); TL_ERRNO_END(); return to_quad(d); }
 static v2u64 b_wcstold(const wchar_t *s, wchar_t **end) { TL_ERRNO_BEGIN(); double d = wcstod(s, end); TL_ERRNO_END(); return to_quad(d); }
 
+/* Android arm64 long double is binary128 in q0, including all 112 fraction
+ * bits. Scaling its exponent must not pass through Darwin's 64-bit double. */
+static v2u64 quad_result(unsigned __int128 bits)
+{ return (v2u64){(uint64_t)bits,(uint64_t)(bits>>64)}; }
+static v2u64 b_frexpl(v2u64 value, int *exponent)
+{
+    unsigned __int128 bits=((unsigned __int128)value[1]<<64)|value[0];
+    unsigned __int128 sign=bits&((unsigned __int128)1<<127), hidden=(unsigned __int128)1<<112;
+    unsigned __int128 fraction=bits&(hidden-1);
+    int e=(int)((bits>>112)&0x7fff);
+    *exponent=0;
+    if(e==0x7fff||(!e&&!fraction))return value;
+    if(!e){e=1;while(!(fraction&hidden)){fraction<<=1;--e;}}
+    *exponent=e-16382;
+    return quad_result(sign|((unsigned __int128)16382<<112)|(fraction&(hidden-1)));
+}
+static v2u64 b_ldexpl(v2u64 value, int power)
+{
+    unsigned __int128 bits=((unsigned __int128)value[1]<<64)|value[0];
+    unsigned __int128 sign=bits&((unsigned __int128)1<<127), hidden=(unsigned __int128)1<<112;
+    unsigned __int128 significand=bits&(hidden-1);
+    int64_t e=(int)((bits>>112)&0x7fff);
+    if(e==0x7fff||(!e&&!significand))return value;
+    if(!e){e=1;while(!(significand&hidden)){significand<<=1;--e;}}
+    else significand|=hidden;
+    e+=power;
+    int rounding=fegetround();
+    if(e>=0x7fff){
+        tl_set_guest_errno(34);feraiseexcept(FE_OVERFLOW|FE_INEXACT);
+        bool infinite=rounding==FE_TONEAREST||(rounding==FE_UPWARD&&!sign)||(rounding==FE_DOWNWARD&&sign);
+        unsigned __int128 infinity=(unsigned __int128)0x7fff<<112;
+        return quad_result(sign|(infinite?infinity:infinity-1));
+    }
+    if(e>0)return quad_result(sign|((unsigned __int128)e<<112)|(significand&(hidden-1)));
+    int64_t shift=1-e;
+    unsigned __int128 result=shift>113?0:significand>>shift;
+    unsigned __int128 remainder=shift>113?significand:significand&(((unsigned __int128)1<<shift)-1);
+    if(remainder){
+        bool up=(rounding==FE_UPWARD&&!sign)||(rounding==FE_DOWNWARD&&sign);
+        if(rounding==FE_TONEAREST&&shift<=113){
+            unsigned __int128 half=(unsigned __int128)1<<(shift-1);
+            up=remainder>half||(remainder==half&&(result&1));
+        }
+        if(up)++result;
+        tl_set_guest_errno(34);feraiseexcept(FE_UNDERFLOW|FE_INEXACT);
+    }
+    return quad_result(sign|result);
+}
+
 /* -------------------------------------------------------- strtol & friends */
 
 static long b_strtol(const char *s, char **e, int b) { TL_ERRNO_BEGIN(); long r = strtol(s, e, b); TL_ERRNO_END(); return r; }
@@ -585,6 +635,7 @@ const tl_bionic_entry tl_tab_str[] = {
     TL_DIRECT(setjmp), TL_DIRECT(longjmp), TL_DIRECT(fnmatch), TL_DIRECT(getopt_long),
     TL_DATA("optarg", &optarg), TL_DATA("optind", &optind),
     /* math.h */
+    TL_WRAP("frexpl", b_frexpl), TL_WRAP("ldexpl", b_ldexpl),
     TL_DIRECT(acos), TL_DIRECT(acosf), TL_DIRECT(asin), TL_DIRECT(asinf), TL_DIRECT(atan), TL_DIRECT(atan2), TL_DIRECT(atan2f),
     TL_DIRECT(atanf), TL_DIRECT(cbrtf), TL_DIRECT(cos), TL_DIRECT(cosf), TL_DIRECT(exp), TL_DIRECT(exp2f), TL_DIRECT(expf),
     TL_DIRECT(fmod), TL_DIRECT(fmodf), TL_DIRECT(hypot), TL_DIRECT(ldexp), TL_DIRECT(ldexpf), TL_DIRECT(log), TL_DIRECT(log10),

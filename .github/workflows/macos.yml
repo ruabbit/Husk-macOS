@@ -1,0 +1,75 @@
+name: Native macOS
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      hardware:
+        description: Run Metal, audio and full session tests on an opted-in physical Apple Silicon runner
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-core:
+    runs-on: xcode-27
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build tools
+        run: brew install cmake ninja llvm
+      - name: Cache pinned graphics
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            build/macos-deps/lib
+            build/macos-deps/include
+            build/macos-deps/notices
+            build/macos-deps/*.json
+          key: macos-arm64-xcode27-${{ hashFiles('dependencies/macos.lock.json', 'scripts/build_macos_graphics.py') }}
+      - name: Native application and helpers
+        env:
+          ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
+        run: ./scripts/build_macos.sh
+      - name: Platform, rpath and signature contract
+        run: python3 scripts/verify_macos_bundle.py build/macos/Product/HuskMac.app --output build/macos/bundle-verification.json
+      - name: Shared core and Hardened Runtime loader checks
+        env:
+          ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
+        run: |
+          ctest --test-dir build/macos -R '^core-' --output-on-failure
+          ./scripts/test_macos_p0.sh --suite memory
+          ./scripts/test_macos_p0.sh --suite core
+      - name: Build evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-build-evidence
+          path: |
+            build/macos/bundle-verification.json
+            build/macos/Fixtures/provenance.json
+            build/macos-p0/results.json
+            build/logs/*.log
+  hardware:
+    if: github.event_name == 'workflow_dispatch' && inputs.hardware
+    runs-on: [self-hosted, macOS, ARM64, husk-metal]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: ./scripts/test_macos.sh
+      - name: Twenty headless game sessions
+        run: build/macos/MacCycles build/macos/Product/HuskMac.app build/macos/Cycles 20
+      - name: Thirty-minute headless rendering
+        run: build/macos/MacSoak build/macos/Product/HuskMac.app build/macos/Soak 1800
+      - name: Runtime evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-runtime-evidence
+          path: |
+            build/macos/TestResults
+            build/macos/Cycles
+            build/macos/Soak

@@ -30,7 +30,7 @@ typedef struct motion {
     int source, device;                     /* 0: a touch screen, device 0 */
     bool joystick;                          /* the values are in axes[], by Android axis number */
     float axes[MAX_AXES];
-    int keycode, repeat, meta, scan;
+    int keycode, repeat, meta, scan, buttons;
 } motion;
 
 static jvalue vi(int i) { jvalue v; v.j = 0; v.i = i; return v; }
@@ -60,7 +60,8 @@ static void ME_getY(tl_jcall *c)   { const motion *m = M_(c); c->ret = vf(m ? m-
 static void ME_getPressure(tl_jcall *c) { const motion *m = M_(c); c->ret = vf(m && m->joystick ? 0.0f : 1.0f); }
 static void ME_getSize(tl_jcall *c)     { c->ret = vf(0.1f); }
 static void ME_zeroF(tl_jcall *c)       { c->ret = vf(0.0f); }
-static void ME_getToolType(tl_jcall *c) { const motion *m = M_(c); c->ret = vi(m && m->joystick ? 0 : 1); }   /* TOOL_TYPE_UNKNOWN for a stick, else FINGER */
+static void ME_getToolType(tl_jcall *c) { const motion *m = M_(c); c->ret = vi(m && (m->source == 0x2002 || m->source == 0x20004) ? 3 : m && m->joystick ? 0 : 1); }
+static void ME_getButtons(tl_jcall *c) { const motion *m = M_(c); c->ret = vi(m ? m->buttons : 0); }
 static void ME_getEventTime(tl_jcall *c){ const motion *m = M_(c); c->ret = vj(m ? m->event_ms : 0); }
 static void ME_getDownTime(tl_jcall *c) { const motion *m = M_(c); c->ret = vj(m ? m->down_ms : 0); }
 static void ME_getSource(tl_jcall *c)   { const motion *m = M_(c); c->ret = vi(m && m->source ? m->source : SOURCE_TOUCHSCREEN); }
@@ -153,6 +154,17 @@ jobj *tl_input_key_event(int action, int keycode, int device, int source, int re
     return o;
 }
 
+jobj *tl_input_mouse_event(int action, float x, float y, int buttons, float scroll, int64_t now, bool relative)
+{
+    static jobj *ring[POOL]; static unsigned next;
+    motion *m; jobj *o = pooled("android/view/MotionEvent", ring, &next, &m);
+    m->action=action; m->count=1; m->source=relative?0x20004:0x2002; m->buttons=buttons; m->joystick=true;
+    m->x[0]=m->axes[0]=x; m->y[0]=m->axes[1]=y; m->axes[9]=scroll;
+    if(relative){m->axes[27]=x;m->axes[28]=y;}
+    m->down_ms=m->event_ms=now;
+    return o;
+}
+
 /* A controller's sticks, triggers and hat, as one MOVE event of a joystick source; axes is by Android axis number (MAX_AXES of them). */
 jobj *tl_input_joystick_event(int device, int source, int64_t down_ms, int64_t event_ms, const float *axes)
 {
@@ -210,7 +222,7 @@ static const tl_jhle k_input_hle[] = {
     K("android/view/KeyEvent", "isGamepadButton", "(I)Z", KE_isGamepadButton),
     K("android/view/KeyEvent", "recycle", "()V", ME_recycle),
     K("android/view/MotionEvent", "getFlags", "()I", ME_zeroI), K("android/view/MotionEvent", "getMetaState", "()I", ME_zeroI),
-    K("android/view/MotionEvent", "getButtonState", "()I", ME_zeroI), K("android/view/MotionEvent", "getEdgeFlags", "()I", ME_zeroI),
+    K("android/view/MotionEvent", "getButtonState", "()I", ME_getButtons), K("android/view/MotionEvent", "getEdgeFlags", "()I", ME_zeroI),
     K("android/view/MotionEvent", "getHistorySize", "()I", ME_zeroI),
     K("android/view/MotionEvent", "getAxisValue", "(II)F", ME_getAxisValue), K("android/view/MotionEvent", "getAxisValue", "(I)F", ME_getAxisValue1),
     K("android/view/MotionEvent", "isFromSource", "(I)Z", ME_isTrue),

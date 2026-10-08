@@ -1,5 +1,34 @@
 # Husk
 
+This fork now includes a native **macOS / Apple Silicon** application. Its internal
+prototype has a SwiftUI library, a separate game process, two repository-owned
+Orbit Garden ELF game fixtures, and a Minecraft GameActivity path. The exact
+1.26.52.3 arm64 APK recorded in the [P4 report](docs/2026-10-08-macos-p4-report.md)
+has completed the P4 checks. Other single-APK arm64 Minecraft builds can now be
+tried from the GUI, with their unverified status shown explicitly. Old imports
+are reclassified using the installed runtime, without deleting their data.
+Other engines can be imported and scanned; the iOS compatibility list below
+does not establish macOS support.
+
+Upstream source changes through `75dc21f` (27 commits after the original audit)
+are integrated with the macOS changes. See [the sync report](docs/2026-10-08-upstream-sync-report.md)
+and [the source receipt](dependencies/upstream.lock.json).
+
+Build with `./scripts/build_macos.sh`, then open
+`build/macos/Product/HuskMac.app`. The first build fetches the pinned macOS ANGLE
+and MoltenVK sources. `./scripts/test_macos.sh` runs without visible windows or
+audible output. No iOS pairing, QEMU images or personal runtime library paths are
+required. See [the macOS guide](docs/macos.md) for prerequisites, data handling,
+verification and current limits. Validation evidence is recorded in the
+[P1–P3 report](docs/2026-10-08-macos-p1-p3-report.md) and the
+[Minecraft P4 report](docs/2026-10-08-macos-p4-report.md).
+An optional native VM candidate now boots Android through TCG or HVF, with
+Metal output and an independent VMRunner. Its current dependencies require
+macOS 27. Minecraft installation works in the VM, but gameplay remains blocked
+by a black screen; sustained guest audio is also unverified. See the
+[P5 report](docs/2026-10-08-macos-p5-report.md) before enabling this mode.
+The iOS source and documentation remain below.
+
 <p align="center">
   <a href="https://trendshift.io/repositories/233057?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-233057" target="_blank" rel="noopener noreferrer">
     <img src="https://trendshift.io/api/badge/trendshift/repositories/233057/daily?language=Swift" alt="Leviidev/Husk | Trendshift" width="250" height="55"/>
@@ -57,18 +86,28 @@ Games made with an engine Husk has a driver for:
 - Unity
 - Unreal Engine 4 (through Vulkan)
 - cocos2d-x
+- Godot 3 and 4 (GLES2, GLES3 and the Compatibility renderer)
 - SDL2 and SDL3, including LÖVE games
 - GameActivity (Minecraft) and NativeActivity
 - Rockstar's own engine (GTA: San Andreas)
 
+Games see Google Play services as installed and signed out, so the ones that
+check for it start normally; Play Games sign-in, cloud saves and purchases are
+not available. Geometry Dash can load [Geode](https://geode-sdk.org) mods.
+
 An APK needs 64-bit (`arm64-v8a`) native code. iPhones cannot run 32-bit ARM
 code, so an APK that only has 32-bit libraries cannot run here. APKs and
-split bundles (`.xapk`, `.apkm`, `.apks`) can both be added. Apps written only
+split bundles (`.xapk`, `.apkm`, `.apks`, or a Play download's separate split
+APKs and asset packs) can all be added. Apps written only
 in Java, with no native engine, are not supported on the translation layer;
 Emulation is the way to run those.
 
-One game runs per launch of Husk: to switch to another game, close Husk
-completely and open it again.
+One game runs per launch of Husk. To switch, press **Close Husk to Play** on
+the other game's page; when you open Husk again, that game starts by itself.
+
+A game's saves can be backed up to a `.zip` from its page and restored later,
+on the same iPhone or another. If a game crashes Husk, the next launch shows
+what happened, with a report you can share.
 
 ## Installing
 
@@ -111,6 +150,10 @@ It then builds the app and writes the IPA to `build/Husk.ipa`. The first run
 takes a couple of hours, and later runs reuse what is already built. After
 that, `./scripts/package_ipa.sh` rebuilds just the app and writes
 `~/Desktop/Husk.ipa`.
+
+`tools/regress/run.sh` plays a set of games on the Mac through the
+translation layer and checks each against a reference screenshot (see the
+top of `tools/regress/cases.txt` for what it needs).
 
 ## Licence
 

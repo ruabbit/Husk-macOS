@@ -3,12 +3,14 @@
 #include "husk-tl-egl.h"
 
 #include <dlfcn.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "husk-tl-bionic.h"
 #include "husk-tl-ld.h"
@@ -74,6 +76,7 @@ static void (*a_glReadPixels)(int, int, int, int, unsigned, unsigned, void *);
 static void (*a_glGetIntegerv)(unsigned, int *);
 static void (*a_glBindFramebuffer)(unsigned, unsigned);
 static void (*a_glPixelStorei)(unsigned, int);
+static void (*a_glFinish)(void);
 
 #define LOAD(lib, name) do { a_##name = dlsym(lib, #name); if (!a_##name) tl_log_line("egl: ANGLE does not export " #name); } while (0)
 
@@ -101,6 +104,8 @@ bool tl_egl_init(const char *egl_path, const char *gles_path, const char *frame_
     a_glGetIntegerv = a_eglGetProcAddress("glGetIntegerv");
     a_glBindFramebuffer = a_eglGetProcAddress("glBindFramebuffer");
     a_glPixelStorei = a_eglGetProcAddress("glPixelStorei");
+    a_glFinish = a_eglGetProcAddress("glFinish");
+    if (!a_glFinish) { pthread_mutex_unlock(&E.lock); return false; }
     if (frame_dir) { snprintf(E.frame_dir, sizeof(E.frame_dir), "%s", frame_dir); E.latest_only = frame_every < 0; E.frame_every = frame_every != 0 ? (frame_every < 0 ? -frame_every : frame_every) : 60; }
     E.ready = true;
     pthread_mutex_unlock(&E.lock);
@@ -276,6 +281,24 @@ static void save_frame(EGLDisplay d, EGLSurface s, unsigned long n)
 static atomic_ulong g_glt_n, g_glt_draws, g_glt_uploads;
 void tl_egl_gl_histogram(char *out, size_t cap);
 void tl_egl_recent_calls(char *out, size_t n, int count);
+/* Pbuffers have no display refresh and ANGLE's Metal pbuffer swap does not
+ * submit pending commands. Complete each diagnostic frame and pace it without
+ * changing the visible window's normal swap/vsync behavior. */
+static void pace_offscreen_frame(void)
+{
+    static _Thread_local uint64_t next;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    uint64_t time = (uint64_t)now.tv_sec * 1000000000 + now.tv_nsec;
+    const uint64_t interval = 1000000000 / 60;
+    if (!next || time > next + interval) next = time;
+    if (next > time) {
+        uint64_t delay = next - time;
+        struct timespec remaining = { delay / 1000000000, delay % 1000000000 };
+        while (nanosleep(&remaining, &remaining) && errno == EINTR) {}
+    }
+    next += interval;
+}
 static EGLBoolean w_eglSwapBuffers(EGLDisplay d, EGLSurface s)
 {
     unsigned long n = atomic_fetch_add(&E.presented, 1) + 1;
@@ -291,8 +314,12 @@ static EGLBoolean w_eglSwapBuffers(EGLDisplay d, EGLSurface s)
         tl_egl_gl_histogram(hist, sizeof(hist));
         fprintf(stderr, "egl: calls so far, by function: %s\n", hist);
     }
-    if (E.frame_dir[0] && (n % (unsigned long)E.frame_every == 0 || n <= 3)) save_frame(d, s, n);
-    return E.frame_dir[0] ? EGL_TRUE : a_eglSwapBuffers(d, s);
+    if (E.frame_dir[0] || g_offscreen_windows) { a_glFinish(); pace_offscreen_frame(); }
+    if (E.frame_dir[0]) {
+        if (n % (unsigned long)E.frame_every == 0 || n <= 3) save_frame(d, s, n);
+        return EGL_TRUE;
+    }
+    return a_eglSwapBuffers(d, s);
 }
 
 /* Android extensions this ANGLE does not have: Swappy and Unity probe for them. */

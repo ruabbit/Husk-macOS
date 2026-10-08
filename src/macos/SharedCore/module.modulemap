@@ -1,0 +1,4 @@
+module HuskCore {
+    header "HuskCore.h"
+    export *
+}

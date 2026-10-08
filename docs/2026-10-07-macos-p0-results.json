@@ -1,0 +1,727 @@
+{
+  "date": "2026-10-07",
+  "baseline": "82f33e858952f9fda3cf224e839f4385894e2d5b",
+  "evidence_scope": "ad-hoc Hardened Runtime on this Apple Silicon Mac; no Developer ID or notarization",
+  "environment": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "xcode": "Xcode 27.0\nBuild version 27A266a",
+    "host_version": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+    "elf_version": "Homebrew clang version 23.1.2\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /opt/homebrew/Cellar/llvm/23.1.2/bin\nConfiguration file: /opt/homebrew/Cellar/llvm/23.1.2/etc/clang/arm64-apple-darwin27.cfg",
+    "ld_version": "LLD 17.0.2 (compatible with GNU linkers)",
+    "python": "3.14.8 (main, Sep 30 2026, 17:55:09) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "page_size": 16384
+  },
+  "default_selection": {
+    "suite": "all",
+    "gui": false,
+    "faults": false,
+    "cycles": 2,
+    "build_only": false
+  },
+  "current_background_results": [
+    {
+      "name": "alias-development",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.467,
+      "log": "alias-development.log"
+    },
+    {
+      "name": "invalid-sizes",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.006,
+      "log": "invalid-sizes.log"
+    },
+    {
+      "name": "invalid-env-0",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.006,
+      "log": "invalid-env-0.log"
+    },
+    {
+      "name": "invalid-env--1",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.006,
+      "log": "invalid-env--1.log"
+    },
+    {
+      "name": "invalid-env-bogus",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.005,
+      "log": "invalid-env-bogus.log"
+    },
+    {
+      "name": "invalid-env-18446744073709551615",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.005,
+      "log": "invalid-env-18446744073709551615.log"
+    },
+    {
+      "name": "alias-unsigned",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.284,
+      "log": "alias-unsigned.log"
+    },
+    {
+      "name": "alias-both",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.377,
+      "log": "alias-both.log"
+    },
+    {
+      "name": "map-jit-code",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.281,
+      "log": "map-jit-code.log"
+    },
+    {
+      "name": "elf-rela4",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.28,
+      "log": "elf-rela4.log"
+    },
+    {
+      "name": "elf-relr16",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.007,
+      "log": "elf-relr16.log"
+    },
+    {
+      "name": "elf-aps2-4",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.007,
+      "log": "elf-aps2-4.log"
+    },
+    {
+      "name": "elf-initial-exec",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.005,
+      "log": "elf-initial-exec.log"
+    },
+    {
+      "name": "elf-exhaustion",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.005,
+      "log": "elf-exhaustion.log"
+    },
+    {
+      "name": "classic-tls-refused",
+      "passed": true,
+      "exit": 20,
+      "seconds": 0.291,
+      "log": "classic-tls-refused.log"
+    },
+    {
+      "name": "classic-16k",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.006,
+      "log": "classic-16k.log"
+    },
+    {
+      "name": "classic-4k-refused",
+      "passed": true,
+      "exit": 20,
+      "seconds": 0.004,
+      "log": "classic-4k-refused.log"
+    },
+    {
+      "name": "runner-headless-pause-resume-stale-checkpoint",
+      "passed": true,
+      "seconds": 0.331,
+      "detail": {
+        "session": "5b5e0786-b655-47f3-9ccc-ead5c420ff7b",
+        "pid": 60330,
+        "window": {
+          "ownerPID": 60330,
+          "headless": true,
+          "state": "running",
+          "protocol": 1,
+          "active": false,
+          "event": "window",
+          "session": "5b5e0786-b655-47f3-9ccc-ead5c420ff7b",
+          "seq": 3,
+          "key": false,
+          "main": false,
+          "ticks": 0,
+          "windowNumber": 0,
+          "visible": false,
+          "menu": 0,
+          "pid": 60330
+        },
+        "log": "sessions/5b5e0786-b655-47f3-9ccc-ead5c420ff7b"
+      }
+    },
+    {
+      "name": "runner-stop-during-startup",
+      "passed": true,
+      "seconds": 0.011,
+      "detail": {
+        "session": "ac80349c-804c-424f-b223-1cb790d183df",
+        "states": [
+          "starting",
+          "running",
+          "stopping",
+          "exited"
+        ]
+      }
+    },
+    {
+      "name": "runner-checkpoint-failure",
+      "passed": true,
+      "seconds": 0.01,
+      "detail": {
+        "session": "e0713875-52b0-4c7e-a6e7-0ec6c2e92b04",
+        "exit": 70
+      }
+    },
+    {
+      "name": "runner-entitlement-preflight",
+      "passed": true,
+      "seconds": 0.344,
+      "detail": {
+        "session": "e7e60691-a28f-4d34-9024-fc9481ec9252",
+        "graceful": true
+      }
+    },
+    {
+      "name": "runner-2-start-stop-cycles",
+      "passed": true,
+      "seconds": 0.024,
+      "detail": {
+        "cycles": 2,
+        "headless": true,
+        "pids": [
+          60346,
+          60347
+        ],
+        "remaining": 0
+      }
+    },
+    {
+      "name": "core-planner",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.277,
+      "log": "core-planner.log"
+    },
+    {
+      "name": "core-prefs",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.289,
+      "log": "core-prefs.log"
+    },
+    {
+      "name": "core-blit",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.302,
+      "log": "core-blit.log"
+    },
+    {
+      "name": "core-variadic",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.291,
+      "log": "core-variadic.log"
+    },
+    {
+      "name": "core-scanner",
+      "passed": true,
+      "exit": 0,
+      "seconds": 1.883,
+      "log": "core-scanner.log"
+    },
+    {
+      "name": "ios-syntax-husk-tl-xmem",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.046,
+      "log": "ios-syntax-husk-tl-xmem.log"
+    },
+    {
+      "name": "ios-syntax-husk-tl-ld",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.038,
+      "log": "ios-syntax-husk-tl-ld.log"
+    },
+    {
+      "name": "ios-syntax-husk-tl-load",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.051,
+      "log": "ios-syntax-husk-tl-load.log"
+    }
+  ],
+  "historical_interactive_results": [
+    {
+      "name": "alias-development",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.441,
+      "log": "alias-development.log"
+    },
+    {
+      "name": "invalid-sizes",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.006,
+      "log": "invalid-sizes.log"
+    },
+    {
+      "name": "invalid-env-0",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.006,
+      "log": "invalid-env-0.log"
+    },
+    {
+      "name": "invalid-env--1",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.008,
+      "log": "invalid-env--1.log"
+    },
+    {
+      "name": "invalid-env-bogus",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.008,
+      "log": "invalid-env-bogus.log"
+    },
+    {
+      "name": "invalid-env-18446744073709551615",
+      "passed": true,
+      "exit": 11,
+      "seconds": 0.006,
+      "log": "invalid-env-18446744073709551615.log"
+    },
+    {
+      "name": "alias-none-refused",
+      "passed": true,
+      "exit": -9,
+      "seconds": 0.303,
+      "log": "alias-none-refused.log"
+    },
+    {
+      "name": "alias-jit-refused",
+      "passed": true,
+      "exit": -9,
+      "seconds": 0.317,
+      "log": "alias-jit-refused.log"
+    },
+    {
+      "name": "alias-unsigned",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.292,
+      "log": "alias-unsigned.log"
+    },
+    {
+      "name": "alias-both",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.285,
+      "log": "alias-both.log"
+    },
+    {
+      "name": "map-jit-code",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.006,
+      "log": "map-jit-code.log"
+    },
+    {
+      "name": "map-jit-data-refused",
+      "passed": true,
+      "exit": -10,
+      "seconds": 0.025,
+      "log": "map-jit-data-refused.log"
+    },
+    {
+      "name": "elf-rela4",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.594,
+      "log": "elf-rela4.log"
+    },
+    {
+      "name": "elf-relr16",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.007,
+      "log": "elf-relr16.log"
+    },
+    {
+      "name": "elf-aps2-4",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.006,
+      "log": "elf-aps2-4.log"
+    },
+    {
+      "name": "elf-initial-exec",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.005,
+      "log": "elf-initial-exec.log"
+    },
+    {
+      "name": "elf-exhaustion",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.005,
+      "log": "elf-exhaustion.log"
+    },
+    {
+      "name": "classic-tls-refused",
+      "passed": true,
+      "exit": 20,
+      "seconds": 0.294,
+      "log": "classic-tls-refused.log"
+    },
+    {
+      "name": "classic-16k",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.005,
+      "log": "classic-16k.log"
+    },
+    {
+      "name": "classic-4k-refused",
+      "passed": true,
+      "exit": 20,
+      "seconds": 0.005,
+      "log": "classic-4k-refused.log"
+    },
+    {
+      "name": "runner-window-menu-pause-resume-stale-checkpoint",
+      "passed": true,
+      "seconds": 0.701,
+      "detail": {
+        "session": "fa08c845-c479-47a6-87d9-494124f9bc92",
+        "pid": 57366,
+        "window": {
+          "ownerPID": 57366,
+          "state": "running",
+          "protocol": 1,
+          "active": true,
+          "event": "window",
+          "session": "fa08c845-c479-47a6-87d9-494124f9bc92",
+          "seq": 5,
+          "key": true,
+          "main": true,
+          "ticks": 0,
+          "windowNumber": 15514,
+          "visible": true,
+          "menu": 1,
+          "pid": 57366
+        },
+        "log": "sessions/fa08c845-c479-47a6-87d9-494124f9bc92"
+      }
+    },
+    {
+      "name": "runner-stop-during-startup",
+      "passed": true,
+      "seconds": 0.193,
+      "detail": {
+        "session": "6424d671-2a7e-43d4-bb3f-b180dca20ddd",
+        "states": [
+          "starting",
+          "stopping",
+          "exited"
+        ]
+      }
+    },
+    {
+      "name": "runner-window-close",
+      "passed": true,
+      "seconds": 0.364,
+      "detail": {
+        "session": "c701c9ad-4837-4a56-aa64-940341ee81f7",
+        "reason": "window-close"
+      }
+    },
+    {
+      "name": "runner-menu-quit",
+      "passed": true,
+      "seconds": 0.372,
+      "detail": {
+        "session": "cc830f63-0367-4932-ba58-42020223627f",
+        "reason": "menu-quit"
+      }
+    },
+    {
+      "name": "runner-crash-isolation-restart",
+      "passed": true,
+      "seconds": 1.113,
+      "detail": {
+        "crashed_pid": 57384,
+        "restarted_pid": 57412
+      }
+    },
+    {
+      "name": "runner-stop-timeout-term-kill-reap",
+      "passed": true,
+      "seconds": 1.285,
+      "detail": {
+        "session": "24dab226-4e51-400c-b0c4-eaf04e527e42",
+        "forced": true,
+        "exit": -9
+      }
+    },
+    {
+      "name": "runner-checkpoint-failure",
+      "passed": true,
+      "seconds": 0.316,
+      "detail": {
+        "session": "471735db-5ed0-4a63-8b61-a5cc780b4c83",
+        "exit": 70
+      }
+    },
+    {
+      "name": "runner-entitlement-preflight",
+      "passed": true,
+      "seconds": 0.475,
+      "detail": {
+        "session": "6fae2445-5599-49ac-b93a-58dad64a7084",
+        "graceful": true
+      }
+    },
+    {
+      "name": "runner-parent-death-normal",
+      "passed": true,
+      "seconds": 0.418,
+      "detail": {
+        "pid": 57446,
+        "hung_main": false,
+        "checkpoint": true
+      }
+    },
+    {
+      "name": "runner-parent-death-hung",
+      "passed": true,
+      "seconds": 2.292,
+      "detail": {
+        "pid": 57449,
+        "hung_main": true,
+        "checkpoint": false
+      }
+    },
+    {
+      "name": "runner-20-start-stop-cycles",
+      "passed": true,
+      "seconds": 8.446,
+      "detail": {
+        "cycles": 20,
+        "pids": [
+          57463,
+          57468,
+          57475,
+          57484,
+          57492,
+          57498,
+          57509,
+          57516,
+          57526,
+          57534,
+          57540,
+          57548,
+          57573,
+          57584,
+          57592,
+          57599,
+          57604,
+          57614,
+          57619,
+          57624
+        ],
+        "remaining": 0
+      }
+    },
+    {
+      "name": "core-planner",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.293,
+      "log": "core-planner.log"
+    },
+    {
+      "name": "core-prefs",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.289,
+      "log": "core-prefs.log"
+    },
+    {
+      "name": "core-blit",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.296,
+      "log": "core-blit.log"
+    },
+    {
+      "name": "core-variadic",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.277,
+      "log": "core-variadic.log"
+    },
+    {
+      "name": "core-scanner",
+      "passed": true,
+      "exit": 0,
+      "seconds": 1.935,
+      "log": "core-scanner.log"
+    },
+    {
+      "name": "ios-syntax-husk-tl-xmem",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.08,
+      "log": "ios-syntax-husk-tl-xmem.log"
+    },
+    {
+      "name": "ios-syntax-husk-tl-ld",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.038,
+      "log": "ios-syntax-husk-tl-ld.log"
+    },
+    {
+      "name": "ios-syntax-husk-tl-load",
+      "passed": true,
+      "exit": 0,
+      "seconds": 0.055,
+      "log": "ios-syntax-husk-tl-load.log"
+    }
+  ],
+  "historical_note": "Visible/fault tests preceded the headless-default change and disrupted the desktop. Preserved as evidence; not rerun after user feedback.",
+  "implementation_sha256": {
+    "scripts/test_macos_p0.sh": "64c31e04d247664011c62ba76801fcb6d19b66e778d593f6256e4e0b62c9356c",
+    "tests/macos-p0/xmem-test.c": "a77471769545aec8a5a5f9f48c7e9b0223387454e41562df96020ba0de7c35ae",
+    "tests/macos-p0/run.py": "3bfad197871a5ec6b71658add55a25d6b2e53751237dd5e72c8f239ba09440c5",
+    "tests/macos-p0/classic-test.c": "93fad729b5058c97d79310c3d7f72d68e107e73b3db486b3425ee085416e7637",
+    "tests/macos-p0/loader-test.c": "7fd9b971719bde2d6fdc49c92c7f752f27bb4a4971769ffd7e00d4fcb7264399",
+    "tests/macos-p0/probe-adapter.c": "e0b44bec2277585cb270fd02e0c3b48c80c19e7acae7cbe29a76410f82909b54",
+    "tests/macos-p0/host-adapter.c": "931d184c6515e9100efe81a45df3c258f38a9ae64c7e9ff3b1888b36c8e2ec9b",
+    "tests/macos-p0/fixture.c": "0a11a0ad1a6b2bbcfe79c1f58332776a813abd8d604c6036e3c3fc290c0bf74a",
+    "tests/macos-p0/x18.S": "17adf04092d45e584d13dc34ad3fb5adf67e256ff8a9ff164fa20188964cfe92",
+    "tests/macos-p0/lifecycle_test.py": "b93adbdb95dbf52f7bc99c7b9d7df1a356c0630c39e41a4facf0f89890122324",
+    "src/macos-p0/session.py": "be44b2f7e98630e9b5d4325b58a9c5b0b0a8777a8947d4956fdc0392a98ddef1",
+    "src/macos-p0/NativeRunner.m": "4e1993f4eab6780a525ac9534cc516dc5242e22bdb01af1fe883301a92271037",
+    "src/macos-p0/NativeRunner.entitlements": "62e60ef69e606437d4e004aa2f1c771945e2609f14530022a55be99538e486da",
+    "src/translation-layer-next/husk-tl-va.h": "c2d2d5c81447e924aff01ab8ca60f34913a06ffc2e91f0372a569f18ec16d3c6",
+    "src/translation-layer-next/husk-tl-ld.h": "3cae8f93841370fe0400cc8fb1d5ba61c264ed0717d9144d3d27bac991773685",
+    "src/translation-layer-next/husk-tl-cocos.h": "bdccad5946eefa5692e7e105f19a23f3720db8d5efce3d06cd7259c99a7b3127",
+    "src/translation-layer-next/husk-tl-audio.h": "5593aa294dfc4771cded370ebce0e51dbcd2f5091967b51b5e1f20b6f5ab2288",
+    "src/translation-layer-next/husk-tl-sdl.h": "f1aea7ceb47cc699261cefc57321a679da07c539e51ce39f083b5ced262aedd4",
+    "src/translation-layer-next/husk-tl-bionic.h": "2cd506dcf052c19ce2777d291d926dbb1f94f988f7c728773bfbf3e56c55b3f6",
+    "src/translation-layer-next/husk-tl-vulkan.h": "a56c3963caf46540d497cd24811270daaba4df2fa74e83d4a91ea71aef39f20d",
+    "src/translation-layer-next/husk-tl-jni.h": "7f01c75baf2d35995f9796ec28671d41bdacb30c1b435031056c8ade2ae04c2f",
+    "src/translation-layer-next/husk-tl-unity-app.h": "9b2033b831d89c7650afc5e2f7b264faf77452dc88dffeeaddeacd2c58f56fee",
+    "src/translation-layer-next/husk-tl-a64.h": "d8c6902ac7af58a4ba59bd0a9ca27629677c9b4ca8991dc7991079b094acf7ed",
+    "src/translation-layer-next/husk-tl-xmem.h": "c8785b271fd54b609060048bccae1b95c6ba429fcc7676c5752ee32c4ec1ec7b",
+    "src/translation-layer-next/husk-tl-unity.h": "7e4f59653180a16aac1c33de20b4567ed3d3e9f8d19379c7c559acf7b826c1a9",
+    "src/translation-layer-next/husk-tl-http.h": "fd4fff7fc802d6d7f9c520152c19a985619a2122bea8a2f659eff943af5cad34",
+    "src/translation-layer-next/husk-tl-gtasa.h": "ea128019029fcc8649afc3106f2763bd60f8939859332f389f6c626cd0dee531",
+    "src/translation-layer-next/husk-tl-egl.h": "0b966c340f540738544c819142ca0dd65799d880b76d3ba8d04aef902976a261",
+    "src/translation-layer-next/husk-tl-dexindex.h": "c015c06e45b3e10c25d9c858a35d7f25be6acc1b29214bdaaea02bd7cc3ed3e5",
+    "src/translation-layer-next/husk-tl-gamepad.h": "c978ff8f6e6c117e43f6f0c414ff0d95c76925524f3a1555aea7fd4fb9a67ca8",
+    "src/translation-layer-next/husk-tl-gameactivity.h": "222d734d79b6143b3b7fe21556df287fe45dfc17802ef19ea24270bbb61309a9",
+    "src/translation-layer-next/husk-tl-nativeactivity.h": "d709252133b5b322ab2ceb060418f8ab20e57c75aa649cee0b72113255d76ac7",
+    "src/translation-layer/husk-tl.h": "8b6d14b160afde26be61d1d41f2738dc655576bd35e4d3a447e64f570ef5ce1d",
+    "src/translation-layer/husk-tl-blit.h": "4d4e85ef6d356c4162e1f3b1801e9947c4c639b5021d8bd9ca110dd7276ea411",
+    "src/translation-layer/husk-tl-framework.h": "e8c8b42eb7082284c4f2ffdcbc40e2f5b4bd2578f383672e443c79508faf8b5b",
+    "src/translation-layer/husk-tl-res.h": "dc551c585b646e26087bb424de7bdbfa6a4b5f6f5bf12a4ebe94df2e6ec5840e",
+    "src/translation-layer/husk-tl-dex.h": "a2e56774b720c89a2242a4cc70218476a1b83fc3ba8a84c958e267e4914e2ea6",
+    "src/translation-layer/husk-tl-prefs.h": "437f4ff112823fd7f2a932d9d0509e70bbf239baf44d381032be61572eb7ec81",
+    "src/translation-layer/husk-tl-internal.h": "aff6ab23a89fbe53a84320ba8c21d575fcb0bdf18cab2894ef4e427f27139fc3",
+    "src/translation-layer-next/husk-tl-ld.c": "530adc58893745b9af81ca3855350f8b928f7191089d43b359f5bdc88c4d7793",
+    "src/translation-layer-next/husk-tl-a64.c": "fe7f1453682de4d5781e9aeb64def39f371b1141960f9471da1bd7ff40b24c60",
+    "src/translation-layer-next/husk-tl-xmem.c": "2bf23edea69a5271ff63ad7c8bf03e7ad530053e240e44b6f2dcf480211e52da",
+    "src/translation-layer/husk-tl-elf.c": "dcdbb562ed12b7210b726ce87324a39ea1491a32a8f2f461845852ed5ebc47eb",
+    "src/translation-layer/husk-tl-zip.c": "6ecdd22d6d84e352395e8f4f755bda660d0205ba75aa3b2d0b02c31d2252fed9",
+    "src/translation-layer/husk-tl-load.c": "f587147bf3e10969610717bea6491f18eeb5125690b59da02fe8a6438baa5052"
+  },
+  "intentional_crash": {
+    "report": "NativeRunner-2026-10-07-225042.ips",
+    "pid": 57384,
+    "exception": {
+      "codes": "0x0000000000000000, 0x0000000000000000",
+      "rawCodes": [
+        0,
+        0
+      ],
+      "type": "EXC_CRASH",
+      "signal": "SIGABRT"
+    },
+    "termination": {
+      "flags": 0,
+      "code": 6,
+      "namespace": "SIGNAL",
+      "indicator": "Abort trap: 6",
+      "byProc": "NativeRunner",
+      "byPid": 57384
+    },
+    "frames": [
+      {
+        "imageOffset": 38480,
+        "symbol": "__pthread_kill",
+        "symbolLocation": 8,
+        "imageIndex": 2
+      },
+      {
+        "imageOffset": 27004,
+        "symbol": "pthread_kill",
+        "symbolLocation": 296,
+        "imageIndex": 3
+      },
+      {
+        "imageOffset": 504920,
+        "symbol": "abort",
+        "symbolLocation": 148,
+        "imageIndex": 4
+      },
+      {
+        "imageOffset": 6928,
+        "sourceLine": 121,
+        "sourceFile": "NativeRunner.m",
+        "symbol": "-[P0Delegate command:]",
+        "imageIndex": 0,
+        "symbolLocation": 1096
+      },
+      {
+        "imageOffset": 6708,
+        "symbol": "_dispatch_call_block_and_release",
+        "symbolLocation": 32,
+        "imageIndex": 5
+      }
+    ],
+    "matching_test": {
+      "name": "runner-crash-isolation-restart",
+      "passed": true,
+      "seconds": 1.113,
+      "detail": {
+        "crashed_pid": 57384,
+        "restarted_pid": 57412
+      }
+    }
+  }
+}

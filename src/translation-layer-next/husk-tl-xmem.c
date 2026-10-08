@@ -139,7 +139,21 @@ static bool open_platform(size_t host_bytes, char *err, size_t errlen)
 static bool open_platform(size_t host_bytes, char *err, size_t errlen)
 {
     /* TL_XMEM_MIB: size the region as a phone's would be, to see whether a game fits there */
-    if (getenv("TL_XMEM_MIB")) host_bytes = (size_t)atoi(getenv("TL_XMEM_MIB")) << 20;
+    const char *mib = getenv("TL_XMEM_MIB");
+    if (mib) {
+        char *end = NULL;
+        errno = 0;
+        unsigned long long value = strtoull(mib, &end, 10);
+        if (errno || end == mib || *end || *mib == '-' || !value || value > (SIZE_MAX >> 21)) {
+            snprintf(err, errlen, "TL_XMEM_MIB must be a positive, representable region size");
+            return false;
+        }
+        host_bytes = (size_t)value << 20;
+    }
+    if (!host_bytes || host_bytes > SIZE_MAX / 2 - (TL_XMEM_PAGE - 1)) {
+        snprintf(err, errlen, "invalid executable region size");
+        return false;
+    }
 #if defined(__APPLE__)
     /* TL_XMEM_SELF=1: make the region the way a jailbroken or TrollStore phone does, to test that path here */
     if (getenv("TL_XMEM_SELF")) return grant_self(host_bytes, err, errlen);
@@ -206,6 +220,7 @@ bool tl_xmem_open(size_t host_bytes, char *err, size_t errlen)
 
 bool tl_xmem_alloc(size_t bytes, uint8_t **rx, uint8_t **rw)
 {
+    if (!bytes || bytes > SIZE_MAX - (TL_XMEM_PAGE - 1)) return false;
     size_t n = (bytes + TL_XMEM_PAGE - 1) & ~(size_t)(TL_XMEM_PAGE - 1);
     bool ok = false;
     pthread_mutex_lock(&g_x.lock);

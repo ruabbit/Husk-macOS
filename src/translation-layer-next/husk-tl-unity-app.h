@@ -27,6 +27,9 @@ bool husk_unity_launch(const char *apk, const char *data_dir, void *metal_layer,
                        const char *angle_dylib, const char *ca_bundle);
 
 /* The same for a cocos2d-x game (Geometry Dash): a landscape surface, with sound. Status, touch and pause go through the calls below. */
+/* Load Geode (the Geometry Dash mod loader) into the next cocos2d-x game: its release zip and its Android launcher's APK.
+ * NULL turns it off. Call before husk_cocos_launch. */
+void husk_cocos_set_geode(const char *release_zip, const char *launcher_apk);
 bool husk_cocos_launch(const char *apk, const char *data_dir, void *metal_layer, int width, int height,
                        const char *angle_dylib, const char *ca_bundle);
 
@@ -46,6 +49,9 @@ bool husk_sdl_launch(const char *apk, const char *data_dir, void *metal_layer, i
  */
 bool husk_ue4_launch(const char *apk, const char *data_dir, void *metal_layer, int width, int height,
                      const char *angle_dylib, const char *ca_bundle);
+/* A Godot game (libgodot_android.so: Godot 3 and 4, with GLES2/GLES3 or the Compatibility renderer): sound, multi-touch. */
+bool husk_godot_launch(const char *apk, const char *data_dir, void *metal_layer, int width, int height,
+                       const char *angle_dylib, const char *ca_bundle);
 /* Rockstar's GTA San Andreas (libGame.so behind the oswrapper): landscape, sound, touch and controllers. Its data is inside the APK. */
 bool husk_gta_launch(const char *apk, const char *data_dir, void *metal_layer, int width, int height,
                      const char *angle_dylib, const char *ca_bundle);
@@ -62,6 +68,12 @@ void husk_sdl_commit_text(const char *utf8);
 void husk_sdl_key(int keycode, int down);
 /* Soft keyboard for a cocos2d-x game. The handler is told (on the game's GL thread) 0 = toggle, 1 = show, 2 = hide. */
 void husk_cocos_set_keyboard_handler(void (*handler)(int action));
+/* Soft keyboard for a GameActivity game (Minecraft): 1 = show, 2 = hide; the field's text is kept on the C side. */
+void husk_ga_set_keyboard_handler(void (*handler)(int action));
+void husk_ga_insert_text(const char *utf8);
+void husk_ga_delete_backward(void);
+void husk_ga_editor_action(void);
+void husk_ga_text(char *out, unsigned long cap);
 void husk_cocos_insert_text(const char *utf8);
 void husk_cocos_delete_backward(void);
 void husk_cocos_key_down(int keycode);

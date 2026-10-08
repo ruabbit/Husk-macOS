@@ -25,6 +25,7 @@
  * because the point of the attempt is to find where the wall is.
  */
 #define _GNU_SOURCE
+#include "husk-tl-sound.h"
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -1291,6 +1292,16 @@ static bool load_library(const char *name, const uint8_t *file, size_t flen)
     }
 
     if (!base) {
+        /* Carving removes execute permission from the entire host page. A
+         * 4 KiB ELF may share that page between code and writable data. */
+        for (size_t i = 0; i < npages; i++) {
+            if ((flags[i] & (TL_PAGE_X | TL_PAGE_W)) == (TL_PAGE_X | TL_PAGE_W)) {
+                tl_log_line("load: %s has code and writable data on one 16 KiB page; "
+                            "the MAP_JIT carve path cannot execute this layout", name);
+                free(flags);
+                return false;
+            }
+        }
         jit_init();
         base = mmap(NULL, npages * TL_PAGE,
                     PROT_READ | PROT_WRITE | PROT_EXEC,
@@ -2016,6 +2027,7 @@ void husk_tl_attempt_reset(void)
 void husk_tl_attempt_stop(void)
 {
     tl_loader_request_stop();
+    tl_sound_stop_all();
 }
 
 void husk_tl_send_touch(int action, float x, float y)

@@ -93,7 +93,7 @@ static struct {
     pthread_mutex_t lock;
     tl_lib *libs[MAX_LIBS];
     int nlibs;
-    tl_zip apks[4];
+    tl_zip apks[TL_LD_MAX_APKS];
     int napks;
     int verbosity;
     size_t unresolved;
@@ -102,7 +102,9 @@ static struct {
     bool recursive_init;
 } G = { .lock = PTHREAD_MUTEX_INITIALIZER, .verbosity = 1 };
 
-static pthread_mutex_t g_big = PTHREAD_MUTEX_INITIALIZER;   /* serialises load/init */
+/* Serialises load/init. Recursive, as a linker's lock has to be: a library's constructor may dlopen another (Geode's constructors
+ * dlopen the game they hook), on the thread that is already inside the loader. */
+static pthread_mutex_t g_big = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
 
 void tl_ld_set_verbosity(int v) { G.verbosity = v; }
 void tl_ld_set_environment(char **argv, char **envp) { G.argv = argv; G.envp = envp; }
@@ -112,15 +114,41 @@ static inline const void *at(const tl_lib *L, uint64_t vaddr) { return L->rw + (
 
 /* ------------------------------------------------------------- the APKs */
 
-bool tl_ld_add_apk(const char *path)
+/* The app's split APKs (its 64-bit libraries, its asset packs), given before the engine starts: they are added right after
+ * the base, whichever engine adds that, as Android puts a split's libraries and assets beside the base's. */
+static char g_splits[4][1024];
+static int g_nsplits;
+static char g_apk_paths[TL_LD_MAX_APKS][1024];
+
+void tl_ld_queue_split(const char *path)
 {
-    if (G.napks >= 4) return false;
+    if (path && path[0] && g_nsplits < 4) snprintf(g_splits[g_nsplits++], sizeof(g_splits[0]), "%s", path);
+}
+
+const char *tl_ld_queued_split(int i) { return i >= 0 && i < g_nsplits ? g_splits[i] : NULL; }
+
+static bool add_one(const char *path)
+{
+    for (int i = 0; i < G.napks; i++) if (!strcmp(g_apk_paths[i], path)) return true;     /* already there */
+    if (G.napks >= TL_LD_MAX_APKS) return false;
     char err[160];
     if (!tl_zip_open(&G.apks[G.napks], path, err, sizeof(err))) {
         tl_log_line("ld: cannot open %s: %s", path, err);
         return false;
     }
+    snprintf(g_apk_paths[G.napks], sizeof(g_apk_paths[0]), "%s", path);
     G.napks++;
+    return true;
+}
+
+bool tl_ld_add_apk(const char *path)
+{
+    bool first = G.napks == 0;
+    if (!add_one(path)) return false;
+    if (first)
+        for (int i = 0; i < g_nsplits; i++) {
+            if (add_one(g_splits[i])) tl_log_line("ld: split %s", strrchr(g_splits[i], '/') ? strrchr(g_splits[i], '/') + 1 : g_splits[i]);
+        }
     return true;
 }
 
@@ -201,6 +229,28 @@ static const char *sym_name(const tl_lib *L, const elf_sym *s)
 static const elf_sym *sym_at(const tl_lib *L, uint32_t i)
 {
     return (const elf_sym *)at(L, L->symtab) + i;
+}
+
+static bool image_is_code(const tl_lib *L, uint64_t vaddr)
+{
+    for (int i = 0; i < L->ncode; i++)
+        if (vaddr >= L->code[i].start && vaddr < L->code[i].end) return true;
+    return false;
+}
+
+/* ADRP addresses a 4 KiB instruction page, not a 16 KiB host page. Using
+ * the host-page permission union also redirects pointers to nearby code. */
+static bool pc_target_rw(const tl_lib *L, uintptr_t target, bool page)
+{
+    if (target < (uintptr_t)L->rx || target - (uintptr_t)L->rx >= L->npages * PAGE) return false;
+    uint64_t vaddr = target - (uintptr_t)L->rx + L->base_vaddr;
+    if (!page) return !image_is_code(L, vaddr) && (L->pflags[(vaddr - L->base_vaddr) / PAGE] & TL_PAGE_W);
+    for (unsigned i = 0; i < L->phnum; i++) {
+        const elf_phdr *p = &L->phdr[i];
+        if (p->p_type == PT_LOAD_ && (p->p_flags & PF_W_) && p->p_memsz &&
+            p->p_vaddr < vaddr + 4096 && vaddr < p->p_vaddr + p->p_memsz) return true;
+    }
+    return false;
 }
 
 /* The address a defined symbol is known by: the writable view for data. */
@@ -286,12 +336,37 @@ static uint32_t dynsym_bound(const tl_lib *L, uint32_t hashed)
 
 /* ----------------------------------------------------- lookup by scope */
 
+const char *tl_path_resolve(const char *path, char *buf, size_t n);
+static const char *base_name(const char *path) { const char *b = strrchr(path, '/'); return b ? b + 1 : path; }
+
+/* By the name it was asked for, its soname, or -- for one loaded from a path (a mod's library) -- its file name. */
 static tl_lib *find_loaded(const char *name)
 {
+    const char *b = base_name(name);
     for (int i = 0; i < G.nlibs; i++) {
         if (!strcmp(G.libs[i]->name, name) || !strcmp(G.libs[i]->soname, name)) return G.libs[i];
+        if (!strcmp(base_name(G.libs[i]->name), b) || !strcmp(G.libs[i]->soname, b)) return G.libs[i];
     }
     return NULL;
+}
+
+/* A library that is a file of its own rather than an APK entry: Geode, and the mods it loads from where it unpacked them. */
+static bool fetch_from_file(const char *path, uint8_t **out, size_t *len)
+{
+    if (!strchr(path, '/')) return false;
+    char real[1024];
+    const char *p = tl_path_resolve(path, real, sizeof(real));
+    FILE *f = fopen(p, "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *data = n > 0 ? malloc((size_t)n) : NULL;
+    bool ok = data && fread(data, 1, (size_t)n, f) == (size_t)n;
+    fclose(f);
+    if (!ok) { free(data); return false; }
+    *out = data; *len = (size_t)n;
+    return true;
 }
 
 tl_lib *tl_ld_find_lib(const char *name) { return find_loaded(name); }
@@ -329,6 +404,20 @@ void tl_ld_interpose(const char *name, void *fn)
     if (g_ninterpose < MAX_INTERPOSE) { snprintf(g_interpose[g_ninterpose].name, sizeof(g_interpose[0].name), "%s", name); g_interpose[g_ninterpose++].fn = fn; }
 }
 
+/*
+ * The C++ runtime's exception machinery. Geometry Dash carries its own copy and exports it; Geode and its mods are built
+ * against libc++_shared, and an exception thrown by one runtime cannot be caught by the other. So everything but the game
+ * itself takes these from libc++_shared, as Geode's own Android launcher arranges by renaming the game's copies.
+ */
+static bool is_cxx_runtime_symbol(const char *name)
+{
+    static const char *const names[] = { "__gxx_personality_v0", "__cxa_throw", "__cxa_rethrow", "__cxa_allocate_exception",
+        "__cxa_free_exception", "__cxa_begin_catch", "__cxa_end_catch", "__cxa_guard_acquire", "__cxa_guard_release",
+        "__cxa_guard_abort", NULL };
+    for (int i = 0; names[i]; i++) if (!strcmp(name, names[i])) return true;
+    return false;
+}
+
 static void *lookup_for(tl_lib *L, const char *name, bool *weak_hit)
 {
     (void)weak_hit;
@@ -336,6 +425,13 @@ static void *lookup_for(tl_lib *L, const char *name, bool *weak_hit)
     build_scope(L);
     const elf_sym *s = lib_find(L, name);
     if (s && (s->st_info & 0xf) != STT_GNU_IFUNC_) return sym_value(L, s);
+    if (strcmp(L->soname, "libcocos2dcpp.so") != 0 && is_cxx_runtime_symbol(name)) {
+        for (int i = 0; i < L->ndeps; i++) {
+            if (strcmp(L->deps[i]->soname, "libc++_shared.so") != 0) continue;
+            s = lib_find(L->deps[i], name);
+            if (s) return sym_value(L->deps[i], s);
+        }
+    }
     for (int i = 0; i < L->ndeps; i++) {
         s = lib_find(L->deps[i], name);
         if (s && (s->st_info & 0xf) != STT_GNU_IFUNC_) return sym_value(L->deps[i], s);
@@ -355,6 +451,9 @@ void *tl_ld_sym(tl_lib *lib, const char *name)
     }
     return NULL;
 }
+
+/* Where the library's vaddr 0 lies in the executable view: what dladdr calls its base. */
+void *tl_ld_lib_base(const tl_lib *L) { return L ? (void *)(L->rx - L->base_vaddr) : NULL; }
 
 tl_lib *tl_ld_lib_of(const void *addr)
 {
@@ -808,7 +907,7 @@ static int x18_rewrite(tl_lib *L, uint32_t *site_rw, const uint8_t *pc, ptrdiff_
             int64_t imm = (int64_t)((((insn >> 5) & 0x7FFFFu) << 2) | ((insn >> 29) & 3u));
             if (imm & 0x100000) imm -= 0x200000;
             uintptr_t tp = page ? ((uintptr_t)pc & ~(uintptr_t)0xFFF) + (uintptr_t)(imm * 4096) : (uintptr_t)pc + (uintptr_t)imm;
-            if (tp >= (uintptr_t)L->rx && tp < (uintptr_t)L->rx + L->npages * PAGE && (L->pflags[(tp - (uintptr_t)L->rx) / PAGE] & TL_PAGE_W))
+            if (pc_target_rw(L, tp, page))
                 tp += (uintptr_t)delta;
             value = tp;
         } else {
@@ -948,12 +1047,9 @@ static void patch_image(tl_lib *L, size_t *n_tpidr, size_t *n_adrp, size_t *n_ad
                 int64_t imm = (int64_t)((((insn >> 5) & 0x7FFFFu) << 2) | ((insn >> 29) & 3u));
                 if (imm & 0x100000) imm -= 0x200000;
                 uintptr_t tp = ((uintptr_t)pc & ~(uintptr_t)0xFFF) + (uintptr_t)(imm << 12);
-                if (tp >= (uintptr_t)L->rx && tp < (uintptr_t)L->rx + L->npages * PAGE) {
-                    size_t tpg = (tp - (uintptr_t)L->rx) / PAGE;
-                    if (L->pflags[tpg] & TL_PAGE_W) {
-                        w[i] = encode_adrp(insn & 0x1Fu, pc, (const void *)(tp + (uintptr_t)delta));
-                        (*n_adrp)++;
-                    }
+                if (pc_target_rw(L, tp, true)) {
+                    w[i] = encode_adrp(insn & 0x1Fu, pc, (const void *)(tp + (uintptr_t)delta));
+                    (*n_adrp)++;
                 }
             } else if (insn == 0xD4000001u) {                       /* svc #0 */
                 uint8_t *stub = svc_stub(L, pc);
@@ -972,8 +1068,7 @@ static void patch_image(tl_lib *L, size_t *n_tpidr, size_t *n_adrp, size_t *n_ad
                 int64_t imm = (int64_t)((((insn >> 5) & 0x7FFFFu) << 2) | ((insn >> 29) & 3u));
                 if (imm & 0x100000) imm -= 0x200000;
                 uintptr_t tp = (uintptr_t)pc + (uintptr_t)imm;
-                if (tp >= (uintptr_t)L->rx && tp < (uintptr_t)L->rx + L->npages * PAGE
-                    && (L->pflags[(tp - (uintptr_t)L->rx) / PAGE] & TL_PAGE_W)) {
+                if (pc_target_rw(L, tp, false)) {
                     uint32_t branch;
                     if (adr_stub(L, pc, insn & 0x1Fu, (uint64_t)(tp + (uintptr_t)delta), &branch)) { w[i] = branch; (*n_adr)++; }
                     else L->n_adr_failed++;
@@ -1076,6 +1171,10 @@ static inline uint64_t rd64(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); re
 static uint64_t image_addr(const tl_lib *L, uint64_t vaddr)
 {
     uint64_t off = vaddr - L->base_vaddr;
+    /* A 4 KiB ELF can put code and writable data on one 16 KiB host page.
+     * RELATIVE/RELR pointers to code (including init_array entries) must still
+     * use RX; the page's union of permissions cannot classify that pointer. */
+    if (image_is_code(L, vaddr)) return (uint64_t)(uintptr_t)(L->rx + off);
     size_t page = (size_t)(off / PAGE);
     if (page < L->npages && (L->pflags[page] & TL_PAGE_W)) return (uint64_t)(uintptr_t)(L->rw + off);
     return (uint64_t)(uintptr_t)(L->rx + off);
@@ -1682,7 +1781,7 @@ static tl_lib *load_locked(const char *name, int depth)
     if (depth > 32) { tl_log_line("ld: dependency chain too deep at %s", name); return NULL; }
 
     uint8_t *file; size_t flen;
-    if (!fetch_from_apks(name, &file, &flen)) {
+    if (!fetch_from_apks(base_name(name), &file, &flen) && !fetch_from_file(name, &file, &flen)) {
         tl_log_line("ld: %s is not in the APK and is not a system library", name);
         return NULL;
     }

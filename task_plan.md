@@ -1,0 +1,73 @@
+# Husk macOS 迁移实施
+
+日期：2026-10-08。当前：GUI 导入游戏的运行入口及上游同步已完成本机交付；0.2.0 已后台启动。P5 仍未通过。用户在 P3 交付后明确授权执行 P4，指定 `/Users/tanmy/Downloads/minecraft-1.26.52.3-arm64-v8a.apk` 为测试样本。此前审计与 P0–P3 记录保留。
+
+
+## GUI / 上游同步交付
+
+| 工作 | 状态 | 验收 |
+| --- | --- | --- |
+| 核对旧 GUI、实际资料库与 upstream | complete | 原 UI PID 15359；真实用户 APK 与 P4 样本不同；27 个 upstream 提交已审计 |
+| 同步适用的上游变更、修正能力判断与文案 | complete | 117 路径三方整合；旧资料库动态能力；Minecraft 实验入口与独立完整性检查 |
+| 实际 APK 与回归验证 | complete（本机后台） | 11/11 + P0 30/30；实际用户 APK 世界/移动/两次恢复/60 秒/保存退出通过；原 P4 样本世界加载/退出通过 |
+| 更新用户 GUI 与交付记录 | complete（进程/能力核对） | 0.2.0 PID 13772 单次后台启动；日常 Minecraft playable=true；原 index/设置/APK 不变。CUA pipe 断开，GUI AX/截图未验收 |
+
+
+| P5 当前工作 | 状态 | 验收 |
+| --- | --- | --- |
+| VM 依赖、guest 来源及冷启动配置 | complete（本地） | 固定来源/hash；脚本与 notices；367 文件独立源码重建；首次设置体验待补齐 |
+| 独立 VMRunner 与原生宿主 | complete（基础实现） | 主 App 无 entitlement；Metal/键鼠/静音 AudioQueue；正式 Swift 控制器正常关机/同对象重开通过 |
+| Android 冷启动及安装 Minecraft | partial，游戏验收阻塞 | TCG/HVF 冷启动、安装/HTTPS 通过；Minecraft 黑屏，后续有 guest ANR；持续 PCM 未通过 |
+| 数据/网络/恢复及回归 | complete（已测范围） | 关机/重开、安装与文件持久化、qcow2 检查；VM 10/10、TL-only 9/9；快照显式禁用，发行/设备项未测 |
+| P5 交付记录 | complete（阶段未通过） | P5 report/results、构建指南、失败证据已保存；候选可复查；P4 产物/哈希保留 |
+
+| P4 当前工作 | 状态 | 验收 |
+| --- | --- | --- |
+| 样本与已有 GameActivity 路径核对 | complete | APK/ELF hash、manifest、依赖与现有 JNI 适配差异；原文件不变 |
+| 正式 Native Runner 接入 Minecraft | complete（集成） | 实际 loader/JNI/图形/输入/音频；AAudio 配置探测与文本桥接已修复 |
+| 真实游戏交互与数据闭环 | complete（指定样本/后台） | 中文追加、键鼠/虚拟手柄、20 次 Activity 恢复、600.17 秒世界运行、保存重开、隐藏 CAMetalLayer、受控退出后重启均通过 |
+| 回归及 P4 兼容矩阵/报告 | complete（本地） | 9/9 CTest、31 项集成、P0 30/30；343 文件独立源码重建；281 实现文件及 56 产物文件一致性通过；其他引擎明确未验证 |
+
+| 当前实施 | 状态 | 验收 |
+| --- | --- | --- |
+| P1：正式原生工程、共享核心、固定图形依赖、签名及 CI | complete（本地） | 325 文件干净源码导出重建及 5/5 组通过；macOS arm64/签名/rpath 通过；CI 配置已完成，远程运行待首次推送 |
+| P2：SwiftUI 资料库、导入扫描、图标/设置与持久化 | complete（内部原型） | 31 项端到端检查包含导入、重启、设置、数据保留及错误；主界面无 entitlement；完整前台视觉/拖放验收尚未完成 |
+| P3：自建可玩 ELF 游戏与原生运行闭环 | complete（后台验收） | 真正 ELF/GLES/PCM、输入、暂停/恢复、存档与隔离通过；20 次后台生命周期通过；修复候选 30 分钟与最终候选 5 分钟均保存/回收通过；前台/实体外设验收边界见报告 |
+
+执行约束：不点系统崩溃提示；测试默认无窗口、无声音、无主动崩溃；不反复抢焦点。复用已有证据，只有新增变更/缺口触发相应复测。用户在 P4 后要求继续推进；当前执行 P5，P6 发行仍留待单独推进。
+
+P5 交付：[P5 VM 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p5-report.md) 与 [结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p5-results.json)。P5 尚未通过，后续先解决 VM 中游戏启动和持续音频，P6 未开始。
+
+此前交付：[P4 Minecraft 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-report.md)、[P4 结果快照](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p4-results.json)、[P1–P3 报告](/Users/tanmy/Projects/Husk-macOS/docs/2026-10-08-macos-p1-p3-report.md)、[构建指南](/Users/tanmy/Projects/Husk-macOS/docs/macos.md)。本轮指定 Minecraft 样本的后台闭环已完成；原计划的其他引擎、完整前台/设备验收、远程 CI 和发行门槛仍待对应验证。
+
+| P0 工作 | 状态 | 验收 |
+| --- | --- | --- |
+| 固定上游 main 基线，建立 P0 分支 | complete | codex/macos-p0，起点 82f33e8 |
+| JIT 权限矩阵与内存契约 | complete | 四组 ad-hoc Hardened Runtime 权限矩阵；双映射仅需 unsigned-memory；MAP_JIT 常量执行及执行态数据写入对照已验证 |
+| 自建 ELF fixture / 两条 loader | complete | 新版通过全局数据、三种重定位、TLS/x18、四线程、4/16 KiB；修复混合页代码地址；classic 16 KiB 通过并明确拒绝混合页/TLS |
+| 原生 Runner 生命周期与窗口原型 | complete | AppKit 窗口/菜单、暂停、checkpoint、故障/超时/父进程退出和 20 次回收通过；原生 UI 手动操作也已核验 |
+| 回归、决策记录、依赖许可清单 | complete | 历史 39 组、当前后台 30 组通过；报告、复现说明、许可清单及 P1 交接已完成 |
+
+| 阶段 | 状态 | 产出 |
+| --- | --- | --- |
+| 1. 核对仓库、分支和历史 | complete | 已锁定 fork main 及上游两分支 |
+| 2. 审计 UI、运行时、依赖、构建和测试 | complete | 架构、平台耦合、分发和测试缺口已核对 |
+| 3. 执行可行的本地基线验证 | complete | 保留原始失败、适配通过结果及发行态 JIT 失败证据 |
+| 4. 编写分阶段迁移计划 | complete | 已写入原生架构、P0–P6、优先级和验收门槛 |
+| 5. 检查报告与交付 | complete | 三份文档、链接检查、Mermaid 渲染及工作区核对完成 |
+
+P0 约束：main 分支保留；不下载游戏或启动未知 APK；仅使用仓库自建 fixture；测试权限只授予测试子进程，不调整系统安全设置；区分 ad-hoc Hardened Runtime、Developer ID、公证与实机图形证据。
+
+用户追加约束：禁止继续反复启动/激活可见窗口影响桌面。默认测试改为无窗口后台模式，故障注入与可见测试均需显式选择。本轮后续仅做后台验证；此前主动 abort 造成的系统弹窗已如实记录。
+
+比较范围：上游 main 与 claude/epic-hypatia-2hsqfv，同时核对 fork main 的落后差异；已向用户发出可选澄清。
+
+错误/限制：未发现 .gitmodules（普通文件读取返回不存在）；main 无 .github/workflows，通配符读取失败，已改为 git tree 检查；无已记录的 Husk 项目记忆；此前的 handoff 文档不是本轮工作指令。
+
+测试问题：main scanner 缺 tl_find_stikdebug_prewarmed 链接符号；topic 首轮 fixture 的 TLS 断言受 NDK clang 默认行为影响，改用上游 LLVM 验证；va 独立宿主缺 tl_log_line。原始失败记录保留，不改产品代码来掩盖。
+
+后续诊断：LLVM 23 readelf 改变 RELR 展示，测试正则少计；固定 readelf 17 后 scanner 通过。Hardened Runtime JIT 自测按预期暴露 CODESIGNING Invalid Page，已作为迁移首要门槛。完整 App 与游戏/VM 验收留在迁移阶段。
+
+文档验证：Mermaid 首次渲染缺指定版本 chrome-headless-shell；改用已安装 Chrome 的临时 PUPPETEER_EXECUTABLE_PATH 后成功，未安装依赖。三份文档的本地链接/行号和代码围栏检查通过。产品代码、脚本、测试和 README 与初始状态无差异。
+
+此前审计/P0 完成后的历史交接已由本页顶部 P1–P4 状态更新取代。P0 的可见测试已停止；当前默认入口只在后台运行。用户明确不需要处理系统崩溃提示。

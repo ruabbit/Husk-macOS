@@ -8,10 +8,12 @@
  * at launch, as two views of the same pages. Code is written through the
  * writable view and run through the executable one.
  *
- * On a Mac there is no such restriction, but the loader is written against the
+ * On a Mac the loader is written against the
  * same two-view shape so the code that relocates, patches and addresses guest
  * images is the code that runs on the phone. The Mac gets its two views from
- * mach_vm_remap of ordinary memory.
+ * mach_vm_remap of ordinary memory. Under Hardened Runtime this strategy needs
+ * com.apple.security.cs.allow-unsigned-executable-memory on the Runner;
+ * allow-jit alone only authorises MAP_JIT and cannot execute this alias.
  *
  * Allocation is a bump pointer: nothing is ever returned. The phone's region is
  * one-shot, so a freed hole could not be refilled by asking for another.
@@ -39,7 +41,8 @@ bool tl_xmem_open(size_t host_bytes, char *err, size_t errlen);
 /*
  * Take `bytes` (rounded up to whole pages) from the region. `*rx` is where the
  * code will run and `*rw` is the same memory for writing; rw - rx is the same
- * constant for every allocation. Returns false when the region is exhausted.
+ * constant for every allocation. Returns false for zero/overflowing sizes or
+ * when the region is exhausted. Output pointers are unchanged on failure.
  */
 bool tl_xmem_alloc(size_t bytes, uint8_t **rx, uint8_t **rw);
 

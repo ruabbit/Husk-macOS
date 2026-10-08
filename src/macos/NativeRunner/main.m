@@ -1,0 +1,578 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#import <AppKit/AppKit.h>
+#import <GameController/GameController.h>
+#import <Security/SecTask.h>
+#import <CommonCrypto/CommonDigest.h>
+#import "MacGraphics.h"
+#import "MacAudio.h"
+#include "MacInput.h"
+#include "HuskCore.h"
+#include "husk-tl-ld.h"
+#include "husk-tl-egl.h"
+#include "husk-tl-gameactivity.h"
+#include "husk-tl-gamepad.h"
+#include "husk-tl-audio.h"
+#include "husk-tl-jni.h"
+#include "MacDiagnostics.h"
+#import "MacTextInput.h"
+#include <sys/stat.h>
+#include <stdatomic.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <unistd.h>
+#include <math.h>
+
+static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *diagnostics;
+static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow;
+static int variant, exitStatus;
+static BOOL minecraft;
+static CGFloat surfaceWidth=640, surfaceHeight=400;
+static atomic_bool finished;
+static MacGraphics *graphics;
+void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
+
+@interface Runner : NSObject <NSApplicationDelegate, NSWindowDelegate> {
+@public
+    MacInput input;
+}
+@property NSWindow *window;
+@property NSTimer *timer;
+@property MacAudio *audio;
+@property NSString *state;
+@property NSUInteger sequence, ticks;
+@property NSUInteger keyEvents, pointerEvents, controllerEvents;
+@property BOOL loaded, changingPause, lifecycleDestroyed;
+@property NSMutableSet<NSNumber *> *heldKeys;
+@property MacTextInput *textInput;
+@property BOOL captureRequested, cursorCaptured;
+- (void)updateCursorCapture;
+- (void)releaseCursor;
+- (void)gameStopped:(BOOL)ok;
+- (void)guestKey:(unsigned)code down:(BOOL)down repeat:(BOOL)repeat;
+@property int (*initialize)(int, const OrbitSave *);
+@property void (*step)(const OrbitInput *);
+@property void (*draw)(int);
+@property void (*mix)(int16_t *, int);
+@property void (*save)(OrbitSave *);
+- (void)event:(NSString *)kind detail:(NSDictionary *)detail;
+- (void)stop:(NSString *)reason;
+- (void)togglePause:(id)sender;
+- (void)clearInput;
+@end
+
+@interface GameView : MacTextInput
+@property(weak) Runner *runner;
+@property CAMetalLayer *surface;
+@end
+@implementation GameView
+- (instancetype)initWithFrame:(NSRect)frame
+{
+    if((self=[super initWithFrame:frame])) {
+        self.wantsLayer=YES;self.layer.backgroundColor=NSColor.blackColor.CGColor;
+        self.surface=[CAMetalLayer layer]; self.surface.drawableSize=CGSizeMake(surfaceWidth,surfaceHeight);
+        [self.layer addSublayer:self.surface];
+        self.needsLayout=YES;
+    }
+    return self;
+}
+- (BOOL)isFlipped {return YES;}
+- (void)setFrameSize:(NSSize)size {[super setFrameSize:size];self.needsLayout=YES;}
+- (BOOL)acceptsFirstResponder {return YES;}
+- (void)layout
+{
+    [super layout];
+    CGFloat scale=MIN(self.bounds.size.width/surfaceWidth,self.bounds.size.height/surfaceHeight);
+    [CATransaction begin];[CATransaction setDisableActions:YES];
+    self.surface.frame=CGRectMake((self.bounds.size.width-surfaceWidth*scale)/2,(self.bounds.size.height-surfaceHeight*scale)/2,surfaceWidth*scale,surfaceHeight*scale);
+    self.surface.drawableSize=CGSizeMake(surfaceWidth,surfaceHeight);[CATransaction commit];
+}
+- (void)keyDown:(NSEvent *)event
+{
+    if(minecraft&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
+    if(event.modifierFlags & NSEventModifierFlagCommand) {[super keyDown:event];return;}
+    if(!minecraft && (event.keyCode==53 || event.keyCode==35)) {if(!event.isARepeat)[self.runner togglePause:nil];return;}
+    if([self.runner.state isEqual:@"running"]) {[self.runner guestKey:event.keyCode down:YES repeat:event.isARepeat];}
+}
+- (void)keyUp:(NSEvent *)event {[self.runner guestKey:event.keyCode down:NO repeat:NO];}
+- (void)flagsChanged:(NSEvent *)event {
+    NSEventModifierFlags flag=0;
+    switch(event.keyCode){case 56:case 60:flag=NSEventModifierFlagShift;break;case 58:case 61:flag=NSEventModifierFlagOption;break;case 59:case 62:flag=NSEventModifierFlagControl;break;default:return;}
+    [self.runner guestKey:event.keyCode down:(event.modifierFlags&flag)!=0 repeat:NO];
+}
+- (void)pointer:(NSEvent *)event down:(BOOL)down
+{
+    NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];
+    self.inputAnchor=point;
+    if(minecraft) {
+        if(![self.runner.state isEqual:@"running"])return;
+        if(self.runner.cursorCaptured&&(event.type==NSEventTypeMouseMoved||event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged)) {
+            tl_ga_mouse_relative(event.deltaX,event.deltaY,(int)NSEvent.pressedMouseButtons&7);self.runner.pointerEvents++;return;
+        }
+        CGFloat scale=MIN(self.bounds.size.width/surfaceWidth,self.bounds.size.height/surfaceHeight);
+        float x=(point.x-(self.bounds.size.width-surfaceWidth*scale)/2)/scale;
+        float y=(point.y-(self.bounds.size.height-surfaceHeight*scale)/2)/scale;
+        if(x<0||x>surfaceWidth||y<0||y>surfaceHeight){if(down||event.type==NSEventTypeMouseMoved)return;x=MAX(0,MIN(surfaceWidth,x));y=MAX(0,MIN(surfaceHeight,y));}
+        int buttons=(int)NSEvent.pressedMouseButtons & 7;
+        int action=event.type==NSEventTypeScrollWheel?8:event.type==NSEventTypeMouseMoved?7:
+            event.type==NSEventTypeLeftMouseDragged||event.type==NSEventTypeRightMouseDragged?2:down?0:1;
+        tl_ga_mouse(action,x,y,buttons,event.scrollingDeltaY);
+    } else mac_input_pointer(&self.runner->input,point.x,point.y,self.bounds.size.width,self.bounds.size.height,down && [self.runner.state isEqual:@"running"]);
+    self.runner.pointerEvents++;
+}
+- (void)mouseDown:(NSEvent *)event {[self.window makeFirstResponder:self];[self pointer:event down:YES];}
+- (void)mouseDragged:(NSEvent *)event {[self pointer:event down:YES];}
+- (void)mouseUp:(NSEvent *)event {[self pointer:event down:NO];}
+- (void)rightMouseDown:(NSEvent *)event {[self pointer:event down:YES];}
+- (void)rightMouseDragged:(NSEvent *)event {[self pointer:event down:YES];}
+- (void)rightMouseUp:(NSEvent *)event {[self pointer:event down:NO];}
+- (void)otherMouseDown:(NSEvent *)event {[self pointer:event down:YES];}
+- (void)otherMouseUp:(NSEvent *)event {[self pointer:event down:NO];}
+- (void)mouseMoved:(NSEvent *)event {if(minecraft)[self pointer:event down:NO];}
+- (void)scrollWheel:(NSEvent *)event {if(minecraft)[self pointer:event down:NO];}
+@end
+
+static NSRange inputRange(int start,int end) {
+    return start<0||end<start?NSMakeRange(NSNotFound,0):NSMakeRange((NSUInteger)start,(NSUInteger)(end-start));
+}
+static void hostTextState(void *context,const char *text,int start,int end,int cs,int ce) {
+    Runner *runner=(__bridge Runner *)context;NSString *copy=[NSString stringWithUTF8String:text?:""]?:@"";
+    dispatch_async(dispatch_get_main_queue(),^{[runner.textInput receiveText:copy selection:inputRange(start,end) marked:inputRange(cs,ce)];});
+}
+static void hostTextActive(void *context,bool active) {
+    Runner *runner=(__bridge Runner *)context;
+    dispatch_async(dispatch_get_main_queue(),^{runner.textInput.textInputActive=active;[runner event:@"text-input" detail:@{@"active":@(active)}];});
+}
+static void hostCursorLocked(void *context,bool locked) {
+    Runner *runner=(__bridge Runner *)context;
+    dispatch_async(dispatch_get_main_queue(),^{runner.captureRequested=locked;[runner updateCursorCapture];[runner event:@"cursor" detail:@{@"requested":@(locked),@"captured":@(runner.cursorCaptured)}];});
+}
+
+static NSDictionary *saveDictionary(OrbitSave save)
+{
+    return @{@"abi":@(save.abi),@"variant":@(save.variant),@"collected":@(save.collected),@"score":@(save.score),
+             @"wins":@(save.wins),@"steps":@(save.steps),@"x":@(save.x),@"y":@(save.y)};
+}
+static BOOL restore(NSDictionary *object, OrbitSave *save)
+{
+    if(![object isKindOfClass:NSDictionary.class] || ![object[@"schema"] isEqual:@1])return NO;
+    NSDictionary *game=object[@"game"];
+    if(![game isKindOfClass:NSDictionary.class])return NO;
+    for(NSString *key in @[@"abi",@"variant",@"collected",@"score",@"wins",@"steps",@"x",@"y"])
+        if(![game[key] isKindOfClass:NSNumber.class] || !isfinite([game[key] doubleValue]) || [game[key] doubleValue]<0 || [game[key] doubleValue]>UINT32_MAX)return NO;
+    *save=(OrbitSave){[game[@"abi"] unsignedIntValue],[game[@"variant"] unsignedIntValue],[game[@"collected"] unsignedIntValue],
+        [game[@"score"] unsignedIntValue],[game[@"wins"] unsignedIntValue],[game[@"steps"] unsignedIntValue],[game[@"x"] floatValue],[game[@"y"] floatValue]};
+    return YES;
+}
+
+static void activityJobFinished(void *context)
+{
+    void (^completion)(void)=CFBridgingRelease(context);
+    dispatch_async(dispatch_get_main_queue(),completion);
+}
+static void activityStopped(void *context,bool ok)
+{
+    Runner *runner=CFBridgingRelease(context);
+    dispatch_async(dispatch_get_main_queue(),^{[runner gameStopped:ok];});
+}
+static int androidKey(unsigned code)
+{
+    // macOS virtual key codes -> Android physical keys. Command stays in AppKit.
+    static const int keys[128]={
+        [0]=29,[1]=47,[2]=32,[3]=34,[4]=36,[5]=35,[6]=54,[7]=52,[8]=31,[9]=50,
+        [11]=30,[12]=45,[13]=51,[14]=33,[15]=46,[16]=53,[17]=48,
+        [18]=8,[19]=9,[20]=10,[21]=11,[22]=13,[23]=12,[25]=16,[26]=14,[28]=15,[29]=7,
+        [31]=43,[32]=49,[34]=37,[35]=44,[36]=66,[37]=40,[38]=38,[40]=39,[45]=42,[46]=41,
+        [48]=61,[49]=62,[51]=67,[53]=111,[56]=59,[58]=57,[59]=113,[60]=60,[61]=58,[62]=114,
+        [123]=21,[124]=22,[125]=20,[126]=19};
+    return code<128?keys[code]:0;
+}
+@implementation Runner
+- (void)event:(NSString *)kind detail:(NSDictionary *)detail
+{
+    NSMutableDictionary *message=[@{@"protocol":@1,@"session":sessionID,@"pid":@(getpid()),@"seq":@(++self.sequence),
+        @"event":kind,@"state":self.state?:@"starting",@"ticks":@(self.ticks)} mutableCopy];
+    [message addEntriesFromDictionary:detail?:@{}];
+    NSData *data=[NSJSONSerialization dataWithJSONObject:message options:0 error:NULL];
+    if(data){fwrite(data.bytes,1,data.length,stdout);fputc('\n',stdout);fflush(stdout);}
+}
+- (void)transition:(NSString *)state reason:(NSString *)reason
+{
+    self.state=state;[self event:@"state" detail:@{@"reason":reason}];
+    self.window.title=[NSString stringWithFormat:@"%@%@ — Husk",gameTitle,[state isEqual:@"paused"]?@" · 已暂停":@""];
+}
+- (void)finish:(BOOL)success reason:(NSString *)reason
+{
+    if(atomic_exchange(&finished,true))return;
+    [self releaseCursor];
+    [self.timer invalidate];[self.audio close];[graphics close];
+    exitStatus=success?0:70;
+    [self transition:success?@"exited":@"failed" reason:reason];
+    [self.window orderOut:nil];
+    if(NSApp){[NSApp stop:nil];[NSApp postEvent:[NSEvent otherEventWithType:NSEventTypeApplicationDefined location:NSZeroPoint
+        modifierFlags:0 timestamp:0 windowNumber:0 context:nil subtype:0 data1:0 data2:0] atStart:NO];}
+    CFRunLoopStop(CFRunLoopGetMain());
+}
+- (BOOL)checkpoint
+{
+    NSDictionary *object;
+    if(minecraft) {
+        if(!self.lifecycleDestroyed)return NO;
+        // The receipt describes the completed Android lifecycle. Minecraft's
+        // world databases remain the game's own files in the adjacent data dir.
+        object=@{@"schema":@1,@"session":sessionID,@"runtime":@"minecraft",@"lifecycle":@"destroyed"};
+    } else { OrbitSave save;self.save(&save);object=@{@"schema":@1,@"session":sessionID,@"game":saveDictionary(save)}; }
+    NSData *data=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:NULL];
+    NSString *temporary=[checkpointPath stringByAppendingFormat:@".%d.tmp",getpid()];
+    int fd=open(temporary.fileSystemRepresentation,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
+    if(fd<0)return NO;
+    const uint8_t *bytes=data.bytes;size_t left=data.length;BOOL ok=YES;
+    while(left){ssize_t n=write(fd,bytes,left);if(n<0&&errno==EINTR)continue;if(n<=0){ok=NO;break;}left-=n;bytes+=n;}
+    if(ok)ok=fsync(fd)==0;if(close(fd)!=0)ok=NO;
+    if(ok)ok=rename(temporary.fileSystemRepresentation,checkpointPath.fileSystemRepresentation)==0;
+    if(ok){int dir=open(checkpointPath.stringByDeletingLastPathComponent.fileSystemRepresentation,O_RDONLY);ok=dir>=0&&fsync(dir)==0;if(dir>=0)close(dir);}
+    if(!ok)unlink(temporary.fileSystemRepresentation);
+    return ok;
+}
+- (void)stop:(NSString *)reason
+{
+    if(atomic_load(&finished)||[self.state isEqual:@"stopping"])return;
+    [self transition:@"stopping" reason:reason];[self clearInput];
+    if(minecraft && self.loaded) {
+        // Let the mixer drain during destruction; keep the output silent.
+        tl_audio_set_muted(true);tl_audio_set_paused(false);
+        tl_ga_stop(activityStopped,(__bridge_retained void *)self);return;
+    }
+    [self.timer invalidate];
+    if(!self.loaded||![self checkpoint]){[self finish:NO reason:@"无法写入游戏存档；之前的存档保留。"];return;}
+    [self event:@"checkpoint" detail:@{@"saved":@YES}];[self finish:YES reason:reason];
+}
+- (void)gameStopped:(BOOL)ok
+{
+    self.lifecycleDestroyed=ok;
+    if(!ok||![self checkpoint]){[self finish:NO reason:@"游戏未能完成正常关闭；已有游戏数据保留。"];return;}
+    [self event:@"storage-closed" detail:@{@"lifecycle":@"destroyed"}];
+    [self finish:YES reason:@"activity-destroyed"];
+}
+- (void)guestKey:(unsigned)code down:(BOOL)down repeat:(BOOL)repeat
+{
+    self.keyEvents++;
+    if(!minecraft){mac_input_key(&input,code,down);return;}
+    int key=androidKey(code);if(!key)return;
+    if(down){if(![self.state isEqual:@"running"])return;[self.heldKeys addObject:@(key)];}
+    else [self.heldKeys removeObject:@(key)];
+    tl_ga_key(key,down,repeat?1:0);
+}
+- (void)clearInput {
+    [self releaseCursor];
+    mac_input_clear(&input);
+    if(minecraft&&self.loaded){
+        for(NSNumber *key in self.heldKeys)tl_ga_key(key.intValue,false,0);
+        [self.heldKeys removeAllObjects];tl_ga_touch(3,0,0,0);tl_ga_mouse_cancel();
+        tl_pad_state empty={0};if(tl_pad_connected(0))tl_pad_update(0,&empty);
+    }
+}
+- (void)releaseCursor {
+    if(!self.cursorCaptured)return;
+    CGAssociateMouseAndMouseCursorPosition(true);[NSCursor unhide];self.cursorCaptured=NO;
+}
+- (void)updateCursorCapture {
+    BOOL capture=self.captureRequested&&!headless&&!hiddenWindow&&self.window.keyWindow&&NSApp.active&&[self.state isEqual:@"running"]&&!atomic_load(&finished);
+    if(!capture){[self releaseCursor];return;}
+    if(!self.cursorCaptured&&CGAssociateMouseAndMouseCursorPosition(false)==kCGErrorSuccess){[NSCursor hide];self.cursorCaptured=YES;}
+}
+- (void)togglePause:(id)sender
+{
+    (void)sender;
+    if(![self.state isEqual:@"running"]&&![self.state isEqual:@"paused"])return;
+    BOOL pause=[self.state isEqual:@"running"];
+    if(self.changingPause)return;
+    [self clearInput];
+    if(minecraft) {
+        self.changingPause=YES;
+        if(!pause)tl_audio_set_paused(false);
+        tl_ga_set_paused(pause);
+        void (^done)(void)=^{
+            self.changingPause=NO;
+            if([self.state isEqual:@"stopping"]||atomic_load(&finished))return;
+            tl_audio_set_paused(pause);
+            [self transition:pause?@"paused":@"running" reason:pause?@"pause-acknowledged":@"resume-acknowledged"];
+            [self updateCursorCapture];
+        };
+        tl_ga_post(activityJobFinished,(__bridge_retained void *)[done copy]);return;
+    }
+    [self.audio setPaused:pause];
+    [self transition:pause?@"paused":@"running" reason:pause?@"pause-acknowledged":@"resume-acknowledged"];
+    self.draw(pause);[graphics present];
+}
+- (void)frame
+{
+    @autoreleasepool {
+    if(minecraft){
+        self.ticks=tl_ga_frames();
+        if(tl_ga_failed()){[self finish:NO reason:@"Minecraft Activity 初始化失败，请查看日志。"];return;}
+        if([self.state isEqual:@"starting"]&&tl_ga_ready()&&self.ticks>0){
+            [self transition:@"running" reason:@"game-ready"];
+            if(!headless&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+        }
+        return;
+    }
+    if(![self.state isEqual:@"running"])return;
+    OrbitInput current=mac_input_frame(&input);self.step(&current);self.ticks++;
+    self.draw(0);int16_t samples[1600];self.mix(samples,800);[self.audio submit:samples frames:800];
+    if(![graphics present])[self finish:NO reason:@"图形呈现失败。"];
+    }
+}
+- (void)status
+{
+    OrbitSave save={0};if(self.loaded&&!minecraft)self.save(&save);
+    [self event:@"status" detail:@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
+        @"runtime":minecraft?@"minecraft":@"orbit",@"audioFrames":@(minecraft?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(minecraft?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
+        @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)}];
+}
+- (void)command:(NSDictionary *)message
+{
+    if(![message isKindOfClass:NSDictionary.class]||![message[@"session"] isEqual:sessionID]||![message[@"protocol"] isEqual:@1]) {
+        [self event:@"rejected" detail:@{@"reason":@"session-or-protocol-mismatch"}];return;
+    }
+    NSString *command=message[@"command"];
+    if([command isEqual:@"stop"]) [self stop:@"controller-stop"];
+    else if([command isEqual:@"pause"]&&[self.state isEqual:@"running"]) [self togglePause:nil];
+    else if([command isEqual:@"resume"]&&[self.state isEqual:@"paused"]) [self togglePause:nil];
+    else if([command isEqual:@"status"]) [self status];
+    else if(automation&&[command isEqual:@"input"]&&[self.state isEqual:@"running"]) {
+        NSString *source=message[@"source"];
+        if([source isEqual:@"key"]) {[self guestKey:[message[@"code"] unsignedIntValue] down:[message[@"down"] boolValue] repeat:NO];}
+        else if(minecraft&&[source isEqual:@"touch"]) {tl_ga_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
+        else if(minecraft&&[source isEqual:@"mouse"]) {tl_ga_mouse([message[@"action"] intValue],[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue],[message[@"scroll"] floatValue]);self.pointerEvents++;}
+        else if(minecraft&&[source isEqual:@"relative-mouse"]) {tl_ga_mouse_relative([message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue]);self.pointerEvents++;}
+        else if(minecraft&&[source isEqual:@"text"]&&self.textInput.textInputActive&&[message[@"text"] isKindOfClass:NSString.class]) {
+            if([message[@"selectAll"] boolValue])[self.textInput selectAll:nil];
+            [self.textInput insertText:message[@"text"] replacementRange:NSMakeRange(NSNotFound,0)];
+        }
+        else if(minecraft&&[source isEqual:@"controller"]) {
+            if(!tl_pad_connected(0))tl_pad_connect(0,"Husk Test Controller");
+            tl_pad_state pad={.buttons=[message[@"buttons"] unsignedIntValue],.lx=[message[@"x"] floatValue],.ly=[message[@"y"] floatValue],.rx=[message[@"rx"] floatValue],.ry=[message[@"ry"] floatValue],.lt=[message[@"lt"] floatValue],.rt=[message[@"rt"] floatValue]};
+            tl_pad_update(0,&pad);self.controllerEvents++;
+        }
+        else if([source isEqual:@"pointer"]) {mac_input_pointer(&input,[message[@"x"] floatValue],[message[@"y"] floatValue],640,400,[message[@"down"] boolValue]);self.pointerEvents++;}
+        else if([source isEqual:@"controller"]) {mac_input_controller(&input,[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"restart"] boolValue]);self.controllerEvents++;}
+        else if([source isEqual:@"focus-lost"]) [self clearInput];
+        [self event:@"input" detail:nil];
+    }
+    else if(automation&&!minecraft&&[command isEqual:@"step"]) {
+        int frames=MAX(0,MIN(600,[message[@"frames"] intValue]));
+        for(int i=0;i<frames&&!atomic_load(&finished);i++)[self frame];
+        [self status];
+    }
+    else if(automation&&diagnostics&&[command isEqual:@"capture"]) {
+        // Only a basename under the launch-time diagnostic directory is accepted.
+        NSString *name=message[@"name"];
+        if(![name isKindOfClass:NSString.class]||![name isEqual:name.lastPathComponent]||![name.pathExtension isEqual:@"png"])return;
+        BOOL ok=NO;
+        if(minecraft){
+            NSData *data=[NSData dataWithContentsOfFile:[diagnostics stringByAppendingPathComponent:@"frames/latest.bmp"]];
+            NSBitmapImageRep *bitmap=data?[NSBitmapImageRep imageRepWithData:data]:nil;
+            NSData *png=[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+            ok=png&&[png writeToFile:[diagnostics stringByAppendingPathComponent:name] options:NSDataWritingAtomic error:NULL];
+        }else{self.draw([self.state isEqual:@"paused"]);ok=[graphics capture:[diagnostics stringByAppendingPathComponent:name]];}
+        [self event:@"capture" detail:@{@"saved":@(ok),@"name":name}];
+    }
+    else if(automation&&[command isEqual:@"exit-unexpectedly"]) _exit(74); // No signal/crash dialog; supervisor failure-path test.
+    else [self event:@"rejected" detail:@{@"reason":@"invalid-state-or-command"}];
+}
+- (BOOL)validateFixture
+{
+    if(minecraft){
+        // The library's import hash remains the integrity contract. Compatibility
+        // is checked independently here before any Android code is loaded.
+        NSInputStream *stream=[NSInputStream inputStreamWithFileAtPath:apkPath];[stream open];
+        CC_SHA256_CTX context;CC_SHA256_Init(&context);uint8_t buffer[65536],digest[CC_SHA256_DIGEST_LENGTH];NSInteger count;
+        while((count=[stream read:buffer maxLength:sizeof(buffer)])>0)CC_SHA256_Update(&context,buffer,(CC_LONG)count);
+        [stream close];if(count<0)return NO;CC_SHA256_Final(digest,&context);
+        NSMutableString *hex=[NSMutableString string];for(unsigned i=0;i<sizeof(digest);i++)[hex appendFormat:@"%02x",digest[i]];
+        if (![hex isEqual:apkDigest]) return NO;
+        const char *path=apkPath.fileSystemRepresentation;
+        char *raw=husk_tl_scan(&path,1);
+        if (!raw) return NO;
+        NSData *data=[NSData dataWithBytes:raw length:strlen(raw)];husk_tl_free(raw);
+        NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
+        return [scan isKindOfClass:NSDictionary.class] && [scan[@"ok"] boolValue] &&
+            [scan[@"hasManifest"] boolValue] && [scan[@"engine"] isEqual:@"Minecraft"] &&
+            [scan[@"abis"] isKindOfClass:NSArray.class] && [scan[@"abis"] containsObject:@"arm64-v8a"];
+    }
+    NSString *catalogPath=[NSBundle.mainBundle pathForResource:@"fixture-catalog" ofType:@"json"];
+    NSDictionary *catalog=[NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:catalogPath]?:[NSData data] options:0 error:NULL];
+    size_t size=0;void *bytes=husk_tl_read_entry(apkPath.fileSystemRepresentation,"lib/arm64-v8a/libhusk_orbit.so",4<<20,&size);
+    if(!bytes||![catalog isKindOfClass:NSDictionary.class]){if(bytes)husk_tl_free(bytes);return NO;}
+    uint8_t digest[CC_SHA256_DIGEST_LENGTH];CC_SHA256(bytes,(CC_LONG)size,digest);husk_tl_free(bytes);
+    NSMutableString *hex=[NSMutableString string];for(int i=0;i<CC_SHA256_DIGEST_LENGTH;i++)[hex appendFormat:@"%02x",digest[i]];
+    return [catalog[@"sha256"] isEqual:hex];
+}
+- (void)setupController:(GCController *)controller
+{
+    controller.handlerQueue=dispatch_get_main_queue();
+    __weak Runner *weak=self;
+    NSString *controllerName=controller.vendorName?:@"Game Controller";
+    controller.extendedGamepad.valueChangedHandler=^(GCExtendedGamepad *pad,GCControllerElement *element){
+        Runner *self=weak;if(!self.window.keyWindow||![self.state isEqual:@"running"])return;
+        if(minecraft){
+            if(!tl_pad_connected(0))tl_pad_connect(0,controllerName.UTF8String);
+            tl_pad_state state={.lx=pad.leftThumbstick.xAxis.value,.ly=-pad.leftThumbstick.yAxis.value,.rx=pad.rightThumbstick.xAxis.value,.ry=-pad.rightThumbstick.yAxis.value,.lt=pad.leftTrigger.value,.rt=pad.rightTrigger.value};
+            GCControllerButtonInput *buttons[]={pad.buttonA,pad.buttonB,pad.buttonX,pad.buttonY,pad.leftShoulder,pad.rightShoulder,pad.leftThumbstickButton,pad.rightThumbstickButton,pad.buttonMenu,pad.buttonOptions,nil,pad.dpad.up,pad.dpad.down,pad.dpad.left,pad.dpad.right};
+            for(int i=0;i<TL_PAD_BUTTONS;i++)if(buttons[i].pressed)state.buttons|=1u<<i;
+            tl_pad_update(0,&state);self.controllerEvents++;return;
+        }
+        float x=pad.leftThumbstick.xAxis.value+pad.dpad.xAxis.value,y=pad.leftThumbstick.yAxis.value+pad.dpad.yAxis.value;
+        mac_input_controller(&self->input,x,y,element==pad.buttonA&&pad.buttonA.pressed);self.controllerEvents++;
+    };
+    controller.extendedGamepad.buttonMenu.pressedChangedHandler=^(GCControllerButtonInput *button,float value,BOOL pressed){
+        (void)button;(void)value;Runner *self=weak;if(!minecraft&&pressed&&self.window.keyWindow)[self togglePause:nil];
+    };
+}
+- (void)applicationDidFinishLaunching:(NSNotification *)notification
+{
+    (void)notification;
+    SecTaskRef task=SecTaskCreateFromSelf(NULL);
+    CFTypeRef entitlement=task?SecTaskCopyValueForEntitlement(task,CFSTR("com.apple.security.cs.allow-unsigned-executable-memory"),NULL):NULL;
+    BOOL allowed=entitlement&&CFEqual(entitlement,kCFBooleanTrue);if(entitlement)CFRelease(entitlement);if(task)CFRelease(task);
+    if(!allowed){[self finish:NO reason:@"运行组件缺少执行内存权限，请重新构建或安装。"];return;}
+    if(![self validateFixture]){[self finish:NO reason:@"游戏文件校验或运行入口检查未通过，请重新导入完整 APK。"];return;}
+    CAMetalLayer *layer=nil;
+    if(!headless) {
+        self.window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,800,500) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+        self.window.acceptsMouseMovedEvents=YES;self.window.delegate=self;self.window.restorable=NO;self.window.releasedWhenClosed=NO;self.window.contentMinSize=NSMakeSize(minecraft?854:640,minecraft?480:400);
+        GameView *view=[[GameView alloc] initWithFrame:NSMakeRect(0,0,800,500)];view.runner=self;self.window.contentView=view;
+        self.textInput=view;
+        [view layoutSubtreeIfNeeded];layer=view.surface;
+        self.window.title=gameTitle;[self.window center];[self.window makeFirstResponder:view];
+        NSMenu *main=[NSMenu new];NSMenuItem *root=[NSMenuItem new];[main addItem:root];
+        NSMenu *menu=[[NSMenu alloc] initWithTitle:@"Husk Game"];
+        NSMenuItem *pause=[menu addItemWithTitle:@"暂停 / 继续" action:@selector(togglePause:) keyEquivalent:@"p"];pause.target=self;
+        [menu addItem:NSMenuItem.separatorItem];
+        [menu addItemWithTitle:@"结束游戏" action:@selector(terminate:) keyEquivalent:@"q"];
+        root.submenu=menu;NSApp.mainMenu=main;
+    }
+    // Runner.app is embedded at Contents/Helpers; Frameworks belongs to the outer app.
+    NSString *frameworks=[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"../../Frameworks"];
+    NSString *angle=[frameworks stringByAppendingPathComponent:@"libANGLE-shared.dylib"];
+    if(minecraft){
+        NSString *data=[checkpointPath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"data"];
+        [NSFileManager.defaultManager createDirectoryAtPath:data withIntermediateDirectories:YES attributes:nil error:NULL];
+        NSString *frames=diagnostics?[diagnostics stringByAppendingPathComponent:@"frames"]:nil;
+        if(frames)[NSFileManager.defaultManager createDirectoryAtPath:frames withIntermediateDirectories:YES attributes:nil error:NULL];
+        self.heldKeys=[NSMutableSet new];tl_audio_set_muted(muted||headless);tl_audio_install();
+        if(!self.textInput)self.textInput=[[MacTextInput alloc] initWithFrame:NSZeroRect];
+        __weak Runner *weakSelf=self;
+        self.textInput.textChanged=^(NSString *text,NSRange selection,NSRange marked){
+            Runner *self=weakSelf;if(!self||![self.state isEqual:@"running"])return;
+            tl_ga_text(text.UTF8String,(int)selection.location,(int)NSMaxRange(selection),marked.location==NSNotFound?-1:(int)marked.location,marked.location==NSNotFound?-1:(int)NSMaxRange(marked));
+        };
+        self.textInput.textCommand=^(unsigned code){[weakSelf guestKey:code down:YES repeat:NO];[weakSelf guestKey:code down:NO repeat:NO];};
+        tl_ga_input_host host={hostTextState,hostTextActive,hostCursorLocked,(__bridge void *)self};tl_ga_set_input_host(&host);
+        if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);}
+        tl_ld_set_verbosity(2);tl_jni_set_trace(0);tl_egl_offscreen_windows(headless);
+        tl_ga_config configuration={.apk_path=apkPath.fileSystemRepresentation,.data_dir=data.fileSystemRepresentation,
+            .package_name="com.mojang.minecraftpe",.width=(int)surfaceWidth,.height=(int)surfaceHeight,
+            .metal_layer=(__bridge void *)layer,.angle_egl=angle.fileSystemRepresentation,.frame_dir=frames.fileSystemRepresentation,.frame_every=-60};
+        if(!tl_ga_start(&configuration)){[self finish:NO reason:@"Minecraft 运行时加载失败，请查看日志。"];return;}
+        if(!tl_ga_run()){[self finish:NO reason:@"Minecraft 活动线程启动失败。"];return;}
+        self.loaded=YES;
+    }else{
+    if(!tl_egl_init(angle.fileSystemRepresentation,NULL,NULL,0)){[self finish:NO reason:@"图形入口加载失败。"];return;}
+    NSError *error=nil;graphics=[[MacGraphics alloc] initWithLibrary:[frameworks stringByAppendingPathComponent:@"libANGLE-shared.dylib"] layer:layer error:&error];
+    if(!graphics){[self finish:NO reason:error.localizedDescription];return;}
+    if(!tl_ld_add_apk(apkPath.fileSystemRepresentation)){[self finish:NO reason:@"无法读取游戏 APK。"];return;}
+    tl_lib *lib=tl_ld_load("libhusk_orbit.so");
+    if(!lib||tl_ld_unresolved_count()||!tl_ld_init(lib)){[self finish:NO reason:@"游戏 ELF 加载失败，请查看运行日志。"];return;}
+    self.initialize=tl_ld_sym(lib,"orbit_init");self.step=tl_ld_sym(lib,"orbit_step");self.draw=tl_ld_sym(lib,"orbit_draw");self.mix=tl_ld_sym(lib,"orbit_mix");self.save=tl_ld_sym(lib,"orbit_save");
+    if(!self.initialize||!self.step||!self.draw||!self.mix||!self.save){[self finish:NO reason:@"游戏缺少必需的入口。"];return;}
+    OrbitSave saved,*restorePointer=NULL;
+    if([NSFileManager.defaultManager fileExistsAtPath:checkpointPath]) {
+        NSData *data=[NSData dataWithContentsOfFile:checkpointPath options:0 error:NULL];
+        NSDictionary *object=data&&data.length<=65536?[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL]:nil;
+        if(!restore(object,&saved)){[self finish:NO reason:@"存档格式损坏，原文件已保留。可在游戏设置中单独清除存档。"];return;}
+        restorePointer=&saved;
+    }
+    if(!self.initialize(variant,restorePointer)){[self finish:NO reason:@"游戏无法读取此存档；原文件已保留。"];return;}
+    self.loaded=YES;
+    self.audio=[[MacAudio alloc] initMuted:muted||headless capture:diagnostics?[diagnostics stringByAppendingPathComponent:@"audio.wav"]:nil];
+    if(!self.audio){[self finish:NO reason:@"音频输出初始化失败。请检查音频设备或在设置中静音。"];return;}
+    [self transition:@"running" reason:@"game-ready"];self.draw(0);[graphics present];
+    }
+    if(!headless){
+        if(!minecraft&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+        for(GCController *controller in GCController.controllers)[self setupController:controller];
+        [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){[self setupController:note.object];}];
+        [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){(void)note;[self clearInput];if(minecraft)tl_pad_disconnect(0);}];
+        [NSWorkspace.sharedWorkspace.notificationCenter addObserverForName:NSWorkspaceWillSleepNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){(void)note;if([self.state isEqual:@"running"])[self togglePause:nil];}];
+    }
+    __block NSUInteger heartbeat=0;
+    self.timer=[NSTimer scheduledTimerWithTimeInterval:1.0/60 repeats:YES block:^(NSTimer *timer){
+        (void)timer;if(!automation||minecraft)[self frame];if(++heartbeat%60==0)[self status];
+    }];
+    [self status];
+}
+- (void)windowDidResignKey:(NSNotification *)note {(void)note;[self clearInput];if(pauseInactive&&[self.state isEqual:@"running"])[self togglePause:nil];}
+- (void)applicationDidResignActive:(NSNotification *)note {(void)note;[self clearInput];}
+- (void)windowDidBecomeKey:(NSNotification *)note {(void)note;[self updateCursorCapture];}
+- (void)applicationDidBecomeActive:(NSNotification *)note {(void)note;[self updateCursorCapture];}
+- (BOOL)windowShouldClose:(NSWindow *)sender {(void)sender;[self stop:@"window-close"];return NO;}
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {(void)sender;[self stop:@"menu-quit"];return NSTerminateCancel;}
+@end
+
+int main(int argc,const char **argv)
+{
+    @autoreleasepool {
+        for(int i=1;i<argc;i++) {
+            NSString *arg=@(argv[i]);
+            if([arg isEqual:@"--headless"])headless=YES;
+            else if([arg isEqual:@"--show-window"])headless=NO;
+            else if([arg isEqual:@"--hidden-window"]){headless=NO;hiddenWindow=YES;}
+            else if([arg isEqual:@"--mute"])muted=YES;
+            else if([arg isEqual:@"--automation"])automation=YES;
+            else if([arg isEqual:@"--pause-inactive"])pauseInactive=YES;
+            else if(i+1<argc&&[arg isEqual:@"--session"])sessionID=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--apk"])apkPath=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--apk-sha256"])apkDigest=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--checkpoint"])checkpointPath=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--runtime"]){NSString *runtime=@(argv[++i]);if(![runtime isEqual:@"orbit"]&&![runtime isEqual:@"minecraft"])return 64;minecraft=[runtime isEqual:@"minecraft"];}
+            else if(i+1<argc&&[arg isEqual:@"--variant"])variant=atoi(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--title"])gameTitle=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--diagnostics"])diagnostics=@(argv[++i]);
+            else {fprintf(stderr,"unknown or incomplete option\n");return 64;}
+        }
+        if(![[NSUUID alloc] initWithUUIDString:sessionID]||!apkPath||!checkpointPath||variant<0||variant>1)return 64;
+        if(minecraft && (apkDigest.length != 64 || [apkDigest rangeOfCharacterFromSet:
+            [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location != NSNotFound))return 64;
+        gameTitle=gameTitle?:@"Orbit Garden";
+        if(diagnostics){if(!automation)return 64;[NSFileManager.defaultManager createDirectoryAtPath:diagnostics withIntermediateDirectories:YES attributes:nil error:NULL];}
+        if(minecraft){surfaceWidth=1280;surfaceHeight=720;}
+        mac_runtime_diagnostics_install();signal(SIGPIPE,SIG_IGN);
+        Runner *runner=[Runner new];[runner transition:@"starting" reason:@"launch"];
+        NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
+        NSMutableDictionary *arguments=[[defaults volatileDomainForName:NSArgumentDomain] mutableCopy]?:[NSMutableDictionary new];
+        arguments[@"ApplePersistenceIgnoreState"]=@YES;arguments[@"NSQuitAlwaysKeepsWindows"]=@NO;
+        [defaults setVolatileDomain:arguments forName:NSArgumentDomain];
+        if(!headless){[NSApplication sharedApplication];[NSApp disableRelaunchOnLogin];[NSApp setActivationPolicy:hiddenWindow?NSApplicationActivationPolicyProhibited:NSApplicationActivationPolicyRegular];NSApp.delegate=runner;}
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{
+            char line[8192];while(fgets(line,sizeof(line),stdin)) {@autoreleasepool{
+                NSData *data=[NSData dataWithBytes:line length:strlen(line)];
+                NSDictionary *message=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
+                dispatch_async(dispatch_get_main_queue(),^{[runner command:message];});
+            }}
+            dispatch_async(dispatch_get_main_queue(),^{[runner stop:@"control-channel-closed"];});
+        });
+        pid_t owner=getppid();__block int orphan=0;
+        dispatch_source_t watch=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,dispatch_get_global_queue(QOS_CLASS_UTILITY,0));
+        dispatch_source_set_timer(watch,dispatch_time(DISPATCH_TIME_NOW,100*NSEC_PER_MSEC),100*NSEC_PER_MSEC,10*NSEC_PER_MSEC);
+        dispatch_source_set_event_handler(watch,^{if(getppid()!=owner||owner==1){if(!orphan++)dispatch_async(dispatch_get_main_queue(),^{[runner stop:@"parent-exited"];});if(orphan>=(minecraft?300:20))_exit(125);}});
+        dispatch_resume(watch);
+        if(headless){
+            [runner applicationDidFinishLaunching:[NSNotification notificationWithName:NSApplicationDidFinishLaunchingNotification object:nil]];
+            while(!atomic_load(&finished)) { @autoreleasepool { CFRunLoopRunInMode(kCFRunLoopDefaultMode,.1,true); } }
+        }
+        else [NSApp run];
+        dispatch_source_cancel(watch);
+    }
+    return exitStatus;
+}

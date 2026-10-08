@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "angle": {
+    "repository": "https://github.com/WebKit/WebKit.git",
+    "commit": "f488eac0e00cee453b7ca9f24c42f585df236e97",
+    "subdirectory": "Source/ThirdParty/ANGLE",
+    "license": "BSD-3-Clause and bundled third-party notices"
+  },
+  "moltenvk": {
+    "repository": "https://github.com/KhronosGroup/MoltenVK.git",
+    "commit": "db66022459ffb663aa2b50f6b018bc2e124f5edf",
+    "tag": "v1.4.2",
+    "license": "Apache-2.0"
+  }
+}

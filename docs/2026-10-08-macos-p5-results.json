@@ -1,0 +1,921 @@
+{
+  "schema": 1,
+  "date": "2026-10-08",
+  "stage": "P5",
+  "status": "incomplete",
+  "blockingAcceptance": [
+    "minecraft-vm-black-screen-and-guest-anr",
+    "continuous-guest-audio"
+  ],
+  "repository": {
+    "branch": "codex/macos-p0",
+    "baseHead": "82f33e858952f9fda3cf224e839f4385894e2d5b",
+    "uncommitted": true
+  },
+  "environment": {
+    "macOS": "27.0",
+    "build": "26A428",
+    "model": "Mac13,2",
+    "memoryBytes": 137438953472
+  },
+  "minimumOS": {
+    "mainAndNativeDeclared": "14.0",
+    "vmDependencyFloor": "27.0",
+    "olderSystemRuntimeVerified": false
+  },
+  "apk": {
+    "path": "/Users/tanmy/Downloads/minecraft-1.26.52.3-arm64-v8a.apk",
+    "sha256": "83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95",
+    "size": 1048027974,
+    "package": "com.mojang.minecraftpe",
+    "version": "1.26.52.3",
+    "versionCode": 982605203,
+    "modified": false
+  },
+  "products": {
+    "candidate": {
+      "path": "build/macos-p5-native/Product/HuskMac.app",
+      "binaries": {
+        "Contents/MacOS/HuskMac": "a53b10d3159c43b84695bde808f4ba0215bdbf88d84841036e92970202918fcd",
+        "Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner": "ff984b5d1dae1c772150ca1bc128ace76e24258743be0ff976fa20becc942ca9",
+        "Contents/Helpers/VMRunner.app/Contents/MacOS/VMRunner": "b3c96bd168637b99e7ef0542afc167740aac1639e59c76ffe27d06166d032ee6",
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libqemu-aarch64-softmmu.dylib": "57d8f62ff5f9dd46f7b4119e4c2cf05260b21252d1a5ccb4d8113a0b71ccf7c8"
+      }
+    },
+    "hvf-tested": {
+      "path": "build/macos-p5/candidate05/HuskMac.app",
+      "binaries": {
+        "Contents/MacOS/HuskMac": "01863f6ed806328bf665c083455539c24ce150b863de2f6b803a867fcbddd53f",
+        "Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner": "ff984b5d1dae1c772150ca1bc128ace76e24258743be0ff976fa20becc942ca9",
+        "Contents/Helpers/VMRunner.app/Contents/MacOS/VMRunner": "600f039125d637595e79be8dd603f5075ae832dfc0c32ca61b0bbdc83f7ba8f9",
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libqemu-aarch64-softmmu.dylib": "57d8f62ff5f9dd46f7b4119e4c2cf05260b21252d1a5ccb4d8113a0b71ccf7c8"
+      }
+    }
+  },
+  "sessions": {
+    "session-tcg01": {
+      "result": {
+        "exitCode": 1,
+        "elapsed": 1.2890106659615412,
+        "pid": 59822,
+        "reaped": true
+      },
+      "logs": "build/macos-p5/session-tcg01",
+      "runs": [
+        {
+          "configuration": {
+            "session": "da30b1ac-d558-4263-9180-b0f03ef7cbcf",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/tcg",
+            "accelerator": "tcg",
+            "graphics": "software",
+            "memoryMiB": 4096,
+            "cpus": 4,
+            "width": 640,
+            "height": 360,
+            "showWindow": false,
+            "muted": true,
+            "automation": true,
+            "maxRunSeconds": 1200
+          },
+          "pid": 59822,
+          "androidReady": false,
+          "lastHeartbeat": null,
+          "terminalEvents": [],
+          "eventLogSHA256": "5e85ec80e2122abb2bbc531db91cc384de9ebc0d236ca74d915c84fec3c38980",
+          "stderrSHA256": "fdaad55287f8375d7833ea990cb048a49ee1400bf29d0b11e3c1440d121e39c8"
+        }
+      ]
+    },
+    "session-tcg02": {
+      "result": {
+        "exitCode": -9,
+        "elapsed": 1560.3556606670027,
+        "pid": 60514,
+        "reaped": true
+      },
+      "logs": "build/macos-p5/session-tcg02",
+      "runs": [
+        {
+          "configuration": {
+            "session": "006b9e40-4f86-4a5c-bf12-9ec59e339f43",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/tcg",
+            "accelerator": "tcg",
+            "graphics": "software",
+            "memoryMiB": 4096,
+            "cpus": 4,
+            "width": 640,
+            "height": 360,
+            "showWindow": false,
+            "muted": true,
+            "automation": true,
+            "maxRunSeconds": 1500
+          },
+          "pid": 60514,
+          "androidReady": false,
+          "lastHeartbeat": {
+            "booted": false,
+            "protocol": 1,
+            "pid": 60514,
+            "nonzeroSamples": 0,
+            "event": "heartbeat",
+            "audioCallbacks": 14114,
+            "frames": 830,
+            "session": "006b9e40-4f86-4a5c-bf12-9ec59e339f43",
+            "audioFrames": 0,
+            "state": "stopping",
+            "seq": 240
+          },
+          "terminalEvents": [
+            {
+              "detail": "Guest did not confirm poweroff; disks may require recovery",
+              "protocol": 1,
+              "pid": 60514,
+              "event": "shutdown-timeout",
+              "session": "006b9e40-4f86-4a5c-bf12-9ec59e339f43",
+              "state": "stopping",
+              "seq": 241
+            },
+            {
+              "pid": 60514,
+              "protocol": 1,
+              "clean": false,
+              "event": "exited",
+              "session": "006b9e40-4f86-4a5c-bf12-9ec59e339f43",
+              "state": "failed",
+              "seq": 242
+            }
+          ],
+          "eventLogSHA256": "22e2da3bd6af4a5e4f3bda4f73f44d41cf6dc49b1baaeec05a3d1fca99a19f75",
+          "stderrSHA256": "592baf45505f252bba120feb290df4c57f4239fddada27ea0ad582b8865a9120"
+        }
+      ]
+    },
+    "session-hvf01": {
+      "result": {
+        "exitCode": -9,
+        "elapsed": 1425.5028672920307,
+        "pid": 61890,
+        "reaped": true
+      },
+      "logs": "build/macos-p5/session-hvf01",
+      "runs": [
+        {
+          "configuration": {
+            "session": "52fcdcbb-368f-4573-9a0c-d43e3dcbe81a",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/hvf",
+            "accelerator": "hvf",
+            "graphics": "virgl",
+            "memoryMiB": 4096,
+            "cpus": 4,
+            "width": 960,
+            "height": 540,
+            "showWindow": false,
+            "muted": true,
+            "automation": true,
+            "maxRunSeconds": 1500
+          },
+          "pid": 61890,
+          "androidReady": true,
+          "lastHeartbeat": {
+            "booted": true,
+            "protocol": 1,
+            "pid": 61890,
+            "nonzeroSamples": 14564,
+            "event": "heartbeat",
+            "audioCallbacks": 79286,
+            "frames": 2715,
+            "session": "52fcdcbb-368f-4573-9a0c-d43e3dcbe81a",
+            "audioFrames": 12288,
+            "state": "stopping",
+            "seq": 1373
+          },
+          "terminalEvents": [
+            {
+              "pid": 61890,
+              "protocol": 1,
+              "clean": true,
+              "event": "storage-closed",
+              "session": "52fcdcbb-368f-4573-9a0c-d43e3dcbe81a",
+              "state": "stopping",
+              "seq": 1374
+            },
+            {
+              "pid": 61890,
+              "protocol": 1,
+              "clean": true,
+              "event": "exited",
+              "session": "52fcdcbb-368f-4573-9a0c-d43e3dcbe81a",
+              "state": "exited",
+              "seq": 1375
+            }
+          ],
+          "eventLogSHA256": "5b293fe79495bf85269e8358477f28e5c1a4ac2c57e1694216273b53cbac7ce0",
+          "stderrSHA256": "a30176eb2ff70f346a5de5195cdad6e85174a6462ee241a14cd3c75022d88ff1"
+        }
+      ]
+    },
+    "session-tcg03": {
+      "result": {
+        "exitCode": -9,
+        "elapsed": 1215.0739965420216,
+        "pid": 66263,
+        "reaped": true
+      },
+      "logs": "build/macos-p5/session-tcg03",
+      "runs": [
+        {
+          "configuration": {
+            "session": "f8004cb1-2a1f-4fc2-93ab-5a0b61512941",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/tcg-virgl",
+            "accelerator": "tcg",
+            "graphics": "virgl",
+            "memoryMiB": 4096,
+            "cpus": 4,
+            "width": 640,
+            "height": 360,
+            "showWindow": false,
+            "muted": true,
+            "automation": true,
+            "maxRunSeconds": 1500
+          },
+          "pid": 66263,
+          "androidReady": true,
+          "lastHeartbeat": {
+            "booted": true,
+            "protocol": 1,
+            "pid": 66263,
+            "nonzeroSamples": 7693,
+            "event": "heartbeat",
+            "audioCallbacks": 69389,
+            "frames": 1855,
+            "session": "f8004cb1-2a1f-4fc2-93ab-5a0b61512941",
+            "audioFrames": 8192,
+            "state": "stopping",
+            "seq": 1179
+          },
+          "terminalEvents": [
+            {
+              "pid": 66263,
+              "protocol": 1,
+              "clean": true,
+              "event": "storage-closed",
+              "session": "f8004cb1-2a1f-4fc2-93ab-5a0b61512941",
+              "state": "stopping",
+              "seq": 1180
+            },
+            {
+              "pid": 66263,
+              "protocol": 1,
+              "clean": true,
+              "event": "exited",
+              "session": "f8004cb1-2a1f-4fc2-93ab-5a0b61512941",
+              "state": "exited",
+              "seq": 1181
+            }
+          ],
+          "eventLogSHA256": "0ee99480f1c65cd0049e25b2833f0cebfd6050e500a432ef550064c12574a310",
+          "stderrSHA256": "ba9efb13ccdad5ea6f8cc48b366ffea0018ba0197474807d33bc4baa1daf48c9"
+        }
+      ]
+    },
+    "controller-hvf01": {
+      "result": {
+        "checks": [
+          "product-controller-android-ready",
+          "clean-shutdown-pid-gone-before-reopen",
+          "same-controller-cold-reopen",
+          "clean-shutdown-pid-gone"
+        ],
+        "elapsed": 778.5444231033325,
+        "error": null,
+        "pids": [
+          7107,
+          12535
+        ],
+        "state": "exited"
+      },
+      "logs": "build/macos-p5/controller-hvf01",
+      "runs": [
+        {
+          "configuration": {
+            "accelerator": "hvf",
+            "automation": true,
+            "cpus": 4,
+            "graphics": "virgl",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/hvf",
+            "height": 540,
+            "maxRunSeconds": 960,
+            "memoryMiB": 4096,
+            "muted": true,
+            "session": "7E5FE795-37E7-4538-A768-78F33204EB4D",
+            "showWindow": false,
+            "width": 960
+          },
+          "pid": 7107,
+          "androidReady": true,
+          "lastHeartbeat": {
+            "booted": true,
+            "protocol": 1,
+            "pid": 7107,
+            "nonzeroSamples": 7825,
+            "event": "heartbeat",
+            "audioCallbacks": 27170,
+            "frames": 2551,
+            "session": "7E5FE795-37E7-4538-A768-78F33204EB4D",
+            "audioFrames": 12288,
+            "state": "stopping",
+            "seq": 487
+          },
+          "terminalEvents": [
+            {
+              "pid": 7107,
+              "protocol": 1,
+              "clean": true,
+              "event": "storage-closed",
+              "session": "7E5FE795-37E7-4538-A768-78F33204EB4D",
+              "state": "stopping",
+              "seq": 488
+            },
+            {
+              "pid": 7107,
+              "protocol": 1,
+              "clean": true,
+              "event": "exited",
+              "session": "7E5FE795-37E7-4538-A768-78F33204EB4D",
+              "state": "exited",
+              "seq": 489
+            }
+          ],
+          "eventLogSHA256": "ee62b00e84a14104d97200c68d42cb0d38f3b06836d1ea08c3a9140e31a9edf9",
+          "stderrSHA256": "4a7bd994e8414264d62849d2d111081351b60f07811b1028099ea2eaa1734484"
+        },
+        {
+          "configuration": {
+            "accelerator": "hvf",
+            "automation": true,
+            "cpus": 4,
+            "graphics": "virgl",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/hvf",
+            "height": 540,
+            "maxRunSeconds": 960,
+            "memoryMiB": 4096,
+            "muted": true,
+            "session": "5F1CF040-5809-48FE-94FE-586C2614C5FF",
+            "showWindow": false,
+            "width": 960
+          },
+          "pid": 12535,
+          "androidReady": true,
+          "lastHeartbeat": {
+            "booted": true,
+            "protocol": 1,
+            "pid": 12535,
+            "nonzeroSamples": 15107,
+            "event": "heartbeat",
+            "audioCallbacks": 19374,
+            "frames": 726,
+            "session": "5F1CF040-5809-48FE-94FE-586C2614C5FF",
+            "audioFrames": 8192,
+            "state": "stopping",
+            "seq": 364
+          },
+          "terminalEvents": [
+            {
+              "pid": 12535,
+              "protocol": 1,
+              "clean": true,
+              "event": "storage-closed",
+              "session": "5F1CF040-5809-48FE-94FE-586C2614C5FF",
+              "state": "stopping",
+              "seq": 365
+            },
+            {
+              "pid": 12535,
+              "protocol": 1,
+              "clean": true,
+              "event": "exited",
+              "session": "5F1CF040-5809-48FE-94FE-586C2614C5FF",
+              "state": "exited",
+              "seq": 366
+            }
+          ],
+          "eventLogSHA256": "22460e763a8f6b09eadc1201a89ddd5c6ea40b71ed34344489116498713d174b",
+          "stderrSHA256": "eeb1a7f5767fda5d2aad9dc2d1b5068f79d2f87bcac75e6935503c7efbf9f9da"
+        }
+      ]
+    },
+    "controller-tcg01": {
+      "result": {
+        "checks": [
+          "product-controller-android-ready",
+          "clean-shutdown-pid-gone"
+        ],
+        "elapsed": 442.49987494945526,
+        "error": null,
+        "pids": [
+          13013
+        ],
+        "state": "exited"
+      },
+      "logs": "build/macos-p5/controller-tcg01",
+      "runs": [
+        {
+          "configuration": {
+            "accelerator": "tcg",
+            "automation": true,
+            "cpus": 4,
+            "graphics": "virgl",
+            "guest": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5/guests/tcg-virgl",
+            "height": 540,
+            "maxRunSeconds": 540,
+            "memoryMiB": 4096,
+            "muted": true,
+            "session": "5BD7AF05-BDCE-44E5-9B03-A256E2A45048",
+            "showWindow": false,
+            "width": 960
+          },
+          "pid": 13013,
+          "androidReady": true,
+          "lastHeartbeat": {
+            "booted": true,
+            "protocol": 1,
+            "pid": 13013,
+            "nonzeroSamples": 0,
+            "event": "heartbeat",
+            "audioCallbacks": 26452,
+            "frames": 991,
+            "session": "5BD7AF05-BDCE-44E5-9B03-A256E2A45048",
+            "audioFrames": 4096,
+            "state": "stopping",
+            "seq": 462
+          },
+          "terminalEvents": [
+            {
+              "pid": 13013,
+              "protocol": 1,
+              "clean": true,
+              "event": "storage-closed",
+              "session": "5BD7AF05-BDCE-44E5-9B03-A256E2A45048",
+              "state": "stopping",
+              "seq": 463
+            },
+            {
+              "pid": 13013,
+              "protocol": 1,
+              "clean": true,
+              "event": "exited",
+              "session": "5BD7AF05-BDCE-44E5-9B03-A256E2A45048",
+              "state": "exited",
+              "seq": 464
+            }
+          ],
+          "eventLogSHA256": "1a6c7ce906fc1aea932a284201eb3b9b2769e789ec96eaefc9c5265f517541ac",
+          "stderrSHA256": "c12e07b73557b64dec9a56485a2fbc69cb50333d8396079d3308ca7b34f7abfe"
+        }
+      ]
+    }
+  },
+  "diskChecks": {
+    "hvf/system.qcow2": {
+      "exitCode": 0,
+      "output": "No errors were found on the image.\n36622/81920 = 44.70% allocated, 55.90% fragmented, 53.87% compressed clusters\nImage end offset: 2057568256"
+    },
+    "hvf/userdata.qcow2": {
+      "exitCode": 0,
+      "output": "No errors were found on the image.\n38319/262144 = 14.62% allocated, 2.06% fragmented, 0.00% compressed clusters\nImage end offset: 3435593728"
+    },
+    "hvf/vars.qcow2": {
+      "exitCode": 0,
+      "output": "No errors were found on the image.\n12/1024 = 1.17% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 1114112"
+    },
+    "tcg-virgl/system.qcow2": {
+      "exitCode": 0,
+      "output": "No errors were found on the image.\n36621/81920 = 44.70% allocated, 55.90% fragmented, 53.88% compressed clusters\nImage end offset: 2057568256"
+    },
+    "tcg-virgl/userdata.qcow2": {
+      "exitCode": 0,
+      "output": "No errors were found on the image.\n38172/262144 = 14.56% allocated, 2.04% fragmented, 0.00% compressed clusters\nImage end offset: 3502309376"
+    },
+    "tcg-virgl/vars.qcow2": {
+      "exitCode": 0,
+      "output": "No errors were found on the image.\n12/1024 = 1.17% allocated, 0.00% fragmented, 0.00% compressed clusters\nImage end offset: 1114112"
+    }
+  },
+  "buildVerification": {
+    "vmCTest": "10/10",
+    "cleanSourceCTest": "10/10",
+    "tlOnlyCTest": "9/9",
+    "exportedFiles": 367,
+    "matchingImplementationFiles": 297,
+    "cleanSourceIsSeparateMachine": false,
+    "bundle": {
+      "passed": true,
+      "app": "/Users/tanmy/Projects/Husk-macOS/build/macos-p5-native/Product/HuskMac.app",
+      "binaries": {
+        "Contents/MacOS/HuskMac": {
+          "sha256": "a53b10d3159c43b84695bde808f4ba0215bdbf88d84841036e92970202918fcd",
+          "architecture": "arm64",
+          "minimumOS": [
+            "14.0"
+          ],
+          "dependencies": [
+            "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+            "/System/Library/Frameworks/SwiftUI.framework/Versions/A/SwiftUI",
+            "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+            "/usr/lib/libz.1.dylib",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/Combine.framework/Versions/A/Combine",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/System/Library/Frameworks/CryptoKit.framework/Versions/A/CryptoKit",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/System/Library/Frameworks/ImageIO.framework/Versions/A/ImageIO",
+            "/usr/lib/libobjc.A.dylib",
+            "/usr/lib/swift/libswiftCore.dylib",
+            "/usr/lib/swift/libswiftCoreAudio.dylib",
+            "/usr/lib/swift/libswiftCoreFoundation.dylib",
+            "/usr/lib/swift/libswiftCoreImage.dylib",
+            "/usr/lib/swift/libswiftDarwin.dylib",
+            "/usr/lib/swift/libswiftDispatch.dylib",
+            "/usr/lib/swift/libswiftIOKit.dylib",
+            "/usr/lib/swift/libswiftMetal.dylib",
+            "/usr/lib/swift/libswiftOSLog.dylib",
+            "/usr/lib/swift/libswiftObjectiveC.dylib",
+            "/usr/lib/swift/libswiftQuartzCore.dylib",
+            "/usr/lib/swift/libswiftSpatial.dylib",
+            "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib",
+            "/usr/lib/swift/libswiftXPC.dylib",
+            "/usr/lib/swift/libswift_Concurrency.dylib",
+            "/usr/lib/swift/libswiftos.dylib",
+            "/usr/lib/swift/libswiftsimd.dylib"
+          ],
+          "rpaths": [
+            "/usr/lib/swift",
+            "@executable_path/../Frameworks"
+          ],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner": {
+          "sha256": "ff984b5d1dae1c772150ca1bc128ace76e24258743be0ff976fa20becc942ca9",
+          "architecture": "arm64",
+          "minimumOS": [
+            "14.0"
+          ],
+          "dependencies": [
+            "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+            "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+            "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+            "/System/Library/Frameworks/Security.framework/Versions/A/Security",
+            "/System/Library/Frameworks/GameController.framework/Versions/A/GameController",
+            "/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox",
+            "/usr/lib/libz.1.dylib",
+            "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/usr/lib/libobjc.A.dylib"
+          ],
+          "rpaths": [
+            "@executable_path/../Frameworks"
+          ],
+          "entitlements": {
+            "com.apple.security.cs.allow-unsigned-executable-memory": true,
+            "com.apple.security.cs.disable-library-validation": true
+          },
+          "hardenedRuntime": true
+        },
+        "Contents/Frameworks/libANGLE-shared.dylib": {
+          "sha256": "01181bf05243355f103044c595ae80378a79cce47040bca4cfa202afe5192fa6",
+          "architecture": "arm64",
+          "minimumOS": [
+            "14.0"
+          ],
+          "dependencies": [
+            "@rpath/libANGLE-shared.dylib",
+            "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+            "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+            "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+            "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+            "/usr/lib/libz.1.dylib",
+            "/usr/lib/libobjc.A.dylib",
+            "/usr/lib/libc++.1.dylib",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Frameworks/MoltenVK.framework/Versions/A/MoltenVK": {
+          "sha256": "605e803a32cb2363f387b05fe5f60943613495612d85094fe82f7f70d177d0c6",
+          "architecture": "arm64",
+          "minimumOS": [
+            "12.0"
+          ],
+          "dependencies": [
+            "@rpath/MoltenVK.framework/MoltenVK",
+            "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+            "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+            "/usr/lib/libc++.1.dylib",
+            "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+            "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+            "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/usr/lib/libobjc.A.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/MacOS/VMRunner": {
+          "sha256": "b3c96bd168637b99e7ef0542afc167740aac1639e59c76ffe27d06166d032ee6",
+          "architecture": "arm64",
+          "minimumOS": [
+            "14.0"
+          ],
+          "dependencies": [
+            "@rpath/libqemu-aarch64-softmmu.dylib",
+            "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+            "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+            "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+            "/System/Library/Frameworks/AudioToolbox.framework/Versions/A/AudioToolbox",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/usr/lib/libobjc.A.dylib"
+          ],
+          "rpaths": [
+            "@executable_path/../Frameworks"
+          ],
+          "entitlements": {
+            "com.apple.security.cs.allow-jit": true,
+            "com.apple.security.cs.allow-unsigned-executable-memory": true,
+            "com.apple.security.cs.disable-library-validation": true,
+            "com.apple.security.hypervisor": true
+          },
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libANGLE-shared.dylib": {
+          "sha256": "01181bf05243355f103044c595ae80378a79cce47040bca4cfa202afe5192fa6",
+          "architecture": "arm64",
+          "minimumOS": [
+            "14.0"
+          ],
+          "dependencies": [
+            "@rpath/libANGLE-shared.dylib",
+            "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+            "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+            "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+            "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+            "/usr/lib/libz.1.dylib",
+            "/usr/lib/libobjc.A.dylib",
+            "/usr/lib/libc++.1.dylib",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libcrypto.3.dylib": {
+          "sha256": "e8afe1212d5f942772d9cf0c2986486c3c7a52c8265def05bc0305b7a939c0bb",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libcrypto.3.dylib",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libgio-2.0.0.dylib": {
+          "sha256": "8401e6898cab0e2fa6b12b41458a91d62c8efe2711e6b4ea5d6db9bfd5348f39",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libgio-2.0.0.dylib",
+            "@loader_path/libglib-2.0.0.dylib",
+            "@loader_path/libgobject-2.0.0.dylib",
+            "@loader_path/libgmodule-2.0.0.dylib",
+            "/usr/lib/libz.1.dylib",
+            "@loader_path/libintl.8.dylib",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+            "/usr/lib/libresolv.9.dylib",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+            "/usr/lib/libobjc.A.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libglib-2.0.0.dylib": {
+          "sha256": "c2813808fd5a5b5552ea4ad9355a36605c28200ecc130370988b14f3f1e91dba",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libglib-2.0.0.dylib",
+            "/usr/lib/libiconv.2.dylib",
+            "@loader_path/libintl.8.dylib",
+            "/usr/lib/libSystem.B.dylib",
+            "@loader_path/libpcre2-8.0.dylib",
+            "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+            "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+            "/usr/lib/libobjc.A.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libgmodule-2.0.0.dylib": {
+          "sha256": "a2718cc1c957df23e7c116eb0fc2a1208cf242c5dc0e76f971bbc80d4d2e6d00",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libgmodule-2.0.0.dylib",
+            "@loader_path/libglib-2.0.0.dylib",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libgobject-2.0.0.dylib": {
+          "sha256": "6e7a29ff5dabcabd8b641eaa0caf377224180f21e4ceeb133fcb7d9c218d11db",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libgobject-2.0.0.dylib",
+            "@loader_path/libglib-2.0.0.dylib",
+            "/usr/lib/libffi.dylib",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libintl.8.dylib": {
+          "sha256": "fe0385fd56d86229e03c782df55e3bfc5c203d1cb339538948022118476a28c5",
+          "architecture": "arm64",
+          "minimumOS": [
+            "26.0"
+          ],
+          "dependencies": [
+            "@rpath/libintl.8.dylib",
+            "/usr/lib/libiconv.2.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libpcre2-8.0.dylib": {
+          "sha256": "871a0df086e84b8511d337c363f9ffed99116658a24f72cb380b5daa588a880b",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libpcre2-8.0.dylib",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libpixman-1.0.dylib": {
+          "sha256": "413d4d583f9507182508e34b78c843cd8c9dde84782c2b77acc3bfac28a9d27b",
+          "architecture": "arm64",
+          "minimumOS": [
+            "15.0"
+          ],
+          "dependencies": [
+            "@rpath/libpixman-1.0.dylib",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libqemu-aarch64-softmmu.dylib": {
+          "sha256": "57d8f62ff5f9dd46f7b4119e4c2cf05260b21252d1a5ccb4d8113a0b71ccf7c8",
+          "architecture": "arm64",
+          "minimumOS": [
+            "14.0"
+          ],
+          "dependencies": [
+            "@rpath/libqemu-aarch64-softmmu.dylib",
+            "/System/Library/Frameworks/Hypervisor.framework/Versions/A/Hypervisor",
+            "/usr/lib/libz.1.dylib",
+            "@loader_path/libpixman-1.0.dylib",
+            "/usr/lib/libSystem.B.dylib",
+            "/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio",
+            "@loader_path/libgio-2.0.0.dylib",
+            "@loader_path/libgobject-2.0.0.dylib",
+            "@loader_path/libglib-2.0.0.dylib",
+            "@loader_path/libslirp.0.dylib",
+            "/System/Library/Frameworks/vmnet.framework/Versions/A/vmnet",
+            "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+            "/usr/lib/libpam.2.dylib",
+            "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+            "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+            "@loader_path/libssh.4.12.0.dylib",
+            "@loader_path/libgmodule-2.0.0.dylib",
+            "/usr/lib/libobjc.A.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libslirp.0.dylib": {
+          "sha256": "93cb1c099bd71176d6760f0736f89d32881e96efda09d13d58d8b80a1f20e843",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libslirp.0.dylib",
+            "@loader_path/libglib-2.0.0.dylib",
+            "/usr/lib/libresolv.9.dylib",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        },
+        "Contents/Helpers/VMRunner.app/Contents/Frameworks/libssh.4.12.0.dylib": {
+          "sha256": "fe3759e3a7ab5d46667330473f40cbf903507576f676c840e0b12a23526201ca",
+          "architecture": "arm64",
+          "minimumOS": [
+            "27.0"
+          ],
+          "dependencies": [
+            "@rpath/libssh.4.12.0.dylib",
+            "@loader_path/libcrypto.3.dylib",
+            "/usr/lib/libz.1.dylib",
+            "/System/Library/Frameworks/Kerberos.framework/Versions/A/Kerberos",
+            "/usr/lib/libSystem.B.dylib"
+          ],
+          "rpaths": [],
+          "entitlements": {},
+          "hardenedRuntime": true
+        }
+      },
+      "signing": "local ad-hoc unless an explicit identity was supplied"
+    },
+    "cleanBundlePassed": true,
+    "tlOnlyBundlePassed": true,
+    "builderChecks": [
+      "fresh clone at non-default pinned commit",
+      "preserve existing source edits",
+      "reject incorrect checkout without reset",
+      "deduplicate symbol exports",
+      "idempotent symbol exports"
+    ]
+  },
+  "p4NativeRunnerSHA256": "ff984b5d1dae1c772150ca1bc128ace76e24258743be0ff976fa20becc942ca9",
+  "snapshotPolicy": "disabled-nonmigratable-devices",
+  "hvfProductDefault": false,
+  "allTestVMsReaped": true,
+  "preservedMainUIPID": 15359,
+  "evidence": {
+    "docs/macos-evidence/p5-android-settings.png": "0317f02668903a8399bf6c5dd08d871bd949beea1b7ef9f958ed2e945e08cd52",
+    "docs/macos-evidence/p5-native-keyboard-search.png": "973d891bf3f934c6fdedf4fa6891f96a0e6ded991e0f961e456d428ba8c99bfb",
+    "build/macos-p5/controller-hvf01/anr-13.txt": "13075507092dda3c8a04d04c46e272aff9a307e9d23ac1d5834326029210cf7f",
+    "build/macos-p5/controller-hvf01/minecraft-thread-stacks.txt": "8859bb57bcdaf70d64ffc8e004dc2a89247d448b986bcb73cee80d40c7f32d83",
+    "build/macos-p5/session-hvf01/shutdown-sample.txt": "830ac39ae93e3bd8f8402f5033cd86085910e45e44baedc8e65e7da102ce366c"
+  },
+  "limitations": [
+    "VM Minecraft is not playable yet",
+    "continuous audio not accepted",
+    "LineageOS first-run setup remains",
+    "memory snapshots disabled",
+    "HVF experimental",
+    "no foreground, physical-device or audible-quality acceptance",
+    "local ad-hoc signing only",
+    "transitive license/source-distribution and release gates remain P6"
+  ]
+}

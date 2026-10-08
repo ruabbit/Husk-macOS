@@ -1,0 +1,259 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+import Foundation
+import Combine
+import Darwin
+
+final class PipeReader: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    func stop() { lock.lock(); cancelled = true; lock.unlock() }
+    private var stopped: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func read(_ handle: FileHandle, receive: @escaping (Data) -> Void) {
+        let fd = dup(handle.fileDescriptor)
+        guard fd >= 0 else { receive(Data()); return }
+        DispatchQueue.global(qos: .utility).async { [self] in
+            defer { close(fd); receive(Data()) }
+            var buffer = [UInt8](repeating: 0, count: 16_384)
+            while !stopped {
+                var event = pollfd(fd: fd, events: Int16(POLLIN | POLLHUP), revents: 0)
+                let ready = poll(&event, 1, 100)
+                if ready < 0 { if errno == EINTR { continue }; break }
+                if ready == 0 { continue }
+                let count = Darwin.read(fd, &buffer, buffer.count)
+                if count < 0 && errno == EINTR { continue }
+                if count <= 0 { break }
+                receive(Data(buffer.prefix(count)))
+            }
+        }
+    }
+}
+
+/// Owns one child. An engine is never reused in the library process.
+@MainActor public final class SessionController: ObservableObject {
+    @Published public private(set) var state = "idle"
+    @Published public private(set) var gameID: String?
+    @Published public private(set) var error: String?
+    @Published public private(set) var latest: [String: Any] = [:]
+    public private(set) var sessionID: String?
+    public private(set) var pid: Int32 = 0
+    public private(set) var events: [[String: Any]] = []
+    public var active: Bool { process != nil }
+    private var process: Process?
+    private var commandPipe: Pipe?
+    private var outputPipe: Pipe?
+    private var errorPipe: Pipe?
+    private var eventLog: FileHandle?
+    private var errorLog: FileHandle?
+    private var buffer = Data()
+    private var sequence = 0
+    private var checkpointReceived = false
+    private var checkpoint: URL?
+    private var stdoutEnded = false
+    private var stderrEnded = false
+    private var stderrBytes = 0
+    private var readers: [PipeReader] = []
+    private var drainDeadline: Task<Void, Never>?
+    private var exited: Int32?
+    private var signalExit = false
+    private var terminalEvent: String?
+    private var watchdog: Task<Void, Never>?
+    private var stopping: Task<Void, Never>?
+    private var lastEvent = Date()
+    private var startDate = Date()
+    private var guestManagedStorage = false
+
+    public init() { signal(SIGPIPE, SIG_IGN) }
+
+    public func start(executable: URL, game: LibraryGame, apk: URL, checkpoint: URL,
+                      logs: URL, headless: Bool = false, automation: Bool = false,
+                      diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
+        guard !active else { throw LibraryFailure("请先结束当前游戏。") }
+        guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
+        guestManagedStorage = runtime == "minecraft"
+        let id = UUID().uuidString
+        let sessionLog = logs.appendingPathComponent(id)
+        try FileManager.default.createDirectory(at: sessionLog, withIntermediateDirectories: true)
+        try Data().write(to: sessionLog.appendingPathComponent("events.jsonl"))
+        try Data().write(to: sessionLog.appendingPathComponent("stderr.log"))
+        eventLog = try FileHandle(forWritingTo: sessionLog.appendingPathComponent("events.jsonl"))
+        errorLog = try FileHandle(forWritingTo: sessionLog.appendingPathComponent("stderr.log"))
+        state = "starting"; gameID = game.id; sessionID = id; error = nil; latest = [:]; events = []
+        sequence = 0; checkpointReceived = false; self.checkpoint = checkpoint
+        stdoutEnded = false; stderrEnded = false; stderrBytes = 0; exited = nil; terminalEvent = nil; buffer = Data(); signalExit = false
+        startDate = Date(); lastEvent = startDate
+        let child = Process(), input = Pipe(), output = Pipe(), errors = Pipe()
+        child.executableURL = executable
+        child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
+                           "--apk-sha256", game.digest,
+                           "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
+        if hiddenWindow { child.arguments!.append("--hidden-window") }
+        else if headless { child.arguments!.append("--headless") } else { child.arguments!.append("--show-window") }
+        if game.settings.muted || headless { child.arguments!.append("--mute") }
+        if game.settings.pauseWhenInactive { child.arguments!.append("--pause-inactive") }
+        if automation { child.arguments!.append("--automation") }
+        if let diagnostics { child.arguments! += ["--diagnostics", diagnostics.path] }
+        child.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "TMPDIR": NSTemporaryDirectory(),
+                             "TL_XMEM_MIB": guestManagedStorage ? "1024" : "64"]
+        child.standardInput = input; child.standardOutput = output; child.standardError = errors
+        commandPipe = input; outputPipe = output; errorPipe = errors; process = child
+        child.terminationHandler = { [weak self] child in
+            DispatchQueue.main.async {
+                guard let self, self.sessionID == id else { return }
+                self.exited = child.terminationStatus
+                self.signalExit = child.terminationReason == .uncaughtSignal
+                self.finishIfReaped()
+                if self.active {
+                    self.drainDeadline = Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        guard !Task.isCancelled, let self, self.sessionID == id, self.active else { return }
+                        self.error = self.error ?? "运行进程退出后未关闭输出通道。"
+                        self.readers.forEach { $0.stop() }
+                    }
+                }
+            }
+        }
+        do { try child.run() } catch {
+            self.process = nil; state = "failed"; self.error = error.localizedDescription
+            closePipes(); throw error
+        }
+        pid = child.processIdentifier
+        // Close parent copies of child-facing ends so EOF is observable.
+        try? output.fileHandleForWriting.close(); try? errors.fileHandleForWriting.close()
+        try? input.fileHandleForReading.close()
+        pump(output.fileHandleForReading, session: id, stderr: false)
+        pump(errors.fileHandleForReading, session: id, stderr: true)
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                guard !Task.isCancelled, let self, self.sessionID == id, self.active else { return }
+                let timeout = self.state == "starting" ? (self.guestManagedStorage ? 90.0 : 20.0) : 8.0
+                if Date().timeIntervalSince(self.lastEvent) > timeout {
+                    self.fail("运行进程没有响应。日志保存在资料目录中。")
+                    return
+                }
+            }
+        }
+    }
+
+    private func pump(_ handle: FileHandle, session id: String, stderr: Bool) {
+        let reader = PipeReader(); readers.append(reader)
+        reader.read(handle) { [weak self] data in
+                DispatchQueue.main.async {
+                    guard let self, self.sessionID == id else { return }
+                    if stderr {
+                        // Guest diagnostics are separate from control messages.
+                        if data.isEmpty { self.stderrEnded = true; self.finishIfReaped() }
+                        else if self.stderrBytes < 4 << 20 {
+                            let bounded = data.prefix((4 << 20) - self.stderrBytes)
+                            self.stderrBytes += bounded.count; try? self.errorLog?.write(contentsOf: bounded)
+                        }
+                    } else if data.isEmpty {
+                        self.stdoutEnded = true
+                        if !self.buffer.isEmpty { self.fail("运行进程返回了不完整的消息。") }
+                        self.finishIfReaped()
+                    } else { self.consume(data) }
+                }
+        }
+    }
+
+    private func consume(_ data: Data) {
+        guard error == nil else { return }
+        buffer.append(data)
+        guard buffer.count <= 262_144 else { fail("运行进程消息超过长度限制。"); return }
+        while let end = buffer.firstIndex(of: 10) {
+            let line = buffer[..<end]; buffer.removeSubrange(...end)
+            guard line.count <= 65_536, let object = try? JSONSerialization.jsonObject(with: line),
+                  let event = object as? [String: Any] else { fail("运行进程返回了无效消息。"); return }
+            // An old session must never alter current state.
+            guard event["session"] as? String == sessionID else { continue }
+            guard event["protocol"] as? Int == 1, event["pid"] as? Int32 == pid,
+                  let seq = event["seq"] as? Int, seq == sequence + 1,
+                  let phase = event["state"] as? String, let kind = event["event"] as? String
+            else { fail("运行进程协议校验失败。"); return }
+            let transitions: [String: Set<String>] = [
+                "starting": ["starting", "running", "stopping", "failed"],
+                "running": ["running", "paused", "stopping", "failed"],
+                "paused": ["paused", "running", "stopping", "failed"],
+                "stopping": ["stopping", "exited", "failed"]]
+            guard transitions[state]?.contains(phase) == true else { fail("运行进程状态顺序无效。"); return }
+            sequence = seq; lastEvent = Date(); latest = event
+            if events.count == 1000 { events.removeFirst(500) }
+            events.append(event); try? eventLog?.write(contentsOf: Data(line) + Data([10]))
+            if kind == "checkpoint" || kind == "storage-closed" {
+                let completed = self.guestManagedStorage
+                    ? kind == "storage-closed" && event["lifecycle"] as? String == "destroyed"
+                    : kind == "checkpoint" && event["saved"] as? Bool == true
+                guard phase == "stopping", completed,
+                      let checkpoint, let data = try? Data(contentsOf: checkpoint),
+                      let saved = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                      saved["session"] as? String == sessionID else { fail("未能确认游戏存档写入。"); return }
+                checkpointReceived = true
+            }
+            if phase == "failed" { error = event["reason"] as? String ?? "游戏启动失败。" }
+            if phase == "exited" || phase == "failed" { terminalEvent = phase }
+            else { state = phase }
+        }
+    }
+
+    public func send(_ command: String, values: [String: Any] = [:]) {
+        guard active, let sessionID else { return }
+        var message = values
+        message["protocol"] = 1; message["session"] = sessionID; message["command"] = command
+        do {
+            let bytes = try JSONSerialization.data(withJSONObject: message) + Data([10])
+            try commandPipe?.fileHandleForWriting.write(contentsOf: bytes)
+        } catch { fail("运行进程的控制通道已断开。") }
+    }
+
+    public func togglePause() { send(state == "paused" ? "resume" : "pause") }
+
+    public func stop() {
+        guard active, stopping == nil else { return }
+        send("stop")
+        startStopDeadline()
+    }
+
+    private func startStopDeadline() {
+        guard stopping == nil, let id = sessionID else { return }
+        stopping = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: self?.guestManagedStorage == true ? 30_000_000_000 : 2_000_000_000)
+            guard !Task.isCancelled, let self, self.sessionID == id, let child = self.process, child.isRunning else { return }
+            self.error = self.error ?? "游戏未及时保存退出，已结束运行进程；之前的存档保留。"
+            child.terminate()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled, child.isRunning else { return }
+            kill(child.processIdentifier, SIGKILL)
+        }
+    }
+
+    private func fail(_ reason: String) {
+        error = error ?? reason
+        startStopDeadline()
+        if let child = process, child.isRunning { child.terminate() }
+    }
+
+    private func finishIfReaped() {
+        guard let exited, stdoutEnded, stderrEnded else { return }
+        let success = exited == 0 && !signalExit && checkpointReceived && terminalEvent == "exited" && error == nil
+        if !success { error = error ?? "游戏进程意外退出（\(exited)）。资料库仍可使用；之前的存档保留。" }
+        state = success ? "exited" : "failed"
+        watchdog?.cancel(); watchdog = nil; stopping?.cancel(); stopping = nil
+        drainDeadline?.cancel(); drainDeadline = nil
+        process?.terminationHandler = nil; process = nil
+        closePipes()
+    }
+
+    private func closePipes() {
+        readers.forEach { $0.stop() }; readers.removeAll()
+        try? commandPipe?.fileHandleForWriting.close()
+        try? outputPipe?.fileHandleForReading.close(); try? errorPipe?.fileHandleForReading.close()
+        try? eventLog?.close(); try? errorLog?.close()
+        commandPipe = nil; outputPipe = nil; errorPipe = nil; eventLog = nil; errorLog = nil
+    }
+
+    public func wait(until predicate: @MainActor () -> Bool, timeout: Double = 10) async throws {
+        let limit = Date().addingTimeInterval(timeout)
+        while !predicate() && Date() < limit { try await Task.sleep(nanoseconds: 20_000_000) }
+        guard predicate() else { throw LibraryFailure("等待运行状态超时：\(state) / \(error ?? "无错误消息")") }
+    }
+}

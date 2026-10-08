@@ -22,6 +22,9 @@ void tl_audio_install(void);
 
 /* Silence the output and stop the clock while the game is not on screen (writers block until resumed). */
 void tl_audio_set_paused(bool paused);
+void tl_audio_set_muted(bool muted);
+uint64_t tl_audio_frames(void);
+uint64_t tl_audio_nonzero_samples(void);
 
 #ifdef __cplusplus
 }

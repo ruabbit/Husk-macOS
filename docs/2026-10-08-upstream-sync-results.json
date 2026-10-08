@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-08",
+  "upstream": {
+    "repository": "https://github.com/Leviidev/Husk",
+    "branch": "main",
+    "previousRevision": "82f33e858952f9fda3cf224e839f4385894e2d5b",
+    "integratedRevision": "75dc21f82c1fd748867ad4d4b5dfb0e981c2d468",
+    "checkedOn": "2026-10-08",
+    "commitCount": 27,
+    "integration": "Source changes applied with three-way reconciliation; local macOS changes retained. Git HEAD is not advanced while migration work remains uncommitted.",
+    "topicBranch": "claude/epic-hypatia-2hsqfv",
+    "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522"
+  },
+  "sourceFilesChecked": 326,
+  "app": "/Users/tanmy/Projects/Husk-macOS/build/macos-upstream-20261008/Product/HuskMac.app",
+  "version": "0.2.0",
+  "build": "2",
+  "checks": {
+    "ctest": {
+      "passed": 11,
+      "total": 11
+    },
+    "p0": {
+      "passed": 30,
+      "total": 30
+    },
+    "iosSyntax": {
+      "passed": 4,
+      "total": 4
+    },
+    "bundle": true,
+    "sourceUnchangedAfterTests": true,
+    "dailyIndexUnchanged": true,
+    "originalAPKsUnchanged": true,
+    "newHostCrashReports": []
+  },
+  "gui": {
+    "pid": 13772,
+    "path": "/Users/tanmy/Projects/Husk-macOS/build/macos-upstream-20261008/Product/HuskMac.app/Contents/MacOS/HuskMac",
+    "launches": 1,
+    "oldPID": 15359,
+    "oldProcessAlreadyExitedBeforeCandidateLaunch": true,
+    "activation": "CUA documented background launch",
+    "nativeAutomationError": "Sky Computer Use native pipe closed before response",
+    "visualAcceptance": "not completed; native automation pipe unavailable",
+    "dailyMinecraftCapability": {
+      "digest": "bceb3203f3b8897ee498bb3f22bd2373ac9b411a37cd4968a62f942c35d0c37e",
+      "playable": true,
+      "reason": null,
+      "runtime": "minecraft",
+      "status": "可试运行",
+      "title": "Minecraft",
+      "verified": false
+    }
+  },
+  "minecraft": {
+    "session-imported01": {
+      "sha256": "bceb3203f3b8897ee498bb3f22bd2373ac9b411a37cd4968a62f942c35d0c37e",
+      "state": "exited",
+      "checks": [
+        "exact-apk-imported",
+        "gameactivity-first-frame",
+        "destroy-ack-and-process-reaped",
+        "pid-gone"
+      ],
+      "pid": 5196,
+      "error": null,
+      "evidence": "/Users/tanmy/Projects/Husk-macOS/build/upstream-sync-20261008/session-imported01",
+      "pauseResumeCycles": 2,
+      "worldSoak": {
+        "elapsedSeconds": 60.125068000052124,
+        "frames": 3597,
+        "fps": 59.82529616427014,
+        "rssMiB": {
+          "min": 1791.0625,
+          "max": 1792.875
+        },
+        "passed": true,
+        "error": null
+      },
+      "nonzeroPCMIncreased": true
+    },
+    "session-baseline01": {
+      "sha256": "83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95",
+      "state": "exited",
+      "checks": [
+        "exact-apk-imported",
+        "gameactivity-first-frame",
+        "destroy-ack-and-process-reaped",
+        "pid-gone"
+      ],
+      "pid": 10442,
+      "error": null,
+      "evidence": "/Users/tanmy/Projects/Husk-macOS/build/upstream-sync-20261008/session-baseline01"
+    }
+  },
+  "limits": [
+    "Imported modified APK has bounded smoke/gameplay verification, not full P4 acceptance or mod menu coverage.",
+    "VM Minecraft black screen and sustained PCM unresolved; P5 remains incomplete.",
+    "Other upstream engines and iOS Store are not wired into the macOS GUI.",
+    "No fresh-machine, old-macOS, physical input, signed release, login or multiplayer acceptance.",
+    "Source synchronization is in the working tree; Git HEAD was not advanced and no commit or push was made."
+  ]
+}
