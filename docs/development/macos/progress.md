@@ -1,5 +1,11 @@
 # 审计进度
 
+## 2026-10-08 单一构建目录
+
+用户要求清理旧编译并重建当前候选。已清理 10 个 CMake 构建目录、4 份源码导出副本、各测试候选、P0 产物及依赖编译中间目录，移除约 2.38 GiB；必要旧日志约 9 MiB 集中到 `build/logs/previous-builds`。Minecraft 资料库/存档、Android 磁盘/缓存和日常资料库共 662 个受保护文件的大小及修改时间保持不变。固定依赖缓存各保留一套（图形约 40 MiB、VM 约 35 MiB）。
+
+当前源码候选在 `build/macos` 全新 Release 构建，启用已有 VM 配置；12/12 CTest、17 个 Mach-O 的签名/权限/rpath/最低版本校验通过。产物入口 `build/macos/Product/HuskMac.app`；日志为 `build/logs/current-build.log`、`current-tests.log`、`current-bundle.json` 和 `cleanup.json`。没有启动主 GUI、Android 或用户 APK，测试结束后没有 Husk/Runner 进程遗留。后续复用这个目录覆盖构建，Git 负责版本回退。P5/P6 的未通过项没有变化。
+
 ## 2026-10-08 审查修复
 
 八项审查修复：已创建全部迁移工作的本地检查点 `9573597`；运行时修复已提交 `fd9c470`。新候选 `build/macos-review-20261008/Product/HuskMac.app` 构建、12/12 CTest、17 个 Mach-O 的签名/rpath/最低系统校验通过。P0 harness 迁移后 30/30；actionlint 通过。测试均后台静音，没有启动 Android 或 Minecraft，没有重启日常 GUI。

@@ -21,6 +21,8 @@
 ./scripts/build_macos.sh
 ```
 
+当前候选统一构建到 `build/macos`，后续构建直接覆盖这个目录。交付入口为 `build/macos/Product/HuskMac.app`。Git 提交负责版本回退，`build/logs` 保存构建日志和验收结果；按日期、阶段生成的旧编译目录及源码导出副本已清理。`build/macos-deps` 和 `build/macos-vm-deps` 各保留一套固定依赖缓存。
+
 首次构建下载并编译固定提交的 ANGLE 和 MoltenVK，后续校验缓存的提交记录及二进制 SHA-256。构建依赖在 `third_party/build/macos`；缓存产物在 `build/macos-deps`；不会改动 iOS 的构建目录。LLVM/NDK 只用于构建，产物不会链接 Homebrew 库。可通过 `ELF_CC`、`ELF_LD` 指定交叉工具，通过 `HUSK_BUILD_JOBS` 调整并行数。
 
 打开 `build/macos/Product/HuskMac.app`。在资料库点击“添加示例游戏”，选择游戏并点击“开始游戏”。游戏使用独立 AppKit 窗口；关闭该窗口或使用“结束游戏”会先保存，再退出 Runner。主 App 退出也会等待同一保存协议。
@@ -70,7 +72,7 @@ P5 已实现独立 VMRunner，但完整验收仍未通过。TCG/HVF 的 Android 
 
 ```sh
 python3 scripts/build_macos_vm.py
-HUSK_BUILD_DIR="$PWD/build/macos-p5-native" scripts/build_macos.sh -DHUSK_BUILD_VM=ON
+./scripts/build_macos.sh -DHUSK_BUILD_VM=ON
 python3 scripts/prepare_macos_guest.py --destination "$PWD/build/macos-p5/my-android"
 ```
 
@@ -83,8 +85,8 @@ guest 准备脚本下载约 2 GB 的固定系统盘，并从校验过的 Husk 0.
 显式后台验收通过正式 Swift 控制器，始终不显示窗口、保持静音，输出目录必须尚不存在：
 
 ```sh
-build/macos-p5-native/MacVMSession \
-  build/macos-p5-native/Product/HuskMac.app \
+build/macos/MacVMSession \
+  build/macos/Product/HuskMac.app \
   build/macos-p5/my-android build/macos-p5/my-session --seconds 600 tcg
 ```
 

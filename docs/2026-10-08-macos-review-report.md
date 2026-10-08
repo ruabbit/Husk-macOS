@@ -1,5 +1,7 @@
 # macOS 审查问题处理
 
+> 后续构建整理：用户要求只保留当前构建，本文所述旧候选目录已清理。当前构建入口统一为 `build/macos/Product/HuskMac.app`；本报告和结果快照保留当时的验证记录。旧构建中的必要日志移至 `build/logs/previous-builds`。
+
 日期：2026-10-08。分支 `codex/macos-p0`。已有全部迁移与上游同步工作保存为检查点 `9573597`，运行时修复保存为 `fd9c470`。本轮只创建本地提交，没有推送或发布。**代码和文档问题已处理；P5 Minecraft 黑屏 / ANR、持续 PCM，以及 P6 发行许可仍是未通过项。**
 
 新候选在 `build/macos-review-20261008/Product/HuskMac.app`。它与此前候选使用不同目录；日常 GUI 仍运行此前的 `macos-upstream-20261008` 候选，本轮没有启动或替换前台窗口。
@@ -38,12 +40,12 @@
 已有固定依赖可复用；从仓库根目录执行：
 
 ```sh
-cmake -S . -B build/macos-review-20261008 -G Ninja \
+cmake -S . -B build/macos -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DHUSK_BUILD_VM=ON
-cmake --build build/macos-review-20261008 -j 6
-ctest --test-dir build/macos-review-20261008 --output-on-failure
+cmake --build build/macos -j 6
+ctest --test-dir build/macos --output-on-failure
 python3 scripts/verify_macos_bundle.py \
-  build/macos-review-20261008/Product/HuskMac.app
+  build/macos/Product/HuskMac.app
 ./scripts/test_macos_p0.sh
 actionlint .github/workflows/macos.yml
 ```
