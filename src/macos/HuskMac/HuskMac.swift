@@ -15,7 +15,8 @@ import ImageIO
     @Published var search = ""
     let session = SessionController()
     let vm = VMController()
-    var vmAvailable: Bool { VMController.available(in: Bundle.main.bundleURL) }
+    var vmAvailability: VMAvailability { VMController.availability(executable: VMController.helper(in: Bundle.main.bundleURL)) }
+    var vmAvailable: Bool { vmAvailability.available }
     let paths: LibraryPaths
     let repository: LibraryRepository?
     let resources: URL
@@ -166,10 +167,12 @@ struct LibraryView: View {
         .navigationTitle("Husk")
         .toolbar {
             ToolbarItem { Button { model.showImporter = true } label: { Label("导入游戏", systemImage: "plus") }.disabled(model.importing) }
-            if model.vmAvailable {
+            if model.vmAvailability.installed {
                 ToolbarItem {
-                    Menu("Android") {
-                        Button("启动 Android") { model.startVM() }.disabled(model.vm.active)
+                    Menu("Android（实验）") {
+                        if let reason = model.vmAvailability.unavailableReason { Text(reason) }
+                        else if let minimum = model.vmAvailability.minimumSystemVersion { Text("需要 macOS \(minimum) 或更新版本") }
+                        Button("启动 Android") { model.startVM() }.disabled(!model.vmAvailable || model.vm.active)
                         Button("选择 Android 数据目录…") { _ = model.chooseVM() }.disabled(model.vm.active)
                         Button("暂停 / 继续") { model.vm.togglePause() }.disabled(!model.vm.ready)
                         Button("关闭 Android") { model.vm.stop() }.disabled(!model.vm.active)
@@ -278,10 +281,11 @@ struct GameDetail: View {
                         Text("设置在下次启动游戏时生效。").font(.caption).foregroundStyle(.secondary)
                     }.padding(10).disabled(running)
                 }
-                if model.vmAvailable {
+                if model.vmAvailability.installed {
                     Button("在 Android 中安装并运行") { model.playVM(game) }
-                        .disabled(game.apkNames.count != 1 || model.vm.state == "stopping")
-                    Text("实验功能；安装成功不代表游戏可运行。Android 存档保存在所选虚拟机的数据盘中。").font(.caption).foregroundStyle(.secondary)
+                        .disabled(!model.vmAvailable || game.apkNames.count != 1 || model.vm.state == "stopping")
+                    if let reason = model.vmAvailability.unavailableReason { Text(reason).font(.caption).foregroundStyle(.secondary) }
+                    Text("Android 实验功能尚未通过 Minecraft 运行和持续音频验证。安装成功不代表游戏可运行；存档保存在所选虚拟机的数据盘中。").font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
                     Button("在访达中显示文件") { NSWorkspace.shared.activateFileViewerSelecting([model.paths.game(game.id)]) }

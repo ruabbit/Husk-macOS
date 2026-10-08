@@ -3,12 +3,20 @@
 """Collect the VM dylib closure into a standalone, ad-hoc signed helper."""
 import argparse
 import json
+import plistlib
 import re
 from pathlib import Path
 import shutil
 import subprocess
 from build_macos_vm import ROOT, digest
 from package_macos import sign
+
+def minimum_system_version(binary):
+    output = subprocess.check_output(['xcrun', 'vtool', '-show-build', binary], text=True)
+    versions = re.findall(r'minos (\d+(?:\.\d+)+)', output)
+    if not versions:
+        raise RuntimeError(f'Missing macOS deployment metadata: {binary}')
+    return max(tuple((list(map(int, version.split('.'))) + [0, 0])[:3]) for version in versions)
 
 def dependencies(binary):
     lines = subprocess.check_output(['otool', '-L', binary], text=True).splitlines()[1:]
@@ -52,6 +60,14 @@ def package(runner, deps, graphics, destination):
             if not rpath.startswith(('@executable_path/','@loader_path/','/usr/lib/')):
                 subprocess.run(['install_name_tool','-delete_rpath',rpath,target],check=True)
         if target.suffix=='.dylib': sign(target)
+    # A dependency can require a newer OS than the helper's own compiler target.
+    # Declare the actual closure requirement so the UI and launch guard agree.
+    plist = destination/'Contents/Info.plist'
+    info = plistlib.loads(plist.read_bytes())
+    minimum = max(minimum_system_version(binary) for binary in
+                  [destination/'Contents/MacOS/VMRunner', *copied.values()])
+    info['LSMinimumSystemVersion'] = '.'.join(map(str, minimum))
+    plist.write_bytes(plistlib.dumps(info))
     resources=destination/'Contents/Resources';resources.mkdir(exist_ok=True)
     shutil.copy2(ROOT/'dependencies/macos-vm.lock.json',resources/'macos-vm.lock.json')
     shutil.copy2(ROOT/'dependencies/macos.lock.json',resources/'macos.lock.json')

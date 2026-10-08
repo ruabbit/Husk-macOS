@@ -4,6 +4,13 @@ import Combine
 import CryptoKit
 import Darwin
 
+public struct VMAvailability {
+    public let installed: Bool
+    public let minimumSystemVersion: String?
+    public let unavailableReason: String?
+    public var available: Bool { installed && unavailableReason == nil }
+}
+
 /// The library owns a separate VM process. QEMU and its permissions never enter
 /// the SwiftUI process. A running VM owns its disk lock until the child is reaped.
 @MainActor public final class VMController: ObservableObject {
@@ -14,7 +21,7 @@ import Darwin
     public private(set) var pid: Int32 = 0
     public private(set) var sessionID: String?
     public var active: Bool { process != nil }
-    public var ready: Bool { latest["booted"] as? Bool == true || state == "running" || state == "paused" }
+    public var ready: Bool { active && (latest["booted"] as? Bool == true || state == "running" || state == "paused") }
     private var process: Process?
     private var input: Pipe?
     private var pipes: [Pipe] = []
@@ -29,21 +36,45 @@ import Darwin
     private var lastEvent = Date()
     private var watchdog: Task<Void, Never>?
     private var shutdownTask: Task<Void, Never>?
+    private var drainDeadline: Task<Void, Never>?
+    private var stdoutEnded = false
+    private var stderrEnded = false
+    private var exited: Int32?
+    private var signalExit = false
 
     public init() { signal(SIGPIPE, SIG_IGN) }
     public static func helper(in bundle: URL) -> URL {
         bundle.appendingPathComponent("Contents/Helpers/VMRunner.app/Contents/MacOS/VMRunner")
     }
     public static func available(in bundle: URL) -> Bool {
-        FileManager.default.isExecutableFile(atPath: helper(in: bundle).path)
+        availability(executable: helper(in: bundle)).available
+    }
+    public static func availability(executable: URL,
+                                    systemVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) -> VMAvailability {
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+            return VMAvailability(installed: false, minimumSystemVersion: nil, unavailableReason: "此版本未包含 Android 实验功能。")
+        }
+        let plist = executable.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Info.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
+              let minimum = info["LSMinimumSystemVersion"] as? String else {
+            return VMAvailability(installed: true, minimumSystemVersion: nil, unavailableReason: "Android 运行组件缺少系统要求信息，请重新构建。")
+        }
+        let parts = minimum.split(separator: ".", omittingEmptySubsequences: false).compactMap { Int($0) }
+        guard (1...3).contains(parts.count), parts.count == minimum.split(separator: ".", omittingEmptySubsequences: false).count,
+              parts[0] > 0, parts.allSatisfy({ $0 >= 0 }) else {
+            return VMAvailability(installed: true, minimumSystemVersion: nil, unavailableReason: "Android 运行组件的系统要求信息无效。")
+        }
+        let required = parts + Array(repeating: 0, count: 3 - parts.count)
+        let current = [systemVersion.majorVersion, systemVersion.minorVersion, systemVersion.patchVersion]
+        return VMAvailability(installed: true, minimumSystemVersion: minimum,
+            unavailableReason: current.lexicographicallyPrecedes(required) ? "Android 实验功能需要 macOS \(minimum) 或更新版本。" : nil)
     }
     public func start(executable: URL, guest: URL, logs: URL, accelerator: String = "tcg",
                       graphics: String = "virgl", headless: Bool = false, muted: Bool = false,
                       automation: Bool = false, maxRunSeconds: Int = 0) throws {
         guard !active else { throw LibraryFailure("Android 虚拟机正在运行。") }
-        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 else {
-            throw LibraryFailure("此开发版本的 Android 运行库需要 macOS 27 或更新版本。")
-        }
+        if let reason = Self.availability(executable: executable).unavailableReason { throw LibraryFailure(reason) }
         guard ["tcg", "hvf"].contains(accelerator), ["virgl", "software"].contains(graphics) else {
             throw LibraryFailure("无效的虚拟机配置。")
         }
@@ -68,25 +99,31 @@ import Darwin
         process = child; input = command; pipes = [output, errors]
         shutdownTask?.cancel(); shutdownTask = nil
         watchdog?.cancel(); watchdog = nil
+        drainDeadline?.cancel(); drainDeadline = nil
+        stdoutEnded = false; stderrEnded = false; exited = nil; signalExit = false
         sessionID = id; state = "starting"; error = nil; detail = "Android 正在冷启动…"
         eventSequence = 0; requestSequence = 0; replies = [:]; latest = [:]; buffer = Data(); cleanShutdown = false; lastEvent = Date()
         child.terminationHandler = { [weak self] child in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                guard let self, self.sessionID == id else { return }
-                let clean = child.terminationStatus == 0 && self.cleanShutdown
-                self.state = clean ? "exited" : "failed"
-                self.detail = clean ? "Android 已关闭，磁盘已释放。" : "Android 意外结束；下次启动将从磁盘恢复。"
-                if !clean { self.error = self.error ?? "VMRunner 退出码 \(child.terminationStatus)，请查看日志。" }
-                self.process = nil; self.pid = 0; self.watchdog?.cancel(); self.shutdownTask?.cancel()
+            DispatchQueue.main.async {
+                guard let self, self.sessionID == id, self.active else { return }
+                self.exited = child.terminationStatus
+                self.signalExit = child.terminationReason == .uncaughtSignal
+                self.watchdog?.cancel(); self.shutdownTask?.cancel()
                 self.watchdog = nil; self.shutdownTask = nil
-                self.readers.forEach { $0.stop() }; self.readers.removeAll()
-                try? self.input?.fileHandleForWriting.close(); self.input = nil; self.pipes.removeAll()
-                try? self.events?.close(); try? self.diagnostics?.close(); self.events = nil; self.diagnostics = nil
+                self.finishIfReaped()
+                if self.active {
+                    self.drainDeadline = Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        guard !Task.isCancelled, let self, self.sessionID == id, self.active else { return }
+                        self.error = self.error ?? "VMRunner 退出后未关闭输出通道，日志可能不完整。"
+                        self.readers.forEach { $0.stop() }
+                    }
+                }
             }
         }
         do { try child.run() } catch {
-            process = nil; input = nil; pipes = []; self.error = error.localizedDescription; state = "failed"
-            try? events?.close(); try? diagnostics?.close(); throw error
+            child.terminationHandler = nil; process = nil; pid = 0; self.error = error.localizedDescription; state = "failed"
+            closePipes(); throw error
         }
         pid = child.processIdentifier
         try? command.fileHandleForReading.close(); try? output.fileHandleForWriting.close(); try? errors.fileHandleForWriting.close()
@@ -94,8 +131,18 @@ import Darwin
             let reader = PipeReader(); readers.append(reader)
             reader.read(handle) { [weak self] data in
                 DispatchQueue.main.async {
-                    guard let self, self.sessionID == id, self.active, !data.isEmpty else { return }
-                    if isError { try? self.diagnostics?.write(contentsOf: data) }
+                    guard let self, self.sessionID == id, self.active else { return }
+                    if data.isEmpty {
+                        if isError { self.stderrEnded = true }
+                        else {
+                            self.stdoutEnded = true
+                            if !self.buffer.isEmpty {
+                                self.error = self.error ?? "VMRunner 返回了不完整的会话消息。"
+                                self.stop()
+                            }
+                        }
+                        self.finishIfReaped()
+                    } else if isError { try? self.diagnostics?.write(contentsOf: data) }
                     else { self.consume(data) }
                 }
             }
@@ -103,10 +150,29 @@ import Darwin
         watchdog = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                guard let self, !Task.isCancelled, self.active else { return }
+                guard let self, !Task.isCancelled, self.sessionID == id, self.active, self.exited == nil else { return }
                 if Date().timeIntervalSince(self.lastEvent) > 30 { self.error = "VMRunner 没有响应。"; self.stop(); return }
             }
         }
+    }
+    private func finishIfReaped() {
+        // The child may be reaped before the reader queues deliver its final event.
+        guard let exited, stdoutEnded, stderrEnded else { return }
+        let clean = exited == 0 && !signalExit && cleanShutdown && error == nil
+        state = clean ? "exited" : "failed"
+        detail = clean ? "Android 已关闭，磁盘已释放。" : "Android 意外结束；下次启动将从磁盘恢复。"
+        if !clean { error = error ?? "VMRunner 退出码 \(exited)，未确认正常关机；请查看日志。" }
+        watchdog?.cancel(); shutdownTask?.cancel(); drainDeadline?.cancel()
+        watchdog = nil; shutdownTask = nil; drainDeadline = nil
+        process?.terminationHandler = nil; process = nil; pid = 0
+        closePipes()
+    }
+    private func closePipes() {
+        readers.forEach { $0.stop() }; readers.removeAll()
+        try? input?.fileHandleForReading.close(); try? input?.fileHandleForWriting.close(); input = nil
+        for pipe in pipes { try? pipe.fileHandleForReading.close(); try? pipe.fileHandleForWriting.close() }
+        pipes.removeAll()
+        try? events?.close(); try? diagnostics?.close(); events = nil; diagnostics = nil
     }
     private func consume(_ data: Data) {
         buffer.append(data)
@@ -125,14 +191,14 @@ import Darwin
             case "android-ready": detail = "Android 已就绪。"
             case "installing": detail = "正在安装 APK…"
             case "storage-closed": cleanShutdown = event["clean"] as? Bool == true
-            case "failure", "shutdown-timeout": error = event["detail"] as? String
+            case "failure", "shutdown-timeout": error = error ?? event["detail"] as? String ?? "Android 运行失败。"
             case "command-result", "command-error": if let id = event["id"] as? Int { replies[id] = event }
             default: break
             }
         }
     }
     @discardableResult public func send(_ command: String, values: [String: Any] = [:]) throws -> Int {
-        guard let input, let sessionID, active else { throw LibraryFailure("Android 未运行。") }
+        guard let input, let sessionID, active, exited == nil else { throw LibraryFailure("Android 未运行。") }
         requestSequence += 1
         var message = values; message["command"] = command; message["session"] = sessionID; message["id"] = requestSequence
         let data = try JSONSerialization.data(withJSONObject: message) + Data([10])
@@ -170,7 +236,7 @@ import Darwin
     }
     public func togglePause() { _ = try? send(state == "paused" ? "resume" : "pause") }
     public func stop() {
-        guard active, shutdownTask == nil else { return }
+        guard active, exited == nil, shutdownTask == nil else { return }
         _ = try? send("shutdown"); state = "stopping"; detail = "正在关闭 Android…"
         shutdownTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 55_000_000_000)

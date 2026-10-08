@@ -29,7 +29,7 @@ import HuskCore
             // A P3 Minecraft import, with no later migration or reimport.
             var minecraft = records[1]
             minecraft["id"] = String(repeating: "a", count: 64)
-            minecraft["digest"] = String(cString: husk_minecraft_apk_sha256())
+            minecraft["digest"] = CompatibilityEvidence.minecraftP4SHA256
             minecraft["engine"] = "Minecraft"; minecraft["abis"] = ["arm64-v8a"]
             minecraft["unavailableReason"] = "当前版本支持随附的 Orbit 游戏。"
             records.append(minecraft)
@@ -51,6 +51,10 @@ import HuskCore
             try check(duplicate.playable && duplicate.settings == games[0].settings, "duplicate-import-uses-current-capability")
             try check(!games[1].playable && games[1].unavailableReason != nil && !games[3].playable,
                       "unsupported-engine-and-splits-still-disabled")
+            var hashOnly = minecraft
+            hashOnly["engine"] = "Unknown"
+            let hashOnlyGame = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: hashOnly))
+            try check(!hashOnlyGame.playable && !hashOnlyGame.verified, "sample-hash-cannot-grant-runtime-capability")
 
             // A stale or forged index cannot grant the helper a different runtime.
             // The actual APK is still the synthetic unsupported case, never guest code.
@@ -69,7 +73,7 @@ import HuskCore
             var refused = false
             do { _ = try await reopened.prepare(unknown.id) } catch { refused = true }
             try check(refused, "experimental-launch-still-enforces-import-hash")
-            print("Library upgrade: 7 checks passed")
+            print("Library upgrade: 8 checks passed")
         } catch {
             if session.active { session.stop(); try? await session.wait(until: { !session.active }, timeout: 10) }
             print("FAIL \(error.localizedDescription)"); exit(1)

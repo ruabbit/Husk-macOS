@@ -53,6 +53,9 @@ def verify(app):
     if vm.exists():
         executable=vm/'Contents/MacOS/VMRunner'
         vm_paths=[executable,*sorted((vm/'Contents/Frameworks').glob('*.dylib'))]
+        declared = plistlib.loads((vm/'Contents/Info.plist').read_bytes())['LSMinimumSystemVersion']
+        version_tuple = lambda value: tuple((list(map(int, value.split('.'))) + [0, 0])[:3])
+        closure_minimum = (0, 0, 0)
         for path in vm_paths:
             relative=str(path.relative_to(app))
             arch=command('lipo','-archs',path).stdout.strip()
@@ -60,7 +63,8 @@ def verify(app):
             platform=command('xcrun','vtool','-show-build',path).stdout
             assert 'platform MACOS' in platform,(relative,platform)
             minimum=re.findall(r'minos (\d+(?:\.\d+)+)',platform)
-            assert minimum and all(tuple(map(int,v.split('.'))) <= (27,0) for v in minimum),(relative,minimum)
+            assert minimum and all(version_tuple(v) <= version_tuple(declared) for v in minimum),(relative,minimum,declared)
+            closure_minimum = max(closure_minimum, *(version_tuple(v) for v in minimum))
             deps=[line.strip().split(' (compatibility')[0] for line in command('otool','-L',path).stdout.splitlines()[1:]]
             assert all(d.startswith(('/usr/lib/','/System/Library/','@rpath/','@loader_path/')) for d in deps),(relative,deps)
             for dep in deps:
@@ -84,6 +88,7 @@ def verify(app):
             assert entitlements==expected,(relative,entitlements)
             results[relative]={'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'architecture':arch,
                 'minimumOS':minimum,'dependencies':deps,'rpaths':rpaths,'entitlements':entitlements,'hardenedRuntime':True}
+        assert closure_minimum == version_tuple(declared), ('VM minimum does not match dependency closure', declared, closure_minimum)
     forbidden=['StikJIT','HuskJITHelper','embedded.mobileprovision','.dSYM']
     if not vm.exists(): forbidden.append('libqemu')
     for path in app.rglob('*'):
