@@ -145,7 +145,7 @@ struct LibraryView: View {
                             GameIcon(url: model.paths.game(game.id).appendingPathComponent("icon.data"), size: 34)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(game.title).lineLimit(1)
-                                Text(game.statusLabel).font(.caption).foregroundStyle(.secondary)
+                                if !game.playable { Text("尚未接入").font(.caption).foregroundStyle(.secondary) }
                             }
                         }.padding(.vertical, 4).tag(game.id)
                     }
@@ -254,7 +254,7 @@ struct GameDetail: View {
                         Button("结束游戏") { session.stop() }
                         Text(session.state == "paused" ? "已暂停" : session.state == "starting" ? "正在启动…" : "运行中").foregroundStyle(.secondary)
                     } else {
-                        Button { model.play(game) } label: { Label(session.active ? "切换到此游戏" : game.verified ? "开始游戏" : "试运行游戏", systemImage: "play.fill") }
+                        Button { model.play(game) } label: { Label(session.active ? "切换到此游戏" : "开始游戏", systemImage: "play.fill") }
                             .buttonStyle(.borderedProminent).controlSize(.large).disabled(!game.playable || model.importing)
                     }
                 }
@@ -262,9 +262,6 @@ struct GameDetail: View {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).textSelection(.enabled)
                 }
                 if let reason = game.unavailableReason { Label(reason, systemImage: "info.circle").foregroundStyle(.secondary) }
-                if game.playable && !game.verified {
-                    Label("此 APK 尚未完成兼容性验证，可以尝试运行。不同版本和附加组件可能影响运行结果。", systemImage: "info.circle").foregroundStyle(.secondary)
-                }
                 if game.playable {
                     GroupBox("操作") {
                         VStack(alignment: .leading, spacing: 10) {

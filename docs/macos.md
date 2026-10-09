@@ -1,6 +1,6 @@
 # 原生 macOS 开发版
 
-当前实现包含 P1–P3 的原生构建、资料库、自建 **Orbit Garden / Dusk** 游戏，以及 P4 的 **Minecraft 1.26.52.3 arm64** 样本路径。Minecraft 使用真实 Android ELF、bionic/JNI 适配、GameActivity、ANGLE/Metal 和 AudioQueue。0.2.0 起，其他识别为 Minecraft 的 arm64 单 APK 也可从 GUI 试运行；完整验证过的样本与实验版本分别标示。旧资料库记录按当前运行组件重新判定，保留原有设置和存档。
+当前实现包含 P1–P3 的原生构建、资料库、自建 **Orbit Garden / Dusk** 游戏，以及 P4 的 **Minecraft 1.26.52.3 arm64** 样本路径。Minecraft 使用真实 Android ELF、bionic/JNI 适配、GameActivity、ANGLE/Metal 和 AudioQueue。0.2.0 起，其他识别为 Minecraft 的 arm64 单 APK 也可从 GUI 启动。支持的游戏统一显示“开始游戏”，测试样本与测试覆盖记录在开发文档中。旧资料库记录按当前运行组件重新判定，保留原有设置和存档。
 
 上游 main 已同步到 `75dc21f82c1fd748867ad4d4b5dfb0e981c2d468` 的源码，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现。详情见 [GUI / 上游同步报告](2026-10-08-upstream-sync-report.md)。上游新增 Godot、Geode、Unity 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
 
@@ -46,7 +46,7 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 
 “移除游戏”保留存档；同一包重新导入后恢复使用。“清除存档”是详情页中的独立操作，并有确认。运行中的游戏禁止删除和清除存档。损坏索引或存档保留原文件并报告错误。当前版本不自动覆盖同包的另一版本：先移除旧版本，再导入新版本。
 
-普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft 的 arm64 单 APK。P4 完整验证样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`；其他版本显示“可试运行”。资料库准备阶段与 Runner 都核对导入时的完整 APK hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎、Minecraft 分包均保持明确的不可启动状态。游戏文件不随 Husk 分发；扫描成功并不代表完整兼容。
+普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft 的 arm64 单 APK。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时的完整 APK hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎、Minecraft 分包均保持明确的不可启动状态。游戏文件不随 Husk 分发；扫描成功并不代表完整兼容。
 
 ## Minecraft 样本
 

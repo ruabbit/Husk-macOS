@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
-/// Acceptance evidence affects the badge only; runtime eligibility uses the scan.
-public enum CompatibilityEvidence {
-    public static let minecraftP4SHA256 = "83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95"
-}
-
 public struct GameSettings: Codable, Equatable, Sendable {
     public var muted = false
     public var pauseWhenInactive = false
@@ -42,8 +37,6 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
         return nil
     }
     public var playable: Bool { runtime != nil }
-    public var verified: Bool { playable && (fixture != nil || digest == CompatibilityEvidence.minecraftP4SHA256) }
-    public var statusLabel: String { verified ? "已验证版本" : playable ? "可试运行" : "尚未接入" }
     public var unavailableReason: String? {
         if playable { return nil }
         if !abis.contains("arm64-v8a") { return "此应用没有受支持的 arm64 游戏入口。" }

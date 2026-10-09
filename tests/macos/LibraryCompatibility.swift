@@ -29,7 +29,8 @@ import HuskCore
             // A P3 Minecraft import, with no later migration or reimport.
             var minecraft = records[1]
             minecraft["id"] = String(repeating: "a", count: 64)
-            minecraft["digest"] = CompatibilityEvidence.minecraftP4SHA256
+            // Retain the historical acceptance sample only as test data.
+            minecraft["digest"] = "83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95"
             minecraft["engine"] = "Minecraft"; minecraft["abis"] = ["arm64-v8a"]
             minecraft["unavailableReason"] = "当前版本支持随附的 Orbit 游戏。"
             records.append(minecraft)
@@ -42,7 +43,7 @@ import HuskCore
             try bytes.write(to: paths.index)
             let reopened = try LibraryRepository(paths: paths, trustedFixtureHash: catalog["sha256"] as! String)
             let games = try await reopened.games()
-            try check(games[0].playable && games[0].unavailableReason == nil && games[2].playable && games[2].verified,
+            try check(games[0].playable && games[0].unavailableReason == nil && games[2].playable,
                       "old-import-reclassified-with-current-runtime")
             try check(games[0].settings.muted && !games[0].settings.pauseWhenInactive &&
                       (try Data(contentsOf: paths.checkpoint(fixture.id))) == save &&
@@ -54,7 +55,7 @@ import HuskCore
             var hashOnly = minecraft
             hashOnly["engine"] = "Unknown"
             let hashOnlyGame = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: hashOnly))
-            try check(!hashOnlyGame.playable && !hashOnlyGame.verified, "sample-hash-cannot-grant-runtime-capability")
+            try check(!hashOnlyGame.playable, "sample-hash-cannot-grant-runtime-capability")
 
             // A stale or forged index cannot grant the helper a different runtime.
             // The actual APK is still the synthetic unsupported case, never guest code.
@@ -62,8 +63,8 @@ import HuskCore
             legacy["games"] = records
             try JSONSerialization.data(withJSONObject: legacy).write(to: paths.index)
             let (candidate, files, checkpoint) = try await reopened.prepare(unknown.id)
-            try check(candidate.playable && !candidate.verified && candidate.statusLabel == "可试运行",
-                      "other-minecraft-builds-are-experimental")
+            try check(candidate.playable && candidate.unavailableReason == nil,
+                      "other-minecraft-builds-use-the-same-runtime")
             try session.start(executable: app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
                               game: candidate, apk: files[0], checkpoint: checkpoint, logs: paths.logs, headless: true)
             try await session.wait(until: { !session.active }, timeout: 10)
@@ -72,7 +73,7 @@ import HuskCore
             try Data("modified APK".utf8).append(to: files[0])
             var refused = false
             do { _ = try await reopened.prepare(unknown.id) } catch { refused = true }
-            try check(refused, "experimental-launch-still-enforces-import-hash")
+            try check(refused, "launch-still-enforces-import-hash")
             print("Library upgrade: 8 checks passed")
         } catch {
             if session.active { session.stop(); try? await session.wait(until: { !session.active }, timeout: 10) }
