@@ -14,6 +14,16 @@ def command(*args):
 
 def verify(app):
     command('codesign','--verify','--deep','--strict',app)
+    icons={}
+    for bundle in [app,*sorted((app/'Contents/Helpers').glob('*.app'))]:
+        info=plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
+        name=info.get('CFBundleIconFile')
+        assert name and Path(name).name==name, ('Missing bundle icon declaration',bundle)
+        icon=bundle/'Contents/Resources'/name
+        data=icon.read_bytes()
+        assert data[:4]==b'icns' and int.from_bytes(data[4:8],'big')==len(data), ('Invalid icon resource',icon)
+        assert 'format: icns' in command('sips','-g','format',icon).stdout, icon
+        icons[str(icon.relative_to(app))]={'sha256':hashlib.sha256(data).hexdigest()}
     main=app/'Contents/MacOS/HuskMac'
     runner=app/'Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner'
     angle=app/'Contents/Frameworks/libANGLE-shared.dylib'
@@ -93,7 +103,7 @@ def verify(app):
     if not vm.exists(): forbidden.append('libqemu')
     for path in app.rglob('*'):
         assert not any(term in path.name for term in forbidden),path
-    return {'passed':True,'app':str(app),'binaries':results,'signing':'local ad-hoc unless an explicit identity was supplied'}
+    return {'passed':True,'app':str(app),'binaries':results,'icons':icons,'signing':'local ad-hoc unless an explicit identity was supplied'}
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('app',type=Path);parser.add_argument('--output',type=Path)

@@ -22,6 +22,7 @@ def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=No
     (destination/'Contents/MacOS').mkdir(parents=True)
     shutil.copy2(app/'Contents/Info.plist',destination/'Contents/Info.plist')
     shutil.copy2(app/'Contents/MacOS/HuskMac',destination/'Contents/MacOS/HuskMac')
+    shutil.copytree(app/'Contents/Resources',destination/'Contents/Resources',symlinks=True)
     app=destination
     frameworks=app/'Contents/Frameworks';frameworks.mkdir(parents=True,exist_ok=True)
     resources=app/'Contents/Resources';resources.mkdir(parents=True,exist_ok=True)

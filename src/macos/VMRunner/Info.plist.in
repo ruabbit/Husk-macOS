@@ -4,6 +4,7 @@
 <key>CFBundleExecutable</key><string>VMRunner</string>
 <key>CFBundleIdentifier</key><string>org.husk.HuskMac.VMRunner</string>
 <key>CFBundleName</key><string>Husk Android</string>
+<key>CFBundleIconFile</key><string>Husk.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>

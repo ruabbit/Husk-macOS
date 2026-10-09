@@ -27,6 +27,8 @@
 
 打开 `build/macos/Product/HuskMac.app`。在资料库点击“添加示例游戏”，选择游戏并点击“开始游戏”。游戏使用独立 AppKit 窗口；关闭该窗口或使用“结束游戏”会先保存，再退出 Runner。主 App 退出也会等待同一保存协议。
 
+主 App 与两个运行组件共用上游默认 Husk 图标。构建时从 `src/app/Husk/Assets.xcassets/AppIcon.appiconset/Icon-Default.png` 生成含普通及 Retina 尺寸的 `Husk.icns`，打包到各自的 Resources；上游图标更新会自动触发重新生成。包检查同时核对图标声明、资源与签名。
+
 Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍。方向键/WASD 移动；按住鼠标移动到目标；手柄左摇杆和方向键移动。P/Esc 暂停，R 或手柄 A 开始新一轮。得分在左上，已完成轮数在右上。
 
 ## 导入与资料

@@ -21,6 +21,13 @@ endif()
 set(CLASSIC "${CMAKE_SOURCE_DIR}/src/translation-layer")
 set(NEXT "${CMAKE_SOURCE_DIR}/src/translation-layer-next")
 set(MAC "${CMAKE_SOURCE_DIR}/src/macos")
+set(HUSK_ICON_SOURCE "${CMAKE_SOURCE_DIR}/src/app/Husk/Assets.xcassets/AppIcon.appiconset/Icon-Default.png")
+set(HUSK_ICON "${CMAKE_BINARY_DIR}/Resources/Husk.icns")
+add_custom_command(OUTPUT "${HUSK_ICON}"
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/build_macos_icon.py" "${HUSK_ICON_SOURCE}" "${HUSK_ICON}"
+    DEPENDS "${HUSK_ICON_SOURCE}" scripts/build_macos_icon.py VERBATIM)
+add_custom_target(MacIcon DEPENDS "${HUSK_ICON}")
+set_source_files_properties("${HUSK_ICON}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 add_library(SharedCore STATIC
     ${CLASSIC}/husk-tl-scan.c ${CLASSIC}/husk-tl-zip.c ${CLASSIC}/husk-tl-elf.c
     ${CLASSIC}/husk-tl-json.c ${CLASSIC}/husk-tl-prefs.c ${CLASSIC}/husk-tl-blit.c
@@ -57,14 +64,18 @@ target_link_libraries(MinecraftProbe PRIVATE GameActivityRuntime)
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
     ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c
-    ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m)
+    ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m "${HUSK_ICON}")
+add_dependencies(NativeRunner MacIcon)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(NativeRunner PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(NativeRunner PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"
     "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox")
 set_target_properties(NativeRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/NativeRunner/Info.plist.in)
 
-add_executable(HuskMac MACOSX_BUNDLE ${MAC}/HuskMac/HuskMac.swift)
+add_executable(HuskMac MACOSX_BUNDLE ${MAC}/HuskMac/HuskMac.swift "${HUSK_ICON}")
+# Swift's whole-module link does not follow the object-level resource copy rule.
+add_custom_target(HuskMacResources DEPENDS "${CMAKE_BINARY_DIR}/HuskMac.app/Contents/Resources/Husk.icns")
+add_dependencies(HuskMac MacIcon HuskMacResources)
 target_compile_options(HuskMac PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(HuskMac PRIVATE SharedLibrary "-framework AppKit" "-framework SwiftUI")
 set_target_properties(HuskMac PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/HuskMac/Info.plist.in)
@@ -74,7 +85,8 @@ if(HUSK_BUILD_VM)
         message(FATAL_ERROR "Run python3 scripts/build_macos_vm.py before enabling HUSK_BUILD_VM")
     endif()
     add_executable(VMRunner MACOSX_BUNDLE ${MAC}/VMRunner/main.m ${MAC}/VMRunner/VMDisplay.m
-        ${MAC}/VMRunner/VMConnection.m ${MAC}/NativeRunner/MacAudio.m)
+        ${MAC}/VMRunner/VMConnection.m ${MAC}/NativeRunner/MacAudio.m "${HUSK_ICON}")
+    add_dependencies(VMRunner MacIcon)
     target_compile_options(VMRunner PRIVATE -fobjc-arc -Wno-deprecated-declarations)
     target_include_directories(VMRunner PRIVATE src/ios-jit ${MAC}/NativeRunner)
     target_link_libraries(VMRunner PRIVATE "${HUSK_VM_DEPS}/lib/libqemu-aarch64-softmmu.dylib"
