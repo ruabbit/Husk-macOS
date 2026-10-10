@@ -49,6 +49,7 @@ struct ProtoMessage {
             var result: UInt64 = 0, shift: UInt64 = 0
             while i < data.endIndex, shift < 64 {
                 let b = data[i]; i += 1
+                if shift == 63 && b > 1 { return nil }
                 result |= UInt64(b & 0x7F) << shift
                 if b & 0x80 == 0 { return result }
                 shift += 7
@@ -58,6 +59,7 @@ struct ProtoMessage {
         while i < data.endIndex {
             guard let key = readVarint() else { break }
             let field = Int(key >> 3), wire = Int(key & 7)
+            guard field > 0, field <= 0x1fff_ffff else { return }
             switch wire {
             case 0:
                 guard let v = readVarint() else { return }
@@ -82,11 +84,11 @@ struct ProtoMessage {
                     guard let k = readVarint() else { return }
                     switch Int(k & 7) {
                     case 0: _ = readVarint()
-                    case 1: i += 8
-                    case 2: if let n = readVarint() { i += Int(n) } else { return }
+                    case 1: guard data.endIndex - i >= 8 else { return }; i += 8
+                    case 2: if let n = readVarint(), n <= UInt64(data.endIndex - i) { i += Int(n) } else { return }
                     case 3: depth += 1
                     case 4: depth -= 1; if depth == 0 { fields[field, default: []].append(.bytes(data.subdata(in: start..<before))) }
-                    case 5: i += 4
+                    case 5: guard data.endIndex - i >= 4 else { return }; i += 4
                     default: return
                     }
                 }

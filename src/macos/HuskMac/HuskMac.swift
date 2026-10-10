@@ -10,9 +10,12 @@ import ImageIO
     @Published var games: [LibraryGame] = []
     @Published var selection: String?
     @Published var importing = false
+    @Published var playImports = 0
+    var importBusy: Bool { importing || playImports > 0 }
     @Published var showImporter = false
     @Published var error: String?
     @Published var search = ""
+    let playStore = MacPlayStore()
     let session = SessionController()
     let vm = VMController()
     var vmAvailability: VMAvailability { VMController.availability(executable: VMController.helper(in: Bundle.main.bundleURL)) }
@@ -36,6 +39,10 @@ import ImageIO
         sessionChanges = session.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
         vmChanges = vm.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
     }
+    var busyGameIDs: Set<String> {
+        if vm.active { return Set(games.map(\.id)) }
+        return session.active ? Set([session.gameID].compactMap { $0 }) : []
+    }
     func reload() async {
         do { games = try await repository?.games() ?? []; if selection == nil { selection = games.first?.id } }
         catch { self.error = error.localizedDescription }
@@ -49,7 +56,7 @@ import ImageIO
             defer { importing = false }
             while !pendingImports.isEmpty {
                 let url = pendingImports.removeFirst()
-                do { let game = try await repository.importGame(url); selection = game.id }
+                do { let game = try await repository.importGame(url, blockedIDs: busyGameIDs); selection = game.id }
                 catch { self.error = error.localizedDescription }
                 await reload()
             }
@@ -71,7 +78,7 @@ import ImageIO
         }
     }
     func play(_ game: LibraryGame) {
-        guard let repository else { return }
+        guard !importBusy, let repository else { return }
         Task {
             do {
                 if session.active { session.stop(); try await session.wait(until: { !self.session.active }, timeout: 35) }
@@ -113,27 +120,28 @@ import ImageIO
         } catch { self.error = error.localizedDescription }
     }
     func playVM(_ game: LibraryGame) {
-        guard let repository else { return }
+        guard !importBusy, let repository else { return }
         startVM(); guard vm.active else { return }
         Task {
             do {
-                let (fresh, apk, package) = try await repository.prepareVM(game.id)
-                try await vm.install(apk: apk, sha256: fresh.digest, package: package)
+                let (fresh, apks, package) = try await repository.prepareVMSet(game.id)
+                try await vm.install(apks: apks, digest: fresh.digest, package: package)
                 try await repository.update(game.id, played: true); await reload()
             } catch { self.error = error.localizedDescription }
         }
     }
     func remove(_ game: LibraryGame) {
-        guard let repository, session.gameID != game.id || !session.active else { return }
+        guard !importBusy, let repository, session.gameID != game.id || !session.active else { return }
         Task { do { try await repository.remove(game.id); selection = nil; await reload() } catch { self.error = error.localizedDescription } }
     }
     func deleteSave(_ game: LibraryGame) {
-        guard let repository, session.gameID != game.id || !session.active else { return }
+        guard !importBusy, let repository, session.gameID != game.id || !session.active else { return }
         Task { do { try await repository.deleteSave(game.id) } catch { self.error = error.localizedDescription } }
     }
 }
 
 struct LibraryView: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var model: LibraryModel
     var filtered: [LibraryGame] { model.games.filter { model.search.isEmpty || $0.title.localizedCaseInsensitiveContains(model.search) } }
     var body: some View {
@@ -154,7 +162,7 @@ struct LibraryView: View {
             .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 340)
             .searchable(text: $model.search, prompt: "搜索游戏")
             .safeAreaInset(edge: .bottom) {
-                HStack { Text("\(model.games.count) 款游戏").foregroundStyle(.secondary); Spacer(); if model.importing { ProgressView().controlSize(.small) } }
+                HStack { Text("\(model.games.count) 款游戏").foregroundStyle(.secondary); Spacer(); if model.importBusy { ProgressView().controlSize(.small) } }
                     .font(.caption).padding(12).background(.bar)
             }
         } detail: {
@@ -172,7 +180,8 @@ struct LibraryView: View {
         .frame(minWidth: 860, minHeight: 560)
         .navigationTitle("Husk")
         .toolbar {
-            ToolbarItem { Button { model.showImporter = true } label: { Label("导入游戏", systemImage: "plus") }.disabled(model.importing) }
+            ToolbarItem { Button { openWindow(id: "play-store") } label: { Label("Google Play", systemImage: "bag") } }
+            ToolbarItem { Button { model.showImporter = true } label: { Label("导入游戏", systemImage: "plus") }.disabled(model.importBusy) }
             if model.vmAvailability.installed {
                 ToolbarItem {
                     Menu("Android（实验）") {
@@ -255,7 +264,7 @@ struct GameDetail: View {
                         Text(session.state == "paused" ? "已暂停" : session.state == "starting" ? "正在启动…" : "运行中").foregroundStyle(.secondary)
                     } else {
                         Button { model.play(game) } label: { Label(session.active ? "切换到此游戏" : "开始游戏", systemImage: "play.fill") }
-                            .buttonStyle(.borderedProminent).controlSize(.large).disabled(!game.playable || model.importing)
+                            .buttonStyle(.borderedProminent).controlSize(.large).disabled(!game.playable || model.importBusy)
                     }
                 }
                 if let error = session.error, session.gameID == game.id {
@@ -286,7 +295,7 @@ struct GameDetail: View {
                 }
                 if model.vmAvailability.installed {
                     Button("在 Android 中安装并运行") { model.playVM(game) }
-                        .disabled(!model.vmAvailable || game.apkNames.count != 1 || model.vm.state == "stopping")
+                        .disabled(!model.vmAvailable || game.apkNames.count > 32 || model.vm.state == "stopping")
                     if let reason = model.vmAvailability.unavailableReason { Text(reason).font(.caption).foregroundStyle(.secondary) }
                     Text("Android 实验功能尚未通过 Minecraft 运行和持续音频验证。安装成功不代表游戏可运行；存档保存在所选虚拟机的数据盘中。").font(.caption).foregroundStyle(.secondary)
                 }
@@ -321,13 +330,13 @@ struct SettingsView: View {
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: LibraryModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model, model.session.active || model.vm.active else { return .terminateNow }
+        guard let model, model.session.active || model.vm.active || model.playStore.hasActiveDownloads else { return .terminateNow }
         let session = model.session
-        session.stop(); model.vm.stop()
+        session.stop(); model.vm.stop(); model.playStore.stopDownloads()
         Task {
             let deadline = Date().addingTimeInterval(60)
-            while (session.active || model.vm.active) && Date() < deadline { try? await Task.sleep(nanoseconds: 200_000_000) }
-            sender.reply(toApplicationShouldTerminate: !session.active && !model.vm.active)
+            while (session.active || model.vm.active || model.playStore.hasActiveDownloads) && Date() < deadline { try? await Task.sleep(nanoseconds: 200_000_000) }
+            sender.reply(toApplicationShouldTerminate: !session.active && !model.vm.active && !model.playStore.hasActiveDownloads)
         }
         return .terminateLater
     }
@@ -344,14 +353,17 @@ struct HuskMacApp: App {
         .defaultSize(width: 1040, height: 700)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("导入游戏…") { model.showImporter = true }.keyboardShortcut("o").disabled(model.importing)
-                Button("添加示例游戏") { model.addExamples() }.disabled(model.importing)
+                Button("导入游戏…") { model.showImporter = true }.keyboardShortcut("o").disabled(model.importBusy)
+                Button("添加示例游戏") { model.addExamples() }.disabled(model.importBusy)
             }
             CommandMenu("游戏") {
                 Button("暂停 / 继续") { model.session.togglePause() }.keyboardShortcut("p").disabled(!model.session.active)
                 Button("结束游戏") { model.session.stop() }.disabled(!model.session.active)
             }
         }
+        Window("Google Play", id: "play-store") {
+            MacPlayStoreView(model: model, store: model.playStore)
+        }.defaultSize(width: 1040, height: 700)
         Settings { SettingsView(model: model) }
     }
 }

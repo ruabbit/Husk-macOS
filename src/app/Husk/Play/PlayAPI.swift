@@ -8,7 +8,8 @@ import Foundation
 /// Written for Husk from how those requests look on the wire; it shares no code with any other client.
 struct PlayError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
+    let httpStatus: Int?
+    init(_ message: String, httpStatus: Int? = nil) { self.message = message; self.httpStatus = httpStatus }
     var errorDescription: String? { message }
 }
 
@@ -107,7 +108,9 @@ enum PlayAPI {
         }
 
         let email = decoded.email ?? "anonymous@auroraoss.com"
-        let gsf = decoded.gsfId ?? "38918a453d071993"
+        guard let gsf = decoded.gsfId, !gsf.isEmpty else {
+            throw PlayError("Aurora token dispenser did not return a device id.")
+        }
         let consistency = decoded.deviceCheckInConsistencyToken ?? ""
         let configTok = decoded.deviceConfigToken ?? ""
 
@@ -272,10 +275,10 @@ enum PlayAPI {
         let (data, response) = try await urlSession.data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let wrapper = ProtoMessage(data)
-        if status == 401 { throw PlayError("Google Play's session has ended; signing in again.") }
+        if status == 401 { throw PlayError("Google Play 会话已过期，请重新登录。", httpStatus: status) }
         guard status == 200 else {
             let message = wrapper.message(5)?.string(1) ?? "HTTP \(status)"    // ServerCommands.displayErrorMessage
-            throw PlayError("Google Play said no: \(message)")
+            throw PlayError("Google Play said no: \(message)", httpStatus: status)
         }
         if let payload = wrapper.message(1), !payload.fields.isEmpty { return payload }
         return wrapper.message(3)?.message(2)?.message(1) ?? ProtoMessage(Data())
@@ -331,14 +334,13 @@ enum PlayAPI {
             }
 
             // Offer / Price: field 8
-            var price = "Free"
-            var isFree = true
+            var price = ""
+            var isFree = false
             if let offer = doc.messages(8).first {
                 if let p = offer.string(7), !p.isEmpty {
                     price = p
                 }
-                let mic = offer.int(1) ?? 0
-                isFree = (mic == 0)
+                if let mic = offer.int(1) { isFree = (mic == 0) }
             }
 
             // App details: field 13 message 1
@@ -379,7 +381,10 @@ enum PlayAPI {
             var apps: [PlayApp] = []
             var visited = Set<String>()
 
-            func traverse(_ msg: ProtoMessage) {
+            var visitedMessages = 0
+            func traverse(_ msg: ProtoMessage, depth: Int = 0) {
+                guard depth < 24, visitedMessages < 20_000 else { return }
+                visitedMessages += 1
                 // If this is a DocV2
                 if let docid = msg.string(1), isValidPackageName(docid), !visited.contains(docid) {
                     if let app = PlayApp.from(doc: msg) {
@@ -394,7 +399,7 @@ enum PlayAPI {
                         if case .bytes(let d) = val {
                             let child = ProtoMessage(d)
                             if !child.fields.isEmpty {
-                                traverse(child)
+                                traverse(child, depth: depth + 1)
                             }
                         }
                     }
@@ -496,7 +501,9 @@ enum PlayAPI {
             ("q", trimmed),
             ("ksm", "1")
         ]
-        if let payload = try? await fdfeCall("search", session: session, query: q) {
+        // Surface authentication and service errors instead of reporting an empty search.
+        let payload = try await fdfeCall("search", session: session, query: q)
+        do {
             let immediateApps = PlayApp.parseApps(from: payload)
             for app in immediateApps {
                 if !candidatePackages.contains(app.id) {
@@ -646,7 +653,7 @@ enum PlayAPI {
         }
 
         let apps = PlayApp.parseApps(from: payload)
-        return apps.first(where: { $0.id == packageName }) ?? apps.first
+        return apps.first(where: { $0.id == packageName })
     }
 
     public struct DeliveryData {
@@ -655,6 +662,7 @@ enum PlayAPI {
             public let size: Int64
             public let downloadUrl: String
         }
+        public var requiresAdditionalFiles: Bool = false
         public let downloadUrl: String?
         public let size: Int64
         public let splits: [SplitFile]
@@ -723,6 +731,7 @@ enum PlayAPI {
         }
 
         return DeliveryData(
+            requiresAdditionalFiles: !deliveryDataMsg.messages(4).isEmpty,
             downloadUrl: downloadUrl,
             size: downloadSize,
             splits: splits,

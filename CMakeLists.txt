@@ -36,10 +36,10 @@ target_include_directories(SharedCore PUBLIC ${MAC}/SharedCore PRIVATE ${CLASSIC
 target_link_libraries(SharedCore PUBLIC z "-framework CoreGraphics")
 
 add_library(SharedLibrary STATIC
-    ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/AtomicFile.swift
+    ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
     ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/VMController.swift
     src/app/Husk/ApkMetadata.swift src/app/Husk/BundleUnpacker.swift)
-target_link_libraries(SharedLibrary PUBLIC SharedCore)
+target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security")
 target_compile_options(SharedLibrary PRIVATE -I ${MAC}/SharedCore)
 
 add_library(GameActivityRuntime STATIC
@@ -72,12 +72,15 @@ target_link_libraries(NativeRunner PRIVATE NativeRuntime "-framework AppKit" "-f
     "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox")
 set_target_properties(NativeRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/NativeRunner/Info.plist.in)
 
-add_executable(HuskMac MACOSX_BUNDLE ${MAC}/HuskMac/HuskMac.swift "${HUSK_ICON}")
+set(MAC_PLAY_SOURCES
+    src/app/Husk/Play/Protobuf.swift src/app/Husk/Play/PlayDevice.swift src/app/Husk/Play/PlayAPI.swift
+    ${MAC}/Play/PlayCredentials.swift ${MAC}/Play/PlayDownload.swift ${MAC}/Play/MacPlayStore.swift)
+add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift ${MAC}/HuskMac/HuskMac.swift "${HUSK_ICON}")
 # Swift's whole-module link does not follow the object-level resource copy rule.
 add_custom_target(HuskMacResources DEPENDS "${CMAKE_BINARY_DIR}/HuskMac.app/Contents/Resources/Husk.icns")
 add_dependencies(HuskMac MacIcon HuskMacResources)
 target_compile_options(HuskMac PRIVATE -parse-as-library -I ${MAC}/SharedCore)
-target_link_libraries(HuskMac PRIVATE SharedLibrary "-framework AppKit" "-framework SwiftUI")
+target_link_libraries(HuskMac PRIVATE SharedLibrary "-framework AppKit" "-framework SwiftUI" "-framework WebKit")
 set_target_properties(HuskMac PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/HuskMac/Info.plist.in)
 
 if(HUSK_BUILD_VM)
@@ -85,7 +88,7 @@ if(HUSK_BUILD_VM)
         message(FATAL_ERROR "Run python3 scripts/build_macos_vm.py before enabling HUSK_BUILD_VM")
     endif()
     add_executable(VMRunner MACOSX_BUNDLE ${MAC}/VMRunner/main.m ${MAC}/VMRunner/VMDisplay.m
-        ${MAC}/VMRunner/VMConnection.m ${MAC}/NativeRunner/MacAudio.m "${HUSK_ICON}")
+        ${MAC}/VMRunner/VMConnection.m ${MAC}/VMRunner/VMInstall.m ${MAC}/NativeRunner/MacAudio.m "${HUSK_ICON}")
     add_dependencies(VMRunner MacIcon)
     target_compile_options(VMRunner PRIVATE -fobjc-arc -Wno-deprecated-declarations)
     target_include_directories(VMRunner PRIVATE src/ios-jit ${MAC}/NativeRunner)
@@ -210,3 +213,24 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/tests/macos/Integration.swift")
     add_test(NAME macos-library-upgrade COMMAND MacLibraryCompatibilityTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/TestResults" "${CMAKE_BINARY_DIR}/Cases")
     set_tests_properties(macos-library-upgrade PROPERTIES TIMEOUT 30)
 endif()
+
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/PlayCases/ready
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_play_cases.py ${CMAKE_BINARY_DIR}/PlayCases
+    DEPENDS tests/macos/prepare_play_cases.py VERBATIM)
+add_custom_target(PlayCases DEPENDS ${CMAKE_BINARY_DIR}/PlayCases/ready)
+add_executable(MacPlayTests tests/macos/PlaySupport.swift ${MAC_PLAY_SOURCES})
+add_dependencies(MacPlayTests PlayCases)
+target_compile_options(MacPlayTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacPlayTests PRIVATE SharedLibrary)
+add_test(NAME macos-play-support COMMAND MacPlayTests ${CMAKE_BINARY_DIR}/PlayCases ${CMAKE_BINARY_DIR}/TestResults)
+set_tests_properties(macos-play-support PROPERTIES TIMEOUT 30)
+add_executable(APKSplitTests tests/macos/APKSplits.c)
+add_dependencies(APKSplitTests PlayCases)
+target_compile_options(APKSplitTests PRIVATE -UNDEBUG)
+target_link_libraries(APKSplitTests PRIVATE GameActivityRuntime)
+add_test(NAME macos-apk-splits COMMAND APKSplitTests ${CMAKE_BINARY_DIR}/PlayCases)
+add_executable(VMInstallTests tests/macos/VMInstall.m ${MAC}/VMRunner/VMInstall.m ${MAC}/VMRunner/VMConnection.m)
+target_include_directories(VMInstallTests PRIVATE ${MAC}/VMRunner)
+target_compile_options(VMInstallTests PRIVATE -fobjc-arc -UNDEBUG)
+target_link_libraries(VMInstallTests PRIVATE "-framework Foundation")
+add_test(NAME macos-vm-apk-install COMMAND VMInstallTests)

@@ -86,6 +86,9 @@ final class PipeReader: @unchecked Sendable {
         child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
+        for name in game.apkNames.dropFirst() {
+            child.arguments! += ["--split", apk.deletingLastPathComponent().appendingPathComponent(name).path]
+        }
         if hiddenWindow { child.arguments!.append("--hidden-window") }
         else if headless { child.arguments!.append("--headless") } else { child.arguments!.append("--show-window") }
         if game.settings.muted || headless { child.arguments!.append("--mute") }

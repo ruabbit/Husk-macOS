@@ -50,8 +50,8 @@ import HuskCore
                       (try Data(contentsOf: paths.index)) == bytes, "upgrade-preserves-index-settings-and-save")
             let duplicate = try await reopened.importGame(resources.appendingPathComponent("Fixtures/OrbitGarden.apk"))
             try check(duplicate.playable && duplicate.settings == games[0].settings, "duplicate-import-uses-current-capability")
-            try check(!games[1].playable && games[1].unavailableReason != nil && !games[3].playable,
-                      "unsupported-engine-and-splits-still-disabled")
+            try check(!games[1].playable && games[1].unavailableReason != nil && games[3].playable,
+                      "unsupported-engine-rejected-and-minecraft-splits-enabled")
             var hashOnly = minecraft
             hashOnly["engine"] = "Unknown"
             let hashOnlyGame = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: hashOnly))

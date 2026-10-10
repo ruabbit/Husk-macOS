@@ -225,8 +225,14 @@ public struct VMAvailability {
         }
     }
     public func install(apk: URL, sha256: String, package: String) async throws {
+        try await install(apks: [apk], digest: sha256, package: package)
+    }
+    public func install(apks: [URL], digest: String, package: String) async throws {
+        let hashes = digest.split(separator: ":").map(String.init)
+        guard (1...32).contains(apks.count), apks.count == hashes.count else { throw LibraryFailure("APK 集合校验信息不完整。") }
         try await waitUntilReady()
-        let result = try await request("install", values: ["apk": apk.path, "sha256": sha256], timeout: 4200)
+        let files = zip(apks, hashes).map { ["apk": $0.0.path, "sha256": $0.1] }
+        let result = try await request("install", values: ["files": files], timeout: 4200)
         guard result["status"] as? Int == 0, (result["output"] as? String)?.contains("Success") == true else {
             throw LibraryFailure(result["output"] as? String ?? "APK 安装失败。")
         }

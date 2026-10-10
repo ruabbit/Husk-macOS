@@ -1,3 +1,4 @@
+#import "VMInstall.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #import <AppKit/AppKit.h>
 #import <CommonCrypto/CommonDigest.h>
@@ -114,20 +115,10 @@ static void handle(NSDictionary *message) {
         husk_display_send_pointer(x,y,[message[@"down"] boolValue]);result=@{};
     }else if([action isEqual:@"install"]){
         if(!atomic_load(&booted)){emit(@"command-error",@{@"id":request,@"detail":@"Android has not finished booting"});return;}
-        NSString *apk=message[@"apk"],*expected=message[@"sha256"];
-        if(![apk isKindOfClass:NSString.class]||![expected isKindOfClass:NSString.class]||expected.length!=64||![[sha256(apk) lowercaseString] isEqual:expected.lowercaseString]){
-            emit(@"command-error",@{@"id":request,@"detail":@"APK hash mismatch"});return;
-        }
+        NSArray *files=message[@"files"];
+        if(!files && message[@"apk"] && message[@"sha256"])files=@[@{@"apk":message[@"apk"],@"sha256":message[@"sha256"]}];
         emit(@"installing",@{@"id":request});
-        if([bridge push:apk remote:@"/data/local/tmp/husk-install.apk" error:&error]){
-            int status=-1;
-            NSString *hash=[bridge shell:@"sha256sum /data/local/tmp/husk-install.apk" timeout:120 status:&status error:&error];
-            if(status==0&&[hash hasPrefix:expected.lowercaseString]){
-                NSString *out=[bridge shell:@"pm install -r /data/local/tmp/husk-install.apk" timeout:600 status:&status error:&error];
-                if(out)result=@{@"status":@(status),@"output":out};
-                [bridge shell:@"rm -f /data/local/tmp/husk-install.apk" timeout:20 status:NULL error:nil];
-            }else if(!error)error=[NSError errorWithDomain:@"HuskVM" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Transferred APK hash mismatch"}];
-        }
+        result=VMInstallAPKs(bridge,files,&error);
     }else if([action isEqual:@"launch"]){
         NSString *package=message[@"package"];
         if(![package isKindOfClass:NSString.class]||!packageValid(package)){emit(@"command-error",@{@"id":request,@"detail":@"Invalid Android package"});return;}

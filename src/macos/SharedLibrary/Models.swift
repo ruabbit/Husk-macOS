@@ -27,20 +27,22 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     public let engine: String?
     public let abis: [String]
     public let fixture: FixtureManifest?
+    public var packageName: String? = nil
+    public var versionCode: Int? = nil
+    public var signerSHA256: [String]? = nil
     public var settings: GameSettings
     public var lastPlayed: Date?
     // Capability belongs to this installed runtime, not to the version which
     // imported the APK. Codable ignores the old persisted unavailableReason.
     public var runtime: String? {
         if fixture != nil { return "orbit" }
-        if apkNames.count == 1 && engine == "Minecraft" && abis.contains("arm64-v8a") { return "minecraft" }
+        if (1...32).contains(apkNames.count) && engine == "Minecraft" && abis.contains("arm64-v8a") { return "minecraft" }
         return nil
     }
     public var playable: Bool { runtime != nil }
     public var unavailableReason: String? {
         if playable { return nil }
         if !abis.contains("arm64-v8a") { return "此应用没有受支持的 arm64 游戏入口。" }
-        if engine == "Minecraft" && apkNames.count != 1 { return "Minecraft 分包运行尚未接入，请导入包含 arm64 原生库的完整 APK。" }
         return "已完成扫描；此游戏的引擎尚未接入 macOS 原生运行组件。"
     }
 }

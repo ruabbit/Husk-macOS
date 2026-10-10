@@ -82,7 +82,8 @@ static int openFD(void) {
 }
 - (BOOL)push:(NSString *)path remote:(NSString *)remote error:(NSError **)error {
     // Remote name is controlled by the caller; no user path is sent as shell text.
-    if(![remote isEqualToString:@"/data/local/tmp/husk-install.apk"]){failure(error,@"Invalid transfer destination");return NO;}
+    NSRegularExpression *allowed=[NSRegularExpression regularExpressionWithPattern:@"^/data/local/tmp/husk-install(?:-(?:[0-9]|[12][0-9]|3[01]))?\\.apk$" options:0 error:nil];
+    if(![allowed firstMatchInString:remote options:0 range:NSMakeRange(0,remote.length)]){failure(error,@"Invalid transfer destination");return NO;}
     NSFileHandle *file=[NSFileHandle fileHandleForReadingAtPath:path];
     uint64_t size=[NSFileManager.defaultManager attributesOfItemAtPath:path error:error].fileSize;
     if(!file||!size){failure(error,@"Cannot read APK");return NO;}

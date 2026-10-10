@@ -1,5 +1,18 @@
 # 审计进度
 
+## 2026-10-10 Play 支持
+
+已接入 macOS 商店窗口、隔离的 Google 登录 WebView、Keychain 会话、访客模式、搜索/详情、带取消的下载及自动入库。复用上游 PlayAPI/PlayDevice/Protobuf，补齐失效令牌错误、缺失报价不得推定免费、详情包名匹配及协议解析边界。付费应用只请求已有授权交付，不发送购买请求。设备指纹设置按用户安排留到后续，以完整设备配置为单位设计。
+
+共用资料库现在处理最多 32 个 APK 的集合，校验 manifest 中的包名、版本、base/split、必需依赖、v2/v3 签名及 Android 分块内容摘要；同包同签名的新版本更新保留身份、设置和存档，事务日志恢复中断更新。NativeRunner 接收全部分包并重新核对集合 hash，loader 不再静默丢弃旧四分包上限之后的文件。VM 安装改为一次 create/write/commit 会话，任一文件失败则 abandon 并清理传输文件。
+
+本地构建、签名和依赖包检查通过，默认 **17/17 CTest** 通过，含新增 Play 支持、原生分包和 VM 安装事务三组。OpenSSL 独立签名的七文件集合验证了升级、混包、混签名、损坏/取消清理和更新中断恢复。用户提供的 Minecraft APK 通过只读真实签名与完整内容摘要校验，没有运行或修改它。
+
+真实联网验证取得 Aurora 访客会话，搜索返回 18 个应用；Google 计算器 `com.google.android.calculator` 的详情、base 与分包下载、签名校验和整组导入通过。联网测试仅写入临时资料库，完成后清理，没有保存账号令牌或修改日常资料库。当前候选仍在唯一 `build/macos/Product/HuskMac.app` 中覆盖构建。主进程空闲时通过系统“Quit”正常退出后再打包。
+
+证据复用 `build/logs/current-play-final-checks.log`、`current-play-tests.log`、`current-play-live.log` 和 `build/macos/bundle-verification.json`。原地更新后已重新打开当前候选，并核对运行路径。重启后窗口自动化连接恢复，读取到 Play 访客列表、应用详情和已入库状态；这次界面观察不等同于完整点击流程验收。真实 Google 账号登录、已购 Minecraft、VM 内多分包安装、OBB/按需 PAD、签名轮换、GApps 与设备认证均没有通过结论。
+
+
 ## 2026-10-10 每日上游同步：合并与完整本地验收完成
 
 本地 `main` 从 `5a7d2df` 快进到上游 `a08b695`，随后通过真实 merge 合入 `codex/macos-p0`。相对此前源码同步点 `75dc21f`，本次新增 30 个提交、61 个变化路径，包含 Play 搜索与登录修正、iOS 下载管理、bionic 接口、手柄初始化和 Vulkan/DXVK 适配。macOS 的商店界面和 SDL/DXVK 游戏入口没有在本轮接入。

@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <math.h>
 
+static NSMutableArray<NSString *> *splitPaths;
 static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *diagnostics;
 static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow;
 static int variant, exitStatus;
@@ -397,14 +398,19 @@ static int androidKey(unsigned code)
     if(minecraft){
         // The library's import hash remains the integrity contract. Compatibility
         // is checked independently here before any Android code is loaded.
-        NSInputStream *stream=[NSInputStream inputStreamWithFileAtPath:apkPath];[stream open];
-        CC_SHA256_CTX context;CC_SHA256_Init(&context);uint8_t buffer[65536],digest[CC_SHA256_DIGEST_LENGTH];NSInteger count;
-        while((count=[stream read:buffer maxLength:sizeof(buffer)])>0)CC_SHA256_Update(&context,buffer,(CC_LONG)count);
-        [stream close];if(count<0)return NO;CC_SHA256_Final(digest,&context);
-        NSMutableString *hex=[NSMutableString string];for(unsigned i=0;i<sizeof(digest);i++)[hex appendFormat:@"%02x",digest[i]];
-        if (![hex isEqual:apkDigest]) return NO;
-        const char *path=apkPath.fileSystemRepresentation;
-        char *raw=husk_tl_scan(&path,1);
+        NSArray<NSString *> *paths=[@[apkPath] arrayByAddingObjectsFromArray:splitPaths];
+        NSMutableArray<NSString *> *hashes=[NSMutableArray new];
+        const char *rawPaths[TL_LD_MAX_APKS];
+        for(NSUInteger i=0;i<paths.count;i++){
+            NSInputStream *stream=[NSInputStream inputStreamWithFileAtPath:paths[i]];[stream open];
+            CC_SHA256_CTX context;CC_SHA256_Init(&context);uint8_t buffer[65536],digest[CC_SHA256_DIGEST_LENGTH];NSInteger count;
+            while((count=[stream read:buffer maxLength:sizeof(buffer)])>0)CC_SHA256_Update(&context,buffer,(CC_LONG)count);
+            [stream close];if(count<0)return NO;CC_SHA256_Final(digest,&context);
+            NSMutableString *hex=[NSMutableString string];for(unsigned j=0;j<sizeof(digest);j++)[hex appendFormat:@"%02x",digest[j]];
+            [hashes addObject:hex];rawPaths[i]=paths[i].fileSystemRepresentation;
+        }
+        if (![[hashes componentsJoinedByString:@":"] isEqual:apkDigest]) return NO;
+        char *raw=husk_tl_scan(rawPaths,(int)paths.count);
         if (!raw) return NO;
         NSData *data=[NSData dataWithBytes:raw length:strlen(raw)];husk_tl_free(raw);
         NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
@@ -484,6 +490,7 @@ static int androidKey(unsigned code)
         tl_ga_input_host host={hostTextState,hostTextActive,hostCursorLocked,(__bridge void *)self};tl_ga_set_input_host(&host);
         if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);}
         tl_ld_set_verbosity(2);tl_jni_set_trace(0);tl_egl_offscreen_windows(headless);
+        for(NSString *split in splitPaths)tl_ld_queue_split(split.fileSystemRepresentation);
         tl_ga_config configuration={.apk_path=apkPath.fileSystemRepresentation,.data_dir=data.fileSystemRepresentation,
             .package_name="com.mojang.minecraftpe",.width=(int)surfaceWidth,.height=(int)surfaceHeight,
             .metal_layer=(__bridge void *)layer,.angle_egl=angle.fileSystemRepresentation,.frame_dir=frames.fileSystemRepresentation,.frame_every=-60};
@@ -536,6 +543,7 @@ static int androidKey(unsigned code)
 int main(int argc,const char **argv)
 {
     @autoreleasepool {
+        splitPaths=[NSMutableArray new];
         for(int i=1;i<argc;i++) {
             NSString *arg=@(argv[i]);
             if([arg isEqual:@"--headless"])headless=YES;
@@ -546,6 +554,7 @@ int main(int argc,const char **argv)
             else if([arg isEqual:@"--pause-inactive"])pauseInactive=YES;
             else if(i+1<argc&&[arg isEqual:@"--session"])sessionID=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--apk"])apkPath=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--split"])[splitPaths addObject:@(argv[++i])];
             else if(i+1<argc&&[arg isEqual:@"--apk-sha256"])apkDigest=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--checkpoint"])checkpointPath=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--runtime"]){NSString *runtime=@(argv[++i]);if(![runtime isEqual:@"orbit"]&&![runtime isEqual:@"minecraft"])return 64;minecraft=[runtime isEqual:@"minecraft"];}
@@ -555,8 +564,13 @@ int main(int argc,const char **argv)
             else {fprintf(stderr,"unknown or incomplete option\n");return 64;}
         }
         if(![[NSUUID alloc] initWithUUIDString:sessionID]||!apkPath||!checkpointPath||variant<0||variant>1)return 64;
-        if(minecraft && (apkDigest.length != 64 || [apkDigest rangeOfCharacterFromSet:
-            [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location != NSNotFound))return 64;
+        if(splitPaths.count>=TL_LD_MAX_APKS || (!minecraft && splitPaths.count))return 64;
+        if(minecraft){
+            NSArray<NSString *> *hashes=[apkDigest componentsSeparatedByString:@":"];
+            if(hashes.count!=splitPaths.count+1)return 64;
+            for(NSString *hash in hashes)if(hash.length!=64 || [hash rangeOfCharacterFromSet:
+                [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location!=NSNotFound)return 64;
+        }
         gameTitle=gameTitle?:@"Orbit Garden";
         if(diagnostics){if(!automation)return 64;[NSFileManager.defaultManager createDirectoryAtPath:diagnostics withIntermediateDirectories:YES attributes:nil error:NULL];}
         if(minecraft){surfaceWidth=1280;surfaceHeight=720;}
