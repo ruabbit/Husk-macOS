@@ -51,7 +51,7 @@ struct TLAppSettings: Codable, Equatable {
 
     /// When the on-screen controller is offered.
     enum PadMode: String, Codable, CaseIterable, Identifiable {
-        /// For the games that cannot be played without a controller (Unreal), when none is connected.
+        /// For the games that cannot be played without a controller (Unreal, PC games through DXVK), when none is connected.
         case auto, always, never
         var id: String { rawValue }
         var title: String {
@@ -184,9 +184,8 @@ struct TLAppSettingsView: View {
             } header: {
                 Text("Screenshots")
             } footer: {
-                Text("The game starts with nothing over it: no bar, no controller, no readout, the picture to every edge. Tap with three "
-                   + "fingers at once to bring the bar back, and again to hide it. The Hide button in the bar does the same while "
-                   + "playing, but leaves the strip the bar sat in.")
+                Text("The game starts with nothing over it: no bar, no controller, no readout. Tap with three fingers at once to bring "
+                   + "the bar back, and again to hide it. The Hide button in the bar does the same while playing.")
             }
 
             if app.packageName == GeodeSupport.gamePackage {

@@ -5,14 +5,14 @@ prototype has a SwiftUI library, a separate game process, two repository-owned
 Orbit Garden ELF game fixtures, and a Minecraft GameActivity path. The exact
 1.26.52.3 arm64 APK recorded in the [P4 report](docs/2026-10-08-macos-p4-report.md)
 has completed the P4 checks. Other single-APK arm64 Minecraft builds can now be
-tried from the GUI, with their unverified status shown explicitly. Old imports
+started from the GUI with the same launch action. Old imports
 are reclassified using the installed runtime, without deleting their data.
 Other engines can be imported and scanned; the iOS compatibility list below
 does not establish macOS support.
 
-Upstream source changes through `75dc21f` (27 commits after the original audit)
-are integrated with the macOS changes. See [the sync report](docs/2026-10-08-upstream-sync-report.md)
-and [the source receipt](dependencies/upstream.lock.json).
+Upstream source changes through `a08b695` are merged with the macOS changes,
+including the upstream Git ancestry. See [the source receipt](dependencies/upstream.lock.json)
+and [the current validation and push status](docs/development/macos/progress.md).
 
 Build with `./scripts/build_macos.sh`, then open
 `build/macos/Product/HuskMac.app`. The first build fetches the pinned macOS ANGLE
@@ -119,10 +119,22 @@ what happened, with a report you can share.
 
 ## Installing
 
-Download `Husk.ipa` from [Releases](https://github.com/leviidev/husk/releases)
-and install it with SideStore, AltStore or TrollStore. It is one IPA for all
-of them: it carries Husk's entitlements, which TrollStore keeps, and a
-sideloader re-signs it with your own. Husk needs iOS 16.4 or later.
+**SideStore, AltStore and other sideloaders:** add Husk's source, and the
+sideloader installs Husk and offers each update as it comes out.
+
+```
+https://raw.githubusercontent.com/Leviidev/Husk/main/altsource.json
+```
+
+In SideStore or AltStore: Sources › + › paste the address above.
+
+**Or by hand:** download `Husk.ipa` from
+[Releases](https://github.com/leviidev/husk/releases) and install it with
+SideStore, AltStore or TrollStore. It is one IPA for all of them: it carries
+Husk's entitlements, which TrollStore keeps, and a sideloader re-signs it with
+your own.
+
+Husk needs iOS 16.0 or later.
 
 ## JIT
 

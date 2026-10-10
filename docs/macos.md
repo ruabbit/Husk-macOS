@@ -2,7 +2,7 @@
 
 当前实现包含 P1–P3 的原生构建、资料库、自建 **Orbit Garden / Dusk** 游戏，以及 P4 的 **Minecraft 1.26.52.3 arm64** 样本路径。Minecraft 使用真实 Android ELF、bionic/JNI 适配、GameActivity、ANGLE/Metal 和 AudioQueue。0.2.0 起，其他识别为 Minecraft 的 arm64 单 APK 也可从 GUI 启动。支持的游戏统一显示“开始游戏”，测试样本与测试覆盖记录在开发文档中。旧资料库记录按当前运行组件重新判定，保留原有设置和存档。
 
-上游 main 已同步到 `75dc21f82c1fd748867ad4d4b5dfb0e981c2d468` 的源码，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现。详情见 [GUI / 上游同步报告](2026-10-08-upstream-sync-report.md)。上游新增 Godot、Geode、Unity 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
+上游 main 的源码已合并到 `a08b695`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
 
 本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md) 和 [P4 Minecraft 报告](2026-10-08-macos-p4-report.md)。完整 DEX/ART、Unity、Unreal、Cocos、SDL、通用 NativeActivity 和 Rockstar 游戏还没有各自的 macOS 样本验收。
 
