@@ -330,13 +330,13 @@ struct SettingsView: View {
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: LibraryModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model, model.session.active || model.vm.active || model.playStore.hasActiveDownloads else { return .terminateNow }
+        guard let model, model.session.active || model.vm.active || model.playStore.hasActiveDownloads || model.playStore.browserLogin.active else { return .terminateNow }
         let session = model.session
-        session.stop(); model.vm.stop(); model.playStore.stopDownloads()
+        session.stop(); model.vm.stop(); model.playStore.stopDownloads(); model.playStore.cancelLogin()
         Task {
             let deadline = Date().addingTimeInterval(60)
-            while (session.active || model.vm.active || model.playStore.hasActiveDownloads) && Date() < deadline { try? await Task.sleep(nanoseconds: 200_000_000) }
-            sender.reply(toApplicationShouldTerminate: !session.active && !model.vm.active && !model.playStore.hasActiveDownloads)
+            while (session.active || model.vm.active || model.playStore.hasActiveDownloads || model.playStore.browserLogin.active) && Date() < deadline { try? await Task.sleep(nanoseconds: 200_000_000) }
+            sender.reply(toApplicationShouldTerminate: !session.active && !model.vm.active && !model.playStore.hasActiveDownloads && !model.playStore.browserLogin.active)
         }
         return .terminateLater
     }

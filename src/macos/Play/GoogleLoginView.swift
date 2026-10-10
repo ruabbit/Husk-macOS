@@ -4,9 +4,10 @@ import WebKit
 
 struct GoogleLoginView: View {
     @ObservedObject var store: MacPlayStore
+    @ObservedObject var browser: GoogleBrowserLogin
     @Environment(\.dismiss) private var dismiss
-    @State private var email = ""
-    @State private var started = false
+    @State private var embedded = GoogleBrowserLogin.browser == nil
+    @State private var attempt = UUID()
     @State private var loading = true
     @State private var webError: String?
     var body: some View {
@@ -16,30 +17,56 @@ struct GoogleLoginView: View {
                 Spacer()
                 Button("取消") { store.cancelLogin(); dismiss() }.keyboardShortcut(.cancelAction)
             }
-            if started {
-                GoogleLoginWebView(email: email, loading: $loading, error: $webError) { token in
-                    store.connect(email: email, token: token)
-                }.disabled(store.busy)
+            if embedded {
+                GoogleLoginWebView(loading: $loading, error: $webError) { token in
+                    store.connect(token: token)
+                }.id(attempt).disabled(store.busy)
                 if store.busy { ProgressView("正在建立 Play 会话…") }
                 else if loading { ProgressView("正在加载 Google 登录…") }
+                if GoogleBrowserLogin.browser != nil {
+                    Button("使用 Chrome 登录（支持 passkey）") {
+                        embedded = false; webError = nil; store.error = nil; openBrowser()
+                    }.disabled(store.busy || browser.active)
+                } else {
+                    Text("内置登录可使用密码和验证码。Passkey 登录需要 Google Chrome。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             } else {
                 Spacer()
-                TextField("Google 账号邮箱", text: $email).textFieldStyle(.roundedBorder).frame(width: 360)
-                Button("继续") { started = true }.buttonStyle(.borderedProminent)
-                    .disabled(!email.contains("@") || email.contains(where: \.isWhitespace))
+                if browser.active { ProgressView("请在 Chrome 中完成 Google 登录") }
+                else if store.busy { ProgressView("正在建立 Play 会话…") }
+                Text("可使用 passkey、手机或安全密钥。登录完成后会自动返回 Husk。")
+                    .foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Spacer()
+                Button("改用内置登录") {
+                    browser.cancel(); embedded = true; webError = nil; store.error = nil
+                }.disabled(store.busy)
             }
             if let message = webError ?? store.error {
                 Text(message).foregroundStyle(.red).textSelection(.enabled)
-                Button("重新打开登录页") { store.cancelLogin(); store.error = nil; webError = nil; started = false }
+                Button("重新打开登录页") {
+                    store.cancelLogin(); store.error = nil; webError = nil; loading = true
+                    if embedded { attempt = UUID() } else { openBrowser() }
+                }.disabled(browser.active || store.busy)
             }
-        }.padding(20).frame(width: 620, height: 720)
+        }.padding(20).frame(width: embedded ? 620 : 520, height: embedded ? 720 : 260)
+        .onAppear { if !embedded { openBrowser() } }
+        .onDisappear { store.cancelLogin() }
         .onChange(of: store.session != nil) { _, signedIn in if signedIn { dismiss() } }
+    }
+    private func openBrowser() {
+        browser.start { result in
+            switch result {
+            case .success(let token):
+                NSApp.activate(ignoringOtherApps: true)
+                store.connect(token: token)
+            case .failure(let error): store.error = error.localizedDescription
+            }
+        }
     }
 }
 
 struct GoogleLoginWebView: NSViewRepresentable {
-    let email: String
     @Binding var loading: Bool
     @Binding var error: String?
     let captured: (String) -> Void
@@ -48,22 +75,20 @@ struct GoogleLoginWebView: NSViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         let view = WKWebView(frame: .zero, configuration: configuration)
-        view.customUserAgent = PlayDevice.authUserAgent
         view.navigationDelegate = context.coordinator
+        view.uiDelegate = context.coordinator
         context.coordinator.view = view
         configuration.websiteDataStore.httpCookieStore.add(context.coordinator)
-        var url = URLComponents(string: "https://accounts.google.com/EmbeddedSetup")!
-        url.queryItems = [URLQueryItem(name: "Email", value: email)]
-        view.load(URLRequest(url: url.url!))
+        view.load(URLRequest(url: GoogleLoginPolicy.url))
         return view
     }
     func updateNSView(_ view: WKWebView, context: Context) { context.coordinator.parent = self }
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
         coordinator.closed = true
-        view.stopLoading(); view.navigationDelegate = nil
+        view.stopLoading(); view.navigationDelegate = nil; view.uiDelegate = nil
         view.configuration.websiteDataStore.httpCookieStore.remove(coordinator)
     }
-    final class Coordinator: NSObject, WKNavigationDelegate, WKHTTPCookieStoreObserver {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKHTTPCookieStoreObserver {
         var parent: GoogleLoginWebView
         weak var view: WKWebView?
         var done = false
@@ -73,10 +98,9 @@ struct GoogleLoginWebView: NSViewRepresentable {
             guard !closed, !done else { return }
             cookieStore.getAllCookies { [weak self] cookies in
                 guard let self, !self.closed, !self.done,
-                      let token = cookies.first(where: {
-                          $0.name == "oauth_token" && !$0.value.isEmpty &&
-                          ["accounts.google.com", ".accounts.google.com", ".google.com", "google.com"].contains($0.domain) && $0.isSecure
-                      })?.value else { return }
+                      let token = GoogleLoginPolicy.token(in: cookies.map {
+                          .init(name: $0.name, value: $0.value, domain: $0.domain, secure: $0.isSecure)
+                      }) else { return }
                 self.done = true; self.parent.captured(token)
             }
         }
@@ -92,9 +116,15 @@ struct GoogleLoginWebView: NSViewRepresentable {
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard let url = navigationAction.request.url, url.scheme == "https", let host = url.host,
-                  host == "google.com" || host.hasSuffix(".google.com") else { decisionHandler(.cancel); return }
+            guard let url = navigationAction.request.url, GoogleLoginPolicy.allows(url) else { decisionHandler(.cancel); return }
             decisionHandler(.allow)
+        }
+        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if navigationAction.targetFrame == nil, let url = navigationAction.request.url, GoogleLoginPolicy.allows(url) {
+                webView.load(navigationAction.request)
+            }
+            return nil
         }
     }
 }

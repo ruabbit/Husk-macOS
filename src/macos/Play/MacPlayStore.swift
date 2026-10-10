@@ -15,8 +15,12 @@ protocol MacPlayService {
 
 struct GooglePlayService: MacPlayService {
     func signIn(email: String?, token: String?) async throws -> PlaySession {
-        guard let email, let token else { return try await PlayAPI.fetchAuroraGuestSession() }
-        var session = PlaySession(email: email, aasToken: try await PlayAPI.accountToken(email: email, oauthToken: token))
+        guard let token else {
+            guard email == nil else { throw PlayError("Google 登录未完成，请重新登录。") }
+            return try await PlayAPI.fetchAuroraGuestSession()
+        }
+        let account = try await PlayAPI.accountCredentials(oauthToken: token)
+        var session = PlaySession(email: account.email, aasToken: account.token)
         (session.gsfID, session.consistencyToken) = try await PlayAPI.checkin()
         session.bearer = try await PlayAPI.playToken(session)
         session.deviceConfigToken = try await PlayAPI.uploadDeviceConfig(session)
@@ -46,6 +50,7 @@ struct GooglePlayService: MacPlayService {
 }
 
 @MainActor final class MacPlayStore: ObservableObject {
+    let browserLogin = GoogleBrowserLogin()
     struct DownloadState {
         var progress: Double = 0
         var phase = "准备下载…"
@@ -95,7 +100,7 @@ struct GooglePlayService: MacPlayService {
             } catch { if generation == id, !Task.isCancelled { self.error = error.localizedDescription } }
         }
     }
-    func cancelLogin() { loginTask?.cancel(); loginTask = nil; busy = false; generation = UUID() }
+    func cancelLogin() { browserLogin.cancel(); loginTask?.cancel(); loginTask = nil; busy = false; generation = UUID() }
     func signOut() {
         cancelLogin(); jobs.values.forEach { $0.cancel() }; jobs.removeAll()
         session = nil; apps = []; searching = false; downloads = [:]; error = nil

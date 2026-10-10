@@ -93,7 +93,7 @@ struct MacPlayStoreView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .navigationTitle("Google Play")
-        .sheet(isPresented: $login) { GoogleLoginView(store: store) }
+        .sheet(isPresented: $login) { GoogleLoginView(store: store, browser: store.browserLogin) }
         .task { await store.restore() }
         .task(id: query + (store.session?.email ?? "")) {
             if !query.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }

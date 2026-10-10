@@ -145,12 +145,26 @@ enum PlayAPI {
 
     /// The web sign-in leaves an `oauth_token` cookie; this trades it for the account token that lasts.
     static func accountToken(email: String, oauthToken: String) async throws -> String {
-        let params: [(String, String)] = [
+        try await accountResponse(oauthToken: oauthToken, email: email)["Token"]!
+    }
+
+    /// Google identifies the account that actually completed sign-in. Do not ask
+    /// for its email again or infer it from arbitrary text in the login page.
+    static func accountCredentials(oauthToken: String, using client: URLSession? = nil) async throws -> (email: String, token: String) {
+        let response = try await accountResponse(oauthToken: oauthToken, client: client)
+        guard let email = response["Email"], email.contains("@"), email.count <= 320,
+              !email.contains(where: \.isWhitespace) else {
+            throw PlayError("Google 未返回登录账号，请重新登录。")
+        }
+        return (email, response["Token"]!)
+    }
+
+    private static func accountResponse(oauthToken: String, email: String? = nil, client: URLSession? = nil) async throws -> [String: String] {
+        var params: [(String, String)] = [
             ("lang", PlayDevice.locale.replacingOccurrences(of: "_", with: "-")),
             ("google_play_services_version", "\(PlayDevice.playServicesVersion)"),
             ("sdk_version", "\(PlayDevice.sdk)"),
             ("device_country", PlayDevice.country),
-            ("Email", email),
             ("service", "ac2dm"),
             ("get_accountid", "1"),
             ("ACCESS_TOKEN", "1"),
@@ -160,18 +174,19 @@ enum PlayAPI {
             ("callerSig", callerSig),
             ("droidguard_results", "null"),
         ]
+        if let email { params.append(("Email", email)) }
         var req = URLRequest(url: authURL)
         req.httpMethod = "POST"
         req.setValue("com.google.android.gms", forHTTPHeaderField: "app")
         req.setValue(PlayDevice.authUserAgent, forHTTPHeaderField: "User-Agent")
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         req.httpBody = Data(form(params).utf8)
-        let (data, response) = try await urlSession.data(for: req)
+        let (data, response) = try await (client ?? urlSession).data(for: req)
         let kv = parseKeyValues(data)
         guard (response as? HTTPURLResponse)?.statusCode == 200, let token = kv["Token"], !token.isEmpty else {
             throw PlayError("Google did not accept the sign-in (\(kv["Error"] ?? "HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")).")
         }
-        return token
+        return kv
     }
 
     /// The Play Store's own token, made from the account token for this device.

@@ -74,6 +74,7 @@ set_target_properties(NativeRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/Na
 
 set(MAC_PLAY_SOURCES
     src/app/Husk/Play/Protobuf.swift src/app/Husk/Play/PlayDevice.swift src/app/Husk/Play/PlayAPI.swift
+    ${MAC}/Play/GoogleLoginPolicy.swift ${MAC}/Play/GoogleBrowserLogin.swift
     ${MAC}/Play/PlayCredentials.swift ${MAC}/Play/PlayDownload.swift ${MAC}/Play/MacPlayStore.swift)
 add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift ${MAC}/HuskMac/HuskMac.swift "${HUSK_ICON}")
 # Swift's whole-module link does not follow the object-level resource copy rule.
@@ -218,10 +219,10 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/PlayCases/ready
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_play_cases.py ${CMAKE_BINARY_DIR}/PlayCases
     DEPENDS tests/macos/prepare_play_cases.py VERBATIM)
 add_custom_target(PlayCases DEPENDS ${CMAKE_BINARY_DIR}/PlayCases/ready)
-add_executable(MacPlayTests tests/macos/PlaySupport.swift ${MAC_PLAY_SOURCES})
+add_executable(MacPlayTests tests/macos/PlaySupport.swift tests/macos/PlayLogin.swift ${MAC_PLAY_SOURCES})
 add_dependencies(MacPlayTests PlayCases)
 target_compile_options(MacPlayTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
-target_link_libraries(MacPlayTests PRIVATE SharedLibrary)
+target_link_libraries(MacPlayTests PRIVATE SharedLibrary "-framework AppKit")
 add_test(NAME macos-play-support COMMAND MacPlayTests ${CMAKE_BINARY_DIR}/PlayCases ${CMAKE_BINARY_DIR}/TestResults)
 set_tests_properties(macos-play-support PROPERTIES TIMEOUT 30)
 add_executable(APKSplitTests tests/macos/APKSplits.c)

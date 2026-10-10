@@ -1,5 +1,13 @@
 # 审计进度
 
+## 2026-10-10 Google 登录流程修复
+
+删除 macOS 登录前置邮箱输入，后台从 Google 账号令牌交换响应读取 Email，缺少身份时明确报错，不从网页文本猜测。原有 iOS accountToken 调用签名保留。内置 WebView 恢复默认桌面 user agent，并处理同窗口 Google 跳转。
+
+普通 WKWebView 无法为未关联的 Google 域名使用 passkey；有 Chrome 时改为独立浏览器登录窗口，让浏览器处理身份验证。每次登录使用独立临时目录和仅继承给该子进程的 fd 3/4 私有管道，不开放端口或连接日常 Chrome。只读取 Google 登录 URL 适用的 cookie，并接受安全 Google 域名下唯一的 oauth_token；结果和协议数据不写日志。取消、超时、窗口关闭和主 App 退出均结束本次登录，等待子进程退出后清理目录。无 Chrome 时保留内置密码/验证码登录。
+
+已正常退出空闲 Husk、在唯一 build/macos 中构建并原地更新，默认 17/17 CTest 与包签名/权限检查通过。回归新增 Google 返回账号身份、缺失身份拒绝、cookie 来源与歧义检查、登录管道分片/错误/超时/取消/断连。证据：build/logs/current-play-login-checks.log。已重新打开候选；界面自动化在本次重启后连接失败，完整个人账号及 passkey 登录等待本人验证，未记为已通过。
+
 ## 2026-10-10 Play 支持
 
 已接入 macOS 商店窗口、隔离的 Google 登录 WebView、Keychain 会话、访客模式、搜索/详情、带取消的下载及自动入库。复用上游 PlayAPI/PlayDevice/Protobuf，补齐失效令牌错误、缺失报价不得推定免费、详情包名匹配及协议解析边界。付费应用只请求已有授权交付，不发送购买请求。设备指纹设置按用户安排留到后续，以完整设备配置为单位设计。

@@ -88,6 +88,7 @@ private final class FixtureHTTP: URLProtocol, @unchecked Sendable {
                 try check(signatures?.isEmpty == false, "real APK signature and complete content digest")
                 return
             }
+            try await checkPlayLogin()
             let cases = URL(fileURLWithPath: args[1]), root = URL(fileURLWithPath: args[2]).appendingPathComponent("Play-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: root) }

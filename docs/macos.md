@@ -54,7 +54,11 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 
 资料库工具栏的“Google Play”打开原生 macOS 商店窗口，可使用访客账号或 Google 账号搜索、查看详情、下载和更新应用。下载完成后自动校验并加入资料库，无需手工打包分包。下载显示进度，可以取消；失败可重试，临时下载和失败导入不会保留半套安装。启动入口仍使用资料库现有的原生/Android 运行组件。
 
-Google 登录使用独立的非持久化 WebKit Cookie 容器；输入账号邮箱后，在 Google 页面完成登录。会话只存入 `org.husk.HuskMac.play` 钥匙串项，不存入 UserDefaults，不写入日志；退出登录清除该项。HTTP 401 会刷新令牌并重试一次，搜索和详情错误会显示。退出登录或较新的搜索发起后，旧请求不能覆盖新状态。
+点击“登录 Google 账号”后直接进入 Google 登录流程，Husk 不再额外索要邮箱；账号邮箱取自 Google 交换登录结果的响应。有 Google Chrome 时，默认打开独立 Chrome 窗口，由浏览器处理 passkey、手机和安全密钥验证。这个窗口使用权限为 0700 的临时资料目录和私有管道，不使用日常浏览器资料，也不开放调试端口。完成、取消、超时或退出 Husk 时关闭这个登录进程并清理临时目录。Husk 只取当前登录所需的 Google `oauth_token`，不读取密码、passkey 私钥或其他浏览器资料。
+
+没有 Chrome 时使用隔离的临时 WebKit 登录页，也可手动切换到内置登录。内置页使用默认桌面浏览器标识，可使用密码和验证码。普通 WKWebView 的 passkey 需要网站关联域名，Husk 无法替 Google 配置该关联，因此 Google passkey 走 Chrome 路径。系统可能要求本人确认 Chrome 对已保存 passkey 的使用。参见 [Apple passkey 文档](https://developer.apple.com/documentation/authenticationservices/supporting-passkeys) 和 [Chrome passkey 文档](https://support.google.com/chrome/answer/13168025)。
+
+Play 会话只存入 `org.husk.HuskMac.play` 钥匙串项，不存入 UserDefaults，不写入日志；退出登录清除该项。HTTP 401 会刷新令牌并重试一次，搜索和详情错误会显示。退出登录或较新的搜索发起后，旧请求不能覆盖新状态。
 
 免费应用走免费授权流程；付费应用只请求该账号已经拥有的交付，不发起购买。访客不能下载付费应用。当前设备配置仍沿用上游 Pixel 8 / Android 15。后续设备设置应一起管理 fingerprint、build ID、型号、SDK、ABI 和显示配置，并在切换配置时重新注册设备及刷新会话；仅修改 fingerprint 不代表取得设备认证或 Play Integrity。
 
