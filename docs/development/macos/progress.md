@@ -1,18 +1,18 @@
 # 审计进度
 
-## 2026-10-10 每日上游同步：源码已合并，打包和推送待完成
+## 2026-10-10 每日上游同步：合并与完整本地验收完成
 
 本地 `main` 从 `5a7d2df` 快进到上游 `a08b695`，随后通过真实 merge 合入 `codex/macos-p0`。相对此前源码同步点 `75dc21f`，本次新增 30 个提交、61 个变化路径，包含 Play 搜索与登录修正、iOS 下载管理、bionic 接口、手柄初始化和 Vulkan/DXVK 适配。macOS 的商店界面和 SDL/DXVK 游戏入口没有在本轮接入。
 
 首次 merge 前逐项核对 `82f33e8..75dc21f` 的 117 个路径：109 个与上游 blob 相同，8 个保留已记录的本地实现。14 个显式冲突按这个已整合源码基线解决：11 个本地文件等于旧上游，接纳其后上游增量；3 个上游文件自该点未变，保留本地音频、GameActivity 和 Minecraft JNI 修复。另外移除了 Git 自动合并重复插入的 Geode 设置区块。最终源码树与以 `75dc21f` 为基线的独立三方核对结果完全一致，再更新本次来源和状态文档；没有使用 ours 合并策略。`src/macos`、`tests/macos`、CMake、macOS 依赖锁和打包实现均与合并前一致。
 
-保留 `build/macos` 的 Release、VM=ON 和已有依赖缓存，主 App、两种 Runner 及独立测试目标编译通过。11/11 项不依赖最终 App 包的后台 CTest 通过，包括鼠标、画布、文字输入、AAudio、binary128、VM 控制器、bridge 和核心测试。没有启动 Android 或用户 APK，也没有新增可见游戏窗口。
+保留 `build/macos` 的 Release、VM=ON 和已有依赖缓存，运行 `scripts/test_macos.sh` 完成主 App、两种 Runner 的编译与原地打包。完整默认 CTest **14/14 通过**，包括鼠标、画布、文字输入、AAudio、binary128、VM 控制器、bridge、核心测试，以及依赖最终 App 包的 `macos-input-vulkan`、`macos-library-session` 和 `macos-library-upgrade`。`verify_macos_bundle.py` 通过签名、arm64 架构、权限和依赖路径校验。没有启动 Android 或用户 APK，也没有新增可见游戏窗口。
 
-**尚未完成完整验收和推送。** 当前 `build/macos/Product/HuskMac.app` 主进程仍在运行；`package_macos.py` 会先递归删除目标 App，因此本轮没有执行 PackageMac。现用候选的 82 个普通文件 hash 保持不变。待当前 Husk 正常退出后，复用同一个 `build/macos` 完成打包，运行完整默认 CTest（含 `macos-input-vulkan`、`macos-library-session`、`macos-library-upgrade`）及 `verify_macos_bundle.py`，通过后正常推送 `main` 和 `codex/macos-p0` 并回读远端 SHA。两个分支的本地合并保留，不推送未完成验证的结果。
+源码合并保存在 `71265d1`。最初因主 App 仍在运行而暂缓打包；用户随后明确授权空闲时正常退出 Husk、更新后重启。每日任务已保存这一规则，运行时间仍为北京时间每日 09:00。后续根据实际游戏/VM 会话判断是否空闲，不再把仅运行主界面视为阻塞。此次补验收时 Husk 已退出，直接覆盖同一个 `build/macos/Product/HuskMac.app`，没有另存候选副本。更新后已重新打开该路径的 Husk，进程路径与应用清单均确认其运行；应用控制工具在读取窗口时断开，未取得主窗口的视觉验收结果。
 
 上游新加的 SPIRV-Cross 补丁及 iOS 构建接线已同步；本轮没有重建或修改 macOS 固定图形依赖，不能把上游 iOS 修复视为当前 macOS MoltenVK 二进制已更新。P5 的 Minecraft 黑屏/持续音频和 P6 发行门槛仍未通过。
 
-本轮日志复用 `build/logs/current-upstream-*`：`reconciliation.json` 记录 117 个旧同步路径的 blob 核对，`conflicts.json` 记录 14 个冲突的逐文件依据，`build.log`、`tests.log` 保存本次编译和 11 项测试，`active-bundle.json` 记录未替换的现用候选文件 hash。
+本轮日志复用 `build/logs/current-upstream-*`：`reconciliation.json` 记录 117 个旧同步路径的 blob 核对，`conflicts.json` 记录 14 个冲突的逐文件依据，`build.log`、`tests.log` 保存初次编译和 11 项测试，`active-bundle.json` 是替换前候选的历史快照；`final-checks.log` 保存最终打包和完整 14 项测试。最终包校验结果为 `build/macos/bundle-verification.json`。
 
 ## 2026-10-08 单一构建目录
 
