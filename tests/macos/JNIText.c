@@ -3,10 +3,19 @@
 #include <stdio.h>
 #include <string.h>
 void tl_mc_hle_install(const char *,const char *,const char *,int,int);
+void tl_hle_configure(const char *,const char *,const char *,int,int);
+void tl_jni_hle_install(void);
 void tl_log_line(const char *format,...){(void)format;}
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"JNI text check failed: %s\n",#x);return 1;}}while(0)
 int main(void) {
-    tl_jni_init();tl_mc_hle_install("com.husk.text-test","","/tmp",1280,720);
+    tl_jni_init();tl_hle_configure("com.husk.text-test","","/tmp",1280,720);tl_jni_hle_install();
+    tl_mc_hle_install("com.husk.text-test","","/tmp",1280,720);
+    jvalue class_args[3]={{.l=tl_jni_new_string("java.lang.String")},{.z=1},{.l=NULL}};
+    jobj *class_object=tl_jni_call(tl_jni_class_object("java/lang/Class"),"forName","(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",class_args).l;
+    CHECK(class_object==tl_jni_class_object("java/lang/String")&&!tl_jni_pending());
+    tl_jni_unref(class_args[0].l);class_args[0].l=tl_jni_new_string("org.husk.missing.TestClass");
+    CHECK(!tl_jni_call(tl_jni_class_object("java/lang/Class"),"forName","(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",class_args).l&&tl_jni_pending());
+    tl_jni_clear();tl_jni_unref(class_args[0].l);
     jvalue name={.l=tl_jni_new_string("UTF-8")};
     jobj *charset=tl_jni_call(tl_jni_class_object("java/nio/charset/Charset"),"forName","(Ljava/lang/String;)Ljava/nio/charset/Charset;",&name).l;
     CHECK(charset&&!tl_jni_pending());

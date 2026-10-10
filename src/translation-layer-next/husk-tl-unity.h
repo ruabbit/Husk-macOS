@@ -44,6 +44,7 @@ unsigned long tl_unity_frames(void);
 /* Send a connected controller's buttons and sticks to this engine (husk-tl-gamepad.h). */
 void tl_unity_register_pad_sink(void);
 void tl_unity_touch(int phase, int id, float x, float y);
+void tl_unity_key(int keycode, bool down, int repeat);
 
 /* How the last stretch went: frames per second, and the mean and worst time inside one nativeRender call. Resets what it measured. */
 typedef struct tl_unity_perf { double fps, mean_ms, max_ms; } tl_unity_perf;
@@ -51,6 +52,12 @@ void tl_unity_perf_snapshot(tl_unity_perf *out);
 
 /* Pause the engine the way UnityPlayer.onPause does (and resume it). Safe from any thread. */
 void tl_unity_set_paused(bool paused);
+/* Observed state, published only after the native lifecycle calls return. */
+typedef enum tl_unity_state {
+    TL_UNITY_IDLE, TL_UNITY_STARTING, TL_UNITY_RUNNING, TL_UNITY_PAUSED,
+    TL_UNITY_STOPPING, TL_UNITY_DESTROYED, TL_UNITY_FAILED
+} tl_unity_state;
+tl_unity_state tl_unity_get_state(void);
 
 /* Send a signal to the UnityMain thread (diagnostics: a backtrace handler in the host). */
 void tl_unity_poke(int signo);

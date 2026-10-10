@@ -5,13 +5,20 @@
 #define main husk_runner_main
 #define tl_ga_mouse recordMouse
 #define tl_ga_mouse_relative recordRelative
+#define tl_unity_touch recordUnityTouch
+#define tl_unity_key recordUnityKey
 #import "../../src/macos/NativeRunner/main.m"
 #undef main
 #undef tl_ga_mouse
 #undef tl_ga_mouse_relative
+#undef tl_unity_touch
+#undef tl_unity_key
 
 static struct { int action, buttons; float x,y,scroll; BOOL relative; } received[64];
 static int count;
+static int unityKey, unityKeyEvents;
+void recordUnityKey(int code,bool down,int repeat) { (void)down;(void)repeat;unityKey=code;unityKeyEvents++; }
+void recordUnityTouch(int phase,int id,float x,float y) { (void)id;recordMouse(phase,x,y,0,0); }
 void recordMouse(int action,float x,float y,int buttons,float scroll)
 {
     if(count<64)received[count++]=(typeof(received[0])){action,buttons,x,y,scroll,NO};
@@ -146,6 +153,24 @@ int main(void) { @autoreleasepool {
     CHECK(received[1].relative && received[2].relative && received[2].buttons==1);
     CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));
     CHECK(received[3].buttons==0);
+    minecraft=NO;unity=YES;runner.loaded=YES;runner.heldKeys=[NSMutableSet new];count=0;
+    CHECK(mouse(view,NSEventTypeLeftMouseDown,bar));
+    CHECK(mouse(view,NSEventTypeLeftMouseDragged,inside));
+    CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));
+    CHECK(count==0);
+    CHECK(mouse(view,NSEventTypeLeftMouseDown,inside));
+    CHECK(mouse(view,NSEventTypeLeftMouseDragged,bar));
+    CHECK(mouse(view,NSEventTypeLeftMouseUp,bar));
+    CHECK(count==3&&received[0].action==0&&received[1].action==1&&received[2].action==2);
+    CHECK(fabsf(received[0].x-640)<.01&&fabsf(received[0].y-405)<.01&&received[2].x==0);
+    CHECK(mouse(view,NSEventTypeRightMouseDown,inside));CHECK(count==3);
+    [runner guestKey:35 down:YES repeat:NO];CHECK(unityKey==44&&unityKeyEvents==1);
+    CHECK(mouse(view,NSEventTypeLeftMouseDown,inside));
+    [runner windowDidResignKey:[NSNotification notificationWithName:NSWindowDidResignKeyNotification object:window]];
+    CHECK(count==5&&received[4].action==3&&view.mouseButtons==0&&runner.heldKeys.count==0);
+    CHECK(unityKeyEvents==2&&[runner.state isEqual:@"running"]);
+    CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));CHECK(count==5);
+    puts("PASS Unity click/drag mapping, ignored bars/right button, keyboard and focus-loss cancellation");
     CHECK(!window.visible);
     [window close];
     puts("PASS captured move/drag forwards relative input without changing the system cursor");

@@ -36,7 +36,10 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     // imported the APK. Codable ignores the old persisted unavailableReason.
     public var runtime: String? {
         if fixture != nil { return "orbit" }
-        if (1...32).contains(apkNames.count) && engine == "Minecraft" && abis.contains("arm64-v8a") { return "minecraft" }
+        if (1...32).contains(apkNames.count) && abis.contains("arm64-v8a") {
+            if engine == "Minecraft" { return "minecraft" }
+            if engine?.hasPrefix("Unity") == true { return "unity" }
+        }
         return nil
     }
     public var playable: Bool { runtime != nil }

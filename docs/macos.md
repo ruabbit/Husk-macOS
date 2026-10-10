@@ -1,10 +1,10 @@
 # 原生 macOS 开发版
 
-当前实现包含 P1–P3 的原生构建、资料库、自建 **Orbit Garden / Dusk** 游戏，以及 P4 的 **Minecraft 1.26.52.3 arm64** 样本路径。Minecraft 使用真实 Android ELF、bionic/JNI 适配、GameActivity、ANGLE/Metal 和 AudioQueue。当前也允许从 GUI 启动其他识别为 Minecraft 的 arm64 APK 集合。支持的游戏统一显示“开始游戏”，测试样本与测试覆盖记录在开发文档中。旧资料库记录按当前运行组件重新判定，保留原有设置和存档。
+当前原生运行入口包含 **Orbit Garden / Dusk、Minecraft 和 Unity arm64 APK 集合**。Minecraft 与 Unity 使用真实 Android ELF、bionic/JNI 适配、ANGLE/Metal 和 AudioQueue，各自在独立 NativeRunner 中执行。资料库统一显示“开始游戏”，测试覆盖记录在开发文档中。旧 Play/本地导入按当前运行组件重新判定，无需重下，保留原有设置和存档。
 
 上游 main 的源码已合并到 `a08b695`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
 
-本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md) 和 [P4 Minecraft 报告](2026-10-08-macos-p4-report.md)。完整 DEX/ART、Unity、Unreal、Cocos、SDL、通用 NativeActivity 和 Rockstar 游戏还没有各自的 macOS 样本验收。
+本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md)、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 和 [上游接入现况](development/macos/upstream-parity.md)。完整 DEX/ART、Unreal、Cocos、SDL、通用 NativeActivity、Godot 和 Rockstar 尚未接入 macOS 原生启动链路。
 
 ## 构建与运行
 
@@ -42,13 +42,27 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 | `library.json` | 版本化索引、游戏设置及上次游玩时间 |
 | `Games/<id>` | APK 副本、图标、扫描报告和导入元数据 |
 | `Saves/<id>/checkpoint.json` | 与游戏文件分开的存档 |
-| `Saves/<id>/data` | Minecraft 管理的世界数据库及设置；其 checkpoint 只记录正常关闭回执 |
+| `Saves/<id>/data` | Minecraft / Unity 管理的游戏数据和设置；其 checkpoint 只记录正常关闭回执 |
 | `Logs/<session UUID>` | Runner 状态事件及独立 stderr |
 | `Staging`、`Trash` | 导入/移除事务暂存；不包含原始用户文件 |
 
 “移除游戏”保留存档；同一包重新导入后恢复使用。“清除存档”是详情页中的独立操作，并有确认。运行中的游戏禁止删除和清除存档。损坏索引或存档保留原文件并报告错误。同包、同签名且版本号更高的更新会原子替换游戏文件，保留应用身份、设置、上次游玩时间和存档。降级、签名不一致、损坏下载以及运行中的应用更新会被拒绝。安装事务日志用于恢复在文件替换和索引提交之间中断的更新。旧版单 APK 导入仍可读取；不能验证旧签名的安装不会被自动覆盖。
 
-普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft 的 arm64 APK 集合。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft 分包已传入原生加载器；其真实游戏兼容性仍需对应样本验收。游戏文件不随 Husk 分发；扫描成功并不代表完整兼容。
+普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft 或 Unity 的 arm64 APK 集合。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft 和 Unity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
+
+## Unity 运行
+
+Unity 根据 launcher Activity 的 manifest 方向选择固定画布：横屏 1280×720、竖屏 720×1280；窗口缩放和输入换算共用同一图层变换。鼠标左键点击/拖动映射触摸，键盘按键和手柄交给引擎。`⌘P` 暂停/继续，`⌘Q` 或关闭窗口等待 nativeDone 与线程结束后退出。默认失焦继续，失焦释放输入。Unity 软键盘/IME 尚未接入。
+
+2026-10-10 在真实 Play 安装的 Subway Surf 中确认竖屏年龄界面和滑块拖动，并通过暂停、恢复、正常关闭回执与进程回收。Fruit Ninja 的 20 秒检查仍为黑屏；Hole.io 已进入新版 Unity 初始化，但首帧前有空指针崩溃，尚未兼容。默认 CTest 22/22、签名和依赖闭包检查通过；游戏检查均静音、无窗口，使用独立测试数据，尚未验收完整玩法和实体输入设备。
+
+需要复查现有资料库的 Unity APK 时，显式运行下列后台入口。它只读 APK，将游戏数据写到指定测试目录；`GAME_ID` 来自资料库索引，输出目录必须位于日常资料库之外。
+
+```sh
+build/macos/MacUnitySession build/macos/Product/HuskMac.app \
+  "$HOME/Library/Application Support/org.husk.HuskMac" GAME_ID \
+  build/macos/TestResults/UnityReal --seconds 20
+```
 
 ## Google Play
 

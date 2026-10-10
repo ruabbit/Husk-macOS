@@ -1,5 +1,17 @@
 # 审计进度
 
+## 2026-10-10 Unity 运行时接入
+
+Unity 驱动已编入 macOS NativeRunner。资料库按引擎和 arm64 ABI 动态分发，旧 Play 导入无需重下；Runner 独立复核全部 APK 的 hash、引擎和 ABI。启动读取 manifest 中的包名和 launcher 方向，支持 Activity alias；固定画布为横屏 1280×720 或竖屏 720×1280。鼠标左键/拖动映射触摸，键盘与手柄进入 Unity JNI；默认失焦继续并释放输入，未接入 Unity 软键盘/IME。
+
+初始化与关闭在同一串行队列协调，UI 与控制通道在加载时保持响应。UnityMain 完成 nativePause/nativeResume 后才确认状态，nativeDone 返回且线程 join 后才写入当前会话的 storage-closed 回执。引擎主动退出、缺失销毁入口、加载失败或超时不会伪报正常存储关闭。新旧 UnityPlayer 注册类、三参数 initJni 和 Class.forName 重载均有适配。
+
+最终默认 CTest **22/22 通过**，包签名、权限、依赖闭包通过。新增新旧 Unity 生命周期、缺失销毁、引擎退出、manifest 方向/alias 测试；扩充 AppKit 真实 NSEvent 的 Unity 点击/拖动/失焦检查和旧资料库升级/伪造引擎拒绝检查。证据：`build/logs/current-runtime-ctest.log`、`build/macos/bundle-verification.json`。
+
+真实游戏均只读使用现有 APK，在 `build/macos/TestResults/UnityReal`、`UnityFruit`、`UnityHole` 使用独立数据，无可见游戏窗口、无声音。Subway Surf 已显示 720×1280 年龄界面，拖动滑块从 00 变为 22，未提交年龄或确认条款；失焦继续、暂停/恢复、正常销毁与进程回收通过。Fruit Ninja 能持续提交帧并正常暂停/关闭，但 20 秒画面仍全黑。Hole.io 的新版接口加载已接通，首帧前仍有 SIGSEGV / 空指针，Runner 已捕获并按失败回收，无系统崩溃窗口；日志同时记录 AChoreographer 等未实现导入，尚不能确定故障根因。没有把后二者记为游戏兼容。
+
+候选继续覆盖同一个 `build/macos/Product/HuskMac.app`，已单次重开并核对进程路径。CUA 原生通道仍断开，资料库按钮的前台点击未验收。日常 APK、资料库设置、存档和 Android 磁盘未修改；其他引擎接入和 Play 个人账号登录保留为后续待办。
+
 ## 2026-10-10 每日同步范围复核
 
 用户指出上游早已支持 Unity 和 Store。重新 fetch 两个远程、核对 Git 祖先与远端 SHA：上游和 fork main 均为 `a08b695`，macOS 分支已包含它，没有遗漏的新提交。Unity 原生入口来自 `00ecffb`，Store 来自 `bac475a`；上游 `ca70a4b` 的两处登录参数修复也在当前共享 PlayAPI 中。

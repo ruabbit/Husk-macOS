@@ -37,7 +37,7 @@ target_link_libraries(SharedCore PUBLIC z "-framework CoreGraphics")
 
 add_library(SharedLibrary STATIC
     ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
-    ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/VMController.swift
+    ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/NativeLaunch.swift ${MAC}/SharedLibrary/VMController.swift
     src/app/Husk/ApkMetadata.swift src/app/Husk/BundleUnpacker.swift)
 target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security")
 target_compile_options(SharedLibrary PRIVATE -I ${MAC}/SharedCore)
@@ -51,7 +51,7 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-jni-input.c ${NEXT}/husk-tl-jni-assetstream.c ${NEXT}/husk-tl-jni-tls.c
     ${NEXT}/husk-tl-jni-http.c ${NEXT}/husk-tl-jni-security.c ${NEXT}/husk-tl-jni-fmod.c ${NEXT}/husk-tl-jni-gms.c
     ${NEXT}/husk-tl-jni-minecraft.c ${NEXT}/husk-tl-jni-text.c ${NEXT}/husk-tl-dexindex.c
-    ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-gamepad.c
+    ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-unity.c ${NEXT}/husk-tl-gamepad.c
     ${NEXT}/husk-tl-audio.c ${NEXT}/husk-tl-http.m ${NEXT}/husk-tl-vulkan.m)
 target_include_directories(GameActivityRuntime PUBLIC ${NEXT} PRIVATE ${CLASSIC})
 target_compile_options(GameActivityRuntime PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
@@ -143,6 +143,17 @@ endif()
 add_executable(JNITextTests tests/macos/JNIText.c)
 target_link_libraries(JNITextTests PRIVATE GameActivityRuntime)
 add_test(NAME android-jni-text COMMAND JNITextTests)
+add_executable(UnityLifecycleTests tests/macos/UnityLifecycle.c)
+target_link_libraries(UnityLifecycleTests PRIVATE NativeRuntime)
+add_test(NAME unity-lifecycle COMMAND UnityLifecycleTests)
+add_test(NAME unity-incomplete-destroy COMMAND UnityLifecycleTests missing-done)
+add_test(NAME unity-guest-quit COMMAND UnityLifecycleTests guest-quit)
+add_test(NAME unity-modern-player COMMAND UnityLifecycleTests modern-player)
+set_tests_properties(unity-lifecycle unity-incomplete-destroy unity-guest-quit unity-modern-player PROPERTIES TIMEOUT 10)
+add_executable(MacNativeLaunchTests tests/macos/NativeLaunchTests.swift ${MAC}/SharedLibrary/NativeLaunch.swift src/app/Husk/ApkMetadata.swift)
+target_compile_options(MacNativeLaunchTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacNativeLaunchTests PRIVATE SharedCore)
+add_test(NAME macos-native-launch COMMAND MacNativeLaunchTests)
 add_executable(MacTextInputTests tests/macos/TextInput.m ${MAC}/NativeRunner/MacTextInput.m)
 target_include_directories(MacTextInputTests PRIVATE ${MAC}/NativeRunner)
 target_compile_options(MacTextInputTests PRIVATE -fobjc-arc)
@@ -196,6 +207,9 @@ target_link_libraries(MacCycles PRIVATE SharedLibrary)
 add_executable(MacMinecraftSession tests/macos/MinecraftSession.swift)
 target_compile_options(MacMinecraftSession PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacMinecraftSession PRIVATE SharedLibrary)
+add_executable(MacUnitySession tests/macos/UnitySession.swift)
+target_compile_options(MacUnitySession PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacUnitySession PRIVATE SharedLibrary)
 if(EXISTS "${CMAKE_SOURCE_DIR}/tests/macos/Integration.swift")
     add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/Cases/ready
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_cases.py ${FIXTURES} ${CMAKE_BINARY_DIR}/Cases

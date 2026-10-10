@@ -61,6 +61,7 @@ final class PipeReader: @unchecked Sendable {
     private var lastEvent = Date()
     private var startDate = Date()
     private var guestManagedStorage = false
+    private var runtime: String?
 
     public init() { signal(SIGPIPE, SIG_IGN) }
 
@@ -69,7 +70,8 @@ final class PipeReader: @unchecked Sendable {
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
-        guestManagedStorage = runtime == "minecraft"
+        guestManagedStorage = runtime == "minecraft" || runtime == "unity"
+        self.runtime = runtime
         let id = UUID().uuidString
         let sessionLog = logs.appendingPathComponent(id)
         try FileManager.default.createDirectory(at: sessionLog, withIntermediateDirectories: true)
@@ -86,6 +88,7 @@ final class PipeReader: @unchecked Sendable {
         child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
+        if runtime == "unity" { child.arguments! += NativeLaunch.unityArguments(apk: apk, package: game.packageName) }
         for name in game.apkNames.dropFirst() {
             child.arguments! += ["--split", apk.deletingLastPathComponent().appendingPathComponent(name).path]
         }
@@ -190,6 +193,9 @@ final class PipeReader: @unchecked Sendable {
                       let checkpoint, let data = try? Data(contentsOf: checkpoint),
                       let saved = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                       saved["session"] as? String == sessionID else { fail("未能确认游戏存档写入。"); return }
+                if guestManagedStorage && (saved["runtime"] as? String != runtime || saved["lifecycle"] as? String != "destroyed") {
+                    fail("运行组件没有完成存储关闭确认。"); return
+                }
                 checkpointReceived = true
             }
             if phase == "failed" { error = event["reason"] as? String ?? "游戏启动失败。" }
