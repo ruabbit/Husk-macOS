@@ -1,5 +1,11 @@
 # 审计进度
 
+## 2026-10-10 每日同步范围复核
+
+用户指出上游早已支持 Unity 和 Store。重新 fetch 两个远程、核对 Git 祖先与远端 SHA：上游和 fork main 均为 `a08b695`，macOS 分支已包含它，没有遗漏的新提交。Unity 原生入口来自 `00ecffb`，Store 来自 `bac475a`；上游 `ca70a4b` 的两处登录参数修复也在当前共享 PlayAPI 中。
+
+遗漏在平台迁移：CMake 未编入 Unity 等引擎驱动，资料库与 NativeRunner 只接受 Orbit/Minecraft。Store 已使用共享上游 API，macOS 窗口和下载入库由平台代码适配。此前只以 Git 合并和已有 CTest 作为每日同步完成条件，没有持续推进或准确报告这些功能缺口。新增 [功能接入现况](upstream-parity.md) 作为后续同步检查和迁移待办；本轮没有运行时代码变化，不重复构建或启动应用。
+
 ## 2026-10-10 Google 拒绝个人账号登录
 
 用户实际验证上一候选后，Chrome 显示 `accounts.google.com/v3/signin/rejected`，提示“此浏览器或应用可能不安全”。重新读取 Husk 界面确认应用只显示“Google 登录连接中断”，仍宣称支持 passkey 并要求重开。该结果推翻了上一节中 Chrome 路径可用的假设，个人账号与 passkey 验收失败。
