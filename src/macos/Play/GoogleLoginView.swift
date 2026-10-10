@@ -10,6 +10,7 @@ struct GoogleLoginView: View {
     @State private var attempt = UUID()
     @State private var loading = true
     @State private var webError: String?
+    @State private var rejected = false
     var body: some View {
         VStack(spacing: 12) {
             HStack {
@@ -17,25 +18,32 @@ struct GoogleLoginView: View {
                 Spacer()
                 Button("取消") { store.cancelLogin(); dismiss() }.keyboardShortcut(.cancelAction)
             }
-            if embedded {
-                GoogleLoginWebView(loading: $loading, error: $webError) { token in
+            if rejected {
+                Spacer()
+                Image(systemName: "exclamationmark.circle").font(.largeTitle).foregroundStyle(.orange)
+                Text("Google 未接受本次登录").font(.headline)
+                Text("当前个人账号登录方式无法继续。你可以关闭此窗口，使用访客账号浏览和下载免费应用。")
+                    .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Spacer()
+            } else if embedded {
+                GoogleLoginWebView(loading: $loading, error: $webError, rejected: $rejected) { token in
                     store.connect(token: token)
                 }.id(attempt).disabled(store.busy)
                 if store.busy { ProgressView("正在建立 Play 会话…") }
                 else if loading { ProgressView("正在加载 Google 登录…") }
                 if GoogleBrowserLogin.browser != nil {
-                    Button("使用 Chrome 登录（支持 passkey）") {
+                    Button("使用 Chrome 登录") {
                         embedded = false; webError = nil; store.error = nil; openBrowser()
                     }.disabled(store.busy || browser.active)
                 } else {
-                    Text("内置登录可使用密码和验证码。Passkey 登录需要 Google Chrome。")
+                    Text("内置登录不支持 Google passkey。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 Spacer()
                 if browser.active { ProgressView("请在 Chrome 中完成 Google 登录") }
                 else if store.busy { ProgressView("正在建立 Play 会话…") }
-                Text("可使用 passkey、手机或安全密钥。登录完成后会自动返回 Husk。")
+                Text("请按 Google 页面提示完成验证。取得登录结果后，Husk 会尝试连接 Play。")
                     .foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Spacer()
                 Button("改用内置登录") {
@@ -44,12 +52,14 @@ struct GoogleLoginView: View {
             }
             if let message = webError ?? store.error {
                 Text(message).foregroundStyle(.red).textSelection(.enabled)
-                Button("重新打开登录页") {
-                    store.cancelLogin(); store.error = nil; webError = nil; loading = true
-                    if embedded { attempt = UUID() } else { openBrowser() }
-                }.disabled(browser.active || store.busy)
+                if !rejected {
+                    Button("重新打开登录页") {
+                        store.cancelLogin(); store.error = nil; webError = nil; loading = true
+                        if embedded { attempt = UUID() } else { openBrowser() }
+                    }.disabled(browser.active || store.busy)
+                }
             }
-        }.padding(20).frame(width: embedded ? 620 : 520, height: embedded ? 720 : 260)
+        }.padding(20).frame(width: embedded && !rejected ? 620 : 520, height: embedded && !rejected ? 720 : 300)
         .onAppear { if !embedded { openBrowser() } }
         .onDisappear { store.cancelLogin() }
         .onChange(of: store.session != nil) { _, signedIn in if signedIn { dismiss() } }
@@ -60,7 +70,9 @@ struct GoogleLoginView: View {
             case .success(let token):
                 NSApp.activate(ignoringOtherApps: true)
                 store.connect(token: token)
-            case .failure(let error): store.error = error.localizedDescription
+            case .failure(let error):
+                rejected = error is GoogleLoginFailure
+                store.error = error.localizedDescription
             }
         }
     }
@@ -69,6 +81,7 @@ struct GoogleLoginView: View {
 struct GoogleLoginWebView: NSViewRepresentable {
     @Binding var loading: Bool
     @Binding var error: String?
+    @Binding var rejected: Bool
     let captured: (String) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> WKWebView {
@@ -117,6 +130,12 @@ struct GoogleLoginWebView: NSViewRepresentable {
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url, GoogleLoginPolicy.allows(url) else { decisionHandler(.cancel); return }
+            if navigationAction.targetFrame?.isMainFrame == true, GoogleLoginPolicy.isRejection(url) {
+                done = true
+                parent.loading = false; parent.rejected = true
+                parent.error = GoogleLoginFailure.browserRejected.localizedDescription
+                decisionHandler(.cancel); return
+            }
             decisionHandler(.allow)
         }
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,

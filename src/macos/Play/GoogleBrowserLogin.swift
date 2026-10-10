@@ -92,26 +92,10 @@ import Darwin
 
     func waitForLogin() async throws -> String {
         let deadline = Date().addingTimeInterval(600)
-        var session: String?
+        var poller = GoogleLoginPoller()
         while Date() < deadline {
             try Task.checkCancellation()
-            if session == nil {
-                let reply = try await connection.request("Target.getTargets")
-                let pages = reply["targetInfos"] as? [[String: Any]] ?? []
-                if let target = pages.first(where: {
-                    $0["type"] as? String == "page" && ($0["url"] as? String).flatMap(URL.init(string:)).map(GoogleLoginPolicy.allows) == true
-                })?["targetId"] as? String {
-                    let attached = try await connection.request("Target.attachToTarget", parameters: ["targetId": target, "flatten": true])
-                    session = attached["sessionId"] as? String
-                }
-            }
-            if let session {
-                let reply = try await connection.request("Network.getCookies", parameters: ["urls": [GoogleLoginPolicy.url.absoluteString]], session: session)
-                if let raw = reply["cookies"], JSONSerialization.isValidJSONObject(raw) {
-                    let cookies = try JSONDecoder().decode([GoogleLoginPolicy.Cookie].self, from: JSONSerialization.data(withJSONObject: raw))
-                    if let token = GoogleLoginPolicy.token(in: cookies) { return token }
-                }
-            }
+            if let token = try await poller.poll(connection) { return token }
             try await Task.sleep(for: .milliseconds(500))
         }
         throw PlayError("Google 登录已超时，请重试。")
@@ -130,6 +114,49 @@ import Darwin
         // from a normal Chrome profile or its running processes is inspected.
         while waitpid(pid, &status, WNOHANG) == 0 { try? await Task.sleep(for: .milliseconds(100)) }
         try? FileManager.default.removeItem(at: directory)
+    }
+}
+
+/// Inspect navigation on every poll, including after a protocol failure. A
+/// Google rejection is terminal, not a missing cookie to wait ten minutes for.
+/// URLs are used only to classify the page and are never included in errors.
+@MainActor struct GoogleLoginPoller {
+    private var targetID: String?
+    private var session: String?
+
+    private func pages(_ connection: PlayLoginPipe) async throws -> [[String: Any]] {
+        let reply = try await connection.request("Target.getTargets")
+        let pages = (reply["targetInfos"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "page" }
+        if pages.contains(where: {
+            ($0["url"] as? String).flatMap(URL.init(string:)).map(GoogleLoginPolicy.isRejection) == true
+        }) { throw GoogleLoginFailure.browserRejected }
+        return pages
+    }
+
+    mutating func poll(_ connection: PlayLoginPipe) async throws -> String? {
+        let pages = try await self.pages(connection).filter {
+            ($0["url"] as? String).flatMap(URL.init(string:)).map(GoogleLoginPolicy.allows) == true
+        }
+        guard let target = (pages.first { $0["targetId"] as? String == targetID } ?? pages.first)?["targetId"] as? String else {
+            targetID = nil; session = nil; return nil
+        }
+        if target != targetID || session == nil {
+            let attached = try await connection.request("Target.attachToTarget", parameters: ["targetId": target, "flatten": true])
+            targetID = target; session = attached["sessionId"] as? String
+        }
+        guard let session else { return nil }
+        let reply: [String: Any]
+        do {
+            reply = try await connection.request("Network.getCookies", parameters: ["urls": [GoogleLoginPolicy.url.absoluteString]], session: session)
+        } catch {
+            // A navigation can replace the renderer while cookies are being
+            // requested. Prefer Google's actual rejection over a pipe error.
+            _ = try await self.pages(connection)
+            throw error
+        }
+        guard let raw = reply["cookies"], JSONSerialization.isValidJSONObject(raw) else { return nil }
+        let cookies = try JSONDecoder().decode([GoogleLoginPolicy.Cookie].self, from: JSONSerialization.data(withJSONObject: raw))
+        return GoogleLoginPolicy.token(in: cookies)
     }
 }
 

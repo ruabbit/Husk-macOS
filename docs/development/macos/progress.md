@@ -1,5 +1,15 @@
 # 审计进度
 
+## 2026-10-10 Google 拒绝个人账号登录
+
+用户实际验证上一候选后，Chrome 显示 `accounts.google.com/v3/signin/rejected`，提示“此浏览器或应用可能不安全”。重新读取 Husk 界面确认应用只显示“Google 登录连接中断”，仍宣称支持 passkey 并要求重开。该结果推翻了上一节中 Chrome 路径可用的假设，个人账号与 passkey 验收失败。
+
+本次补上浏览器每轮目标页面检查、拒绝时立即结束和 renderer 切换期间的错误归因；内置 WebKit 使用相同拒绝判断。错误文本不包含 URL 参数或协议内容。删除确定性的 passkey 支持承诺，拒绝后不再提示原样重试或切回另一个未验证的登录方式。前置邮箱输入保持删除。
+
+查阅 Google 当前支持说明、桌面 OAuth 与 scope 列表：软件控制的浏览器可能被拒绝；公开桌面 OAuth 没有当前下载器所用的 `googleplay` scope，Play Developer API 的 `androidpublisher` 不能替代消费者下载凭据。尚无已验证的替代登录方案。这次修复的是拒绝处理，不能写成个人账号或 passkey 已恢复。
+
+针对性回归覆盖登录中途拒绝、首次即拒绝、renderer 切换与拒绝同时发生、正常换页后取得合成 cookie，以及来源校验和 URL 参数不泄露。测试使用合成协议，不登录真实账号。完整默认 CTest **17/17 通过**，签名、权限与依赖检查通过；证据复用 `build/logs/current-play-login-checks.log` 和 `build/macos/bundle-verification.json`。候选覆盖到同一个 `build/macos/Product/HuskMac.app`，正常退出旧进程后重开；新的进程路径已核对，更新后 UI 自动化绑定仍失败，没有把界面及真实登录验收记为通过。
+
 ## 2026-10-10 Google 登录流程修复
 
 删除 macOS 登录前置邮箱输入，后台从 Google 账号令牌交换响应读取 Email，缺少身份时明确报错，不从网页文本猜测。原有 iOS accountToken 调用签名保留。内置 WebView 恢复默认桌面 user agent，并处理同窗口 Google 跳转。

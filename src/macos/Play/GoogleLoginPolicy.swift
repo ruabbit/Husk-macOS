@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
+enum GoogleLoginFailure: LocalizedError {
+    case browserRejected
+
+    var errorDescription: String? {
+        "Google 拒绝了这个登录窗口，提示“此浏览器或应用可能不安全”。本次登录未完成，Husk 尚未取得 Play 会话。"
+    }
+}
+
 enum GoogleLoginPolicy {
     static let url = URL(string: "https://accounts.google.com/EmbeddedSetup")!
     struct Cookie: Decodable {
@@ -20,5 +28,9 @@ enum GoogleLoginPolicy {
     static func allows(_ url: URL) -> Bool {
         url.scheme == "https" && url.user == nil && url.password == nil &&
         (url.host == "google.com" || url.host?.hasSuffix(".google.com") == true)
+    }
+    static func isRejection(_ url: URL) -> Bool {
+        guard allows(url), url.host == "accounts.google.com", url.port == nil || url.port == 443 else { return false }
+        return ["/signin/rejected", "/v2/signin/rejected", "/v3/signin/rejected"].contains(url.path)
     }
 }

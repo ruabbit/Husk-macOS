@@ -54,9 +54,13 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 
 资料库工具栏的“Google Play”打开原生 macOS 商店窗口，可使用访客账号或 Google 账号搜索、查看详情、下载和更新应用。下载完成后自动校验并加入资料库，无需手工打包分包。下载显示进度，可以取消；失败可重试，临时下载和失败导入不会保留半套安装。启动入口仍使用资料库现有的原生/Android 运行组件。
 
-点击“登录 Google 账号”后直接进入 Google 登录流程，Husk 不再额外索要邮箱；账号邮箱取自 Google 交换登录结果的响应。有 Google Chrome 时，默认打开独立 Chrome 窗口，由浏览器处理 passkey、手机和安全密钥验证。这个窗口使用权限为 0700 的临时资料目录和私有管道，不使用日常浏览器资料，也不开放调试端口。完成、取消、超时或退出 Husk 时关闭这个登录进程并清理临时目录。Husk 只取当前登录所需的 Google `oauth_token`，不读取密码、passkey 私钥或其他浏览器资料。
+个人账号及 passkey 登录尚未通过：2026-10-10 用户实测进入 Google 的 `/v3/signin/rejected` 页面，提示“此浏览器或应用可能不安全”。Husk 同时误报为登录连接中断。Chrome 能打开、传输层测试通过，都不能证明 Google 接受该登录方案。
 
-没有 Chrome 时使用隔离的临时 WebKit 登录页，也可手动切换到内置登录。内置页使用默认桌面浏览器标识，可使用密码和验证码。普通 WKWebView 的 passkey 需要网站关联域名，Husk 无法替 Google 配置该关联，因此 Google passkey 走 Chrome 路径。系统可能要求本人确认 Chrome 对已保存 passkey 的使用。参见 [Apple passkey 文档](https://developer.apple.com/documentation/authenticationservices/supporting-passkeys) 和 [Chrome passkey 文档](https://support.google.com/chrome/answer/13168025)。
+点击“登录 Google 账号”直接进入 Google 页面，Husk 不再额外索要邮箱；账号邮箱取自 Google 交换登录结果的响应。有 Chrome 时使用独立窗口、权限为 0700 的临时资料目录及私有调试管道，没有网络调试端口。完成、拒绝、取消、超时或退出 Husk 时关闭本次登录进程并清理临时目录。Husk 只取此临时登录中的 Google `oauth_token`，不读取日常浏览器资料。现在每轮轮询检查 Google 拒绝页面，拒绝后结束本次尝试并显示实际原因，不继续等待十分钟或提供原样重试。
+
+无 Chrome 时保留临时 WebKit 登录页，同样处理 Google 拒绝。此页面不支持 Google passkey，也不能保证 Google 接受密码登录。[Google 官方说明](https://support.google.com/accounts/answer/7675428)可能阻止受软件控制的浏览器及嵌入式登录；[Apple 文档](https://developer.apple.com/documentation/authenticationservices/supporting-passkeys)要求普通 WKWebView 的 passkey 配置网站关联域名。因此当前 Chrome 路径和 WebKit 路径均不应标注为已支持个人账号登录。
+
+后续登录方案还缺少可用的 Play 凭据回传机制。[桌面 OAuth](https://developers.google.com/identity/protocols/oauth2/native-app)使用注册的客户端、系统浏览器及应用回调；它不能直接替换现有的 Android `EmbeddedSetup → oauth_token → /auth` 流程。Husk 请求的 `googleplay` scope 不在[公开 scope 列表](https://developers.google.com/identity/protocols/oauth2/scopes)中，公开的 `androidpublisher` 面向开发者管理应用，不能据此实现用户下载其他发行者的应用。尚未验证受支持的替代路径，不要求用户反复尝试被拒绝的窗口。
 
 Play 会话只存入 `org.husk.HuskMac.play` 钥匙串项，不存入 UserDefaults，不写入日志；退出登录清除该项。HTTP 401 会刷新令牌并重试一次，搜索和详情错误会显示。退出登录或较新的搜索发起后，旧请求不能覆盖新状态。
 

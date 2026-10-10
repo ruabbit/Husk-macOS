@@ -24,6 +24,34 @@ private final class LoginHTTP: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+/// Script browser navigation and cookie replies through the real transport.
+/// No Chrome process, network requests or personal account data are involved.
+@MainActor private func loginPolls(_ replies: [[String: Any]],
+                                  _ check: (inout GoogleLoginPoller, PlayLoginPipe) async throws -> Void) async throws {
+    let outgoing = Pipe(), incoming = Pipe()
+    let transport = PlayLoginPipe(reader: incoming.fileHandleForReading, writer: outgoing.fileHandleForWriting)
+    defer {
+        transport.close(); outgoing.fileHandleForReading.readabilityHandler = nil
+        try? outgoing.fileHandleForReading.close(); try? incoming.fileHandleForWriting.close()
+    }
+    outgoing.fileHandleForReading.readabilityHandler = { handle in
+        let data = handle.availableData
+        for part in data.split(separator: 0) {
+            guard let request = (try? JSONSerialization.jsonObject(with: Data(part))) as? [String: Any],
+                  let id = request["id"] as? Int else { continue }
+            var response: [String: Any] = ["id": id]
+            if (1...replies.count).contains(id), replies[id - 1]["method"] as? String == request["method"] as? String {
+                response.merge(replies[id - 1].filter { $0.key != "method" }) { _, value in value }
+            } else { response["error"] = ["message": "unexpected test request"] }
+            if var packet = try? JSONSerialization.data(withJSONObject: response) {
+                packet.append(0); try? incoming.fileHandleForWriting.write(contentsOf: packet)
+            }
+        }
+    }
+    var poller = GoogleLoginPoller()
+    try await check(&poller, transport)
+}
+
 @MainActor func checkPlayLogin() async throws {
     func check(_ condition: Bool, _ label: String) throws { if !condition { throw PlayError("FAIL \(label)") }; print("PASS \(label)") }
     typealias Cookie = GoogleLoginPolicy.Cookie
@@ -37,6 +65,50 @@ private final class LoginHTTP: URLProtocol, @unchecked Sendable {
     try check(GoogleLoginPolicy.token(in: [good, Cookie(name: "oauth_token", value: "other-account", domain: "accounts.google.com", secure: true)]) == nil,
               "ambiguous account cookies cannot select an arbitrary account")
     try check(!GoogleLoginPolicy.allows(URL(string: "https://google.com.example.invalid")!) && !GoogleLoginPolicy.allows(URL(string: "http://accounts.google.com")!), "login navigation validates origin")
+    let rejectionURL = "https://accounts.google.com/v3/signin/rejected?continue=synthetic-private-value"
+    try check(GoogleLoginPolicy.isRejection(URL(string: rejectionURL)!), "Google browser rejection is recognized")
+    for url in ["https://accounts.google.com.example.invalid/v3/signin/rejected",
+                "https://accounts.google.com:8443/v3/signin/rejected",
+                "https://accounts.google.com/EmbeddedSetup?continue=/v3/signin/rejected"] {
+        try check(!GoogleLoginPolicy.isRejection(URL(string: url)!), "untrusted origins and query text cannot invent a rejection")
+    }
+    func targets(_ url: String, id: String = "login-page") -> [String: Any] {
+        ["method": "Target.getTargets", "result": ["targetInfos": [["type": "page", "targetId": id, "url": url]]]]
+    }
+    let attached: [String: Any] = ["method": "Target.attachToTarget", "result": ["sessionId": "synthetic-session"]]
+    let waiting: [String: Any] = ["method": "Network.getCookies", "result": ["cookies": []]]
+    let accepted: [String: Any] = ["method": "Network.getCookies", "result": ["cookies": [
+        ["name": good.name, "value": good.value, "domain": good.domain, "secure": true]
+    ]]]
+    let normal = targets(GoogleLoginPolicy.url.absoluteString), rejected = targets(rejectionURL)
+    try await loginPolls([normal, attached, waiting, rejected]) { poller, transport in
+        let pending = try await poller.poll(transport)
+        try check(pending == nil, "unfinished Google sign-in remains pending")
+        var refused = false
+        do { _ = try await poller.poll(transport) }
+        catch GoogleLoginFailure.browserRejected { refused = true }
+        try check(refused, "navigation to rejection ends login before cookie polling or timeout")
+    }
+    try await loginPolls([normal, attached,
+                         ["method": "Network.getCookies", "error": ["message": "renderer changed"]], rejected]) { poller, transport in
+        var refused = false
+        do { _ = try await poller.poll(transport) }
+        catch GoogleLoginFailure.browserRejected { refused = true }
+        try check(refused, "Google rejection during renderer replacement is not reported as a connection error")
+    }
+    try await loginPolls([rejected]) { poller, transport in
+        var refused = false
+        do { _ = try await poller.poll(transport) }
+        catch GoogleLoginFailure.browserRejected { refused = true }
+        try check(refused && !GoogleLoginFailure.browserRejected.localizedDescription.contains("synthetic-private-value"),
+                  "initial rejection fails immediately without exposing URL parameters")
+    }
+    try await loginPolls([normal, attached, waiting,
+                         targets(GoogleLoginPolicy.url.absoluteString, id: "replacement-page"), attached, accepted]) { poller, transport in
+        _ = try await poller.poll(transport)
+        let token = try await poller.poll(transport)
+        try check(token == good.value, "login follows a replacement page and accepts its scoped cookie")
+    }
 
     let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [LoginHTTP.self]
     let session = URLSession(configuration: configuration); defer { session.invalidateAndCancel() }
