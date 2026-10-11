@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "75dc21f82c1fd748867ad4d4b5dfb0e981c2d468",
-  "integratedRevision": "a08b69551332c6b9f166c2efa1ea28c171082a6c",
-  "checkedOn": "2026-10-10",
-  "commitCount": 30,
-  "integration": "Merged through fork main with Git ancestry. The prior source reconciliation at 75dc21f, preserved in checkpoint 9573597, was audited across all 117 changed paths before resolving the first merge. Local macOS changes retained; packaged validation and push status are tracked in docs/development/macos/progress.md.",
+  "previousRevision": "a08b69551332c6b9f166c2efa1ea28c171082a6c",
+  "integratedRevision": "8a9dc1bffc63c2d7cc6c5c3642c8d2ac4ae8bcd0",
+  "checkedOn": "2026-10-11",
+  "commitCount": 75,
+  "integration": "Merged through fork main with Git ancestry. Five shared-runtime conflicts reconciled individually; macOS split limits, lifecycle, offscreen pacing and binary128 precision retained. New shared Dalvik/NDK modules compiled and linked. Default CTest 25/25 and packaged bundle validation pass. Java application launch is not yet connected; runtime coverage and pending UI restart are tracked in docs/development/macos/upstream-parity.md and progress.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522"
 }

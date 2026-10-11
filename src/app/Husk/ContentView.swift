@@ -59,15 +59,15 @@ struct ContentView: View {
                     .tabItem { Label("Store", systemImage: "cart.fill") }
                     .tag(HuskTab.store)
 
-                DownloadsTab()
-                    .tabItem { Label("Downloads", systemImage: "arrow.down.circle.fill") }
-                    .tag(HuskTab.downloads)
-
                 SettingsTab()
                     .tabItem { Label("Settings", systemImage: "gearshape.fill") }
                     .tag(HuskTab.settings)
             }
             .opacity(showGuestScreen && started && runner.isRunning ? 0 : 1)
+
+            // Multitasking: an app in a window over everything else in Husk (AppWindows.swift).
+            AppWindowLayer()
+                .ignoresSafeArea(.keyboard)
 
             // Outcomes, over whichever tab is showing. Above the tab bar rather
             // than over it: a message that covers the way out of the screen it
@@ -148,6 +148,7 @@ struct ContentView: View {
         }
         .task { await updates.check() }
         .sheet(isPresented: $router.showFiles) { FilesTab() }
+        .sheet(isPresented: $router.showDownloads) { DownloadsTab() }
         // Pictures for the apps here: read the index on launch and whenever the set of apps changes.
         .task(id: showcasePackages) { showcase.refresh(for: showcasePackages) }
         .alert("Metadata Updated", isPresented: Binding(get: { showcase.shouldAsk && !showOnboarding },

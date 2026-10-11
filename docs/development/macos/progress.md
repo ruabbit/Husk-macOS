@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-11 上游运行时合并与 macOS 编译接入
+
+本轮开始时工作树干净，位于 `codex/macos-p0`，两个 origin 分支与本地一致，无未完成 Git 操作。fetch 得到上游 `a08b695..8a9dc1b` 共 75 个提交、3,210 个变化路径，主要新增 Java/Dalvik 框架、Flutter、GameMaker、Python/Web 路径及底层 JNI/NDK 修复。先将本地 main 快进至上游，再以真实 merge 合入 macOS，未使用 ours 策略。Store / Play 登录和 ANGLE / MoltenVK 构建脚本、补丁在该范围内无新改动。
+
+5 个冲突文件逐段处理：loader 保留 32 APK 上限及按 4 KiB 段判断数据地址，同时采用上游避免将回调代码指针转入写视图的检查；EGL 合入纹理窗口并保留离屏提交与节流；AAudio 合入 float / channel / burst 与写入式播放，保留 FMOD 探测和 callback STOP 后 join / restart；Unity 保留串行生命周期与 nativeDone 回执，并兼容上游两参数 initJni。AppKit 鼠标、画布、默认失焦继续、会话和存储关闭代码保持不变。
+
+CMake 补入新 NDK、long double、AudioTrack、Dalvik 核心、Java 图形/GLES/媒体/音频/SQLite/传感器/WebView 模块及 Vorbis 解码器，主 App 与 NativeRunner 编译链接通过。新 long double 表最初覆盖了精确 binary128 缩放，被原有测试检出；将精确 frexpl/ldexpl 移到新的统一模块后通过。Java app profile、boot class path 与框架 DEX 的资源打包尚未接入，不将模块编译成功写成 Java 或 Unity 6 已能运行。
+
+默认 CTest **25/25 通过**，`verify_macos_bundle.py` 通过 arm64、签名、UI 无额外权限及依赖闭包检查。新增 Android runtime 契约、两参数 Unity 初始化、打包活动进程保护，扩充 float PCM / callback-free write / STOP 重启测试。扩展回归曾发现上游 prefs-test 写死作者机器目录并在 fopen 失败后崩溃，修正为系统临时目录和失败检查后复验通过；没有重复运行未修复的崩溃测试。没有运行用户 APK、Android VM、真实登录或播放测试音频。旧游戏验收结果不挪用为本候选结果。
+
+窗口更新有遗留：CUA 的 native pipe 在绑定旧 Husk 时持续断开，重建连接仍失败。构建其余测试目标时未注意到 MacIntegrationTests 对 PackageMac 的隐式依赖，提前替换了运行中主程序的候选目录；此为执行失误。已经补 `package_macos.py` 入口进程检查，并确认它能在任何写入前拒绝 PID 27488 的活动候选；回归也覆盖候选内 NativeRunner / VMRunner 和包含空格的路径。当前磁盘包已完成全部验证，主 App / Runner 的 UUID 与代码、数据段和当前编译产物相同（签名后整文件 hash 不同）；旧 PID 27488 尚未正常退出重启，已向用户说明工具阻塞。没有关闭游戏、删除用户资料库或存档。
+
+证据复用 `build/logs/current-upstream-build.log`、`current-upstream-tests.log`、`current-upstream-bundle.log`、`current-upstream-guards.log`、`current-upstream-candidate.json`，包证据为 `build/macos/bundle-verification.json`。具体 Java / Unity 6 接线和销毁协议下一步保存于 [upstream-parity.md](upstream-parity.md)，Play 个人登录仍按失败处理。
+
 ## 2026-10-10 Unity 运行时接入
 
 Unity 驱动已编入 macOS NativeRunner。资料库按引擎和 arm64 ABI 动态分发，旧 Play 导入无需重下；Runner 独立复核全部 APK 的 hash、引擎和 ABI。启动读取 manifest 中的包名和 launcher 方向，支持 Activity alias；固定画布为横屏 1280×720 或竖屏 720×1280。鼠标左键/拖动映射触摸，键盘与手柄进入 Unity JNI；默认失焦继续并释放输入，未接入 Unity 软键盘/IME。

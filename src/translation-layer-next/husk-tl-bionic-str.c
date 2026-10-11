@@ -103,6 +103,33 @@ int tl_vai_sprintf(tl_va_frame *f)
 }
 TL_VA_STUB(tl_va_sprintf, tl_vai_sprintf);
 extern void tl_va_sprintf(void);
+/* FORTIFY's: __sprintf_chk(dst, flags, dst_len, fmt, ...), __snprintf_chk(dst, n, flags, dst_len, fmt, ...) */
+int tl_vai___sprintf_chk(tl_va_frame *f)
+{
+    tl_va_list ap; tl_va_start(f, 4, 0, &ap);
+    return tl_format((char *)f->gp[0], (size_t)f->gp[2], (const char *)f->gp[3], &ap);
+}
+TL_VA_STUB(tl_va___sprintf_chk, tl_vai___sprintf_chk);
+extern void tl_va___sprintf_chk(void);
+int tl_vai___snprintf_chk(tl_va_frame *f)
+{
+    tl_va_list ap; tl_va_start(f, 5, 0, &ap);
+    size_t n = (size_t)f->gp[1], dl = (size_t)f->gp[3];
+    if (n > dl) { tl_log_line("bionic: __snprintf_chk: buffer %zu smaller than limit %zu", dl, n); abort(); }
+    return tl_format((char *)f->gp[0], n, (const char *)f->gp[4], &ap);
+}
+TL_VA_STUB(tl_va___snprintf_chk, tl_vai___snprintf_chk);
+extern void tl_va___snprintf_chk(void);
+static void *b___memchr_chk(const void *s, int c, size_t n, size_t bl) { (void)bl; return memchr(s, c, n); }
+static void *b___memrchr_chk(const void *s, int c, size_t n, size_t bl)
+{
+    (void)bl;
+    const unsigned char *p = s;
+    while (n--) if (p[n] == (unsigned char)c) return (void *)(p + n);
+    return NULL;
+}
+static char *b___stpncpy_chk(char *d, const char *s, size_t n, size_t dl) { (void)dl; return stpncpy(d, s, n); }
+static char *b___stpncpy_chk2(char *d, const char *s, size_t n, size_t dl, size_t sl) { (void)dl; (void)sl; return stpncpy(d, s, n); }
 
 int tl_vai_printf(tl_va_frame *f)
 {
@@ -114,6 +141,15 @@ int tl_vai_printf(tl_va_frame *f)
 }
 TL_VA_STUB(tl_va_printf, tl_vai_printf);
 extern void tl_va_printf(void);
+
+int tl_vai_asprintf(tl_va_frame *f)
+{
+    tl_va_list ap; tl_va_start(f, 2, 0, &ap);
+    int n; *(char **)f->gp[0] = format_alloc((const char *)f->gp[1], &ap, &n);
+    return n;
+}
+TL_VA_STUB(tl_va_asprintf, tl_vai_asprintf);
+extern void tl_va_asprintf(void);
 
 int tl_vai_fprintf(tl_va_frame *f)
 {
@@ -212,6 +248,9 @@ static void *b_fopen(const char *path, const char *mode)
         if (fd >= 0 && !(f = fdopen(fd, mode))) { close(fd); tl_atomic_abandon(fd); }
     }
     if (!f) f = fopen(real, mode);
+    if (!f && errno == ENOENT) { void tl_note_missing_file(const char *path); tl_note_missing_file(path); }
+    { static int tr = -1; if (tr < 0) tr = getenv("TL_FILE_TRACE") ? atoi(getenv("TL_FILE_TRACE")) : 0;
+      if (tr) tl_log_line("file: fopen(%s, %s) -> %s%s", path, mode, f ? "ok" : "failed", real != path ? " (mapped)" : ""); }
     TL_ERRNO_END();
     return f;
 }
@@ -268,6 +307,12 @@ static int b_putchar(int c) { char ch = (char)c; console_write(stdout, &ch, 1); 
 static int b_puts(const char *str) { console_write(stdout, str, strlen(str)); console_write(stdout, "\n", 1); return 1; }
 static size_t b_wcsftime(wchar_t *buf, size_t n, const wchar_t *fmt, const struct tm *tm) { return wcsftime(buf, n, fmt, tm); }
 static int b_putc(int c, void *f) { return b_fputc(c, f); }
+static ssize_t b_getline(char **line, size_t *cap, void *f) { TL_ERRNO_BEGIN(); ssize_t r = getline(line, cap, map_stream(f)); TL_ERRNO_END(); return r; }
+static ssize_t b_getdelim(char **line, size_t *cap, int delim, void *f) { TL_ERRNO_BEGIN(); ssize_t r = getdelim(line, cap, delim, map_stream(f)); TL_ERRNO_END(); return r; }
+static void b_flockfile(void *f) { flockfile(map_stream(f)); }
+static void b_funlockfile(void *f) { funlockfile(map_stream(f)); }
+static int b_getc_unlocked(void *f) { return getc_unlocked(map_stream(f)); }
+static int b_putc_unlocked(int c, void *f) { return putc_unlocked(c, map_stream(f)); }
 static int b_getc(void *f) { TL_ERRNO_BEGIN(); int r = fgetc(map_stream(f)); TL_ERRNO_END(); return r; }
 static int b_ungetc(int c, void *f) { return ungetc(c, map_stream(f)); }
 static wint_t b_getwc(void *f) { return fgetwc(map_stream(f)); }
@@ -318,6 +363,8 @@ static char *b___strncpy_chk2(char *d, const char *s, size_t n, size_t dl, size_
 /* ------------------------------------------------------------------ ctype */
 
 static char g_ctype[257];
+/* bionic's _ctype_ is a pointer to the table (const char *_ctype_), read through as _ctype_[c + 1] */
+static const char *g_ctype_ptr = g_ctype;
 static char **g_environ_var;
 
 __attribute__((constructor)) static void init_tables(void)
@@ -446,55 +493,6 @@ static v2u64 b_strtold(const char *s, char **end) { TL_ERRNO_BEGIN(); double d =
 static v2u64 b_strtold_l(const char *s, char **end, locale_t l) { TL_ERRNO_BEGIN(); double d = strtod_l(s, end, l); TL_ERRNO_END(); return to_quad(d); }
 static v2u64 b_wcstold(const wchar_t *s, wchar_t **end) { TL_ERRNO_BEGIN(); double d = wcstod(s, end); TL_ERRNO_END(); return to_quad(d); }
 
-/* Android arm64 long double is binary128 in q0, including all 112 fraction
- * bits. Scaling its exponent must not pass through Darwin's 64-bit double. */
-static v2u64 quad_result(unsigned __int128 bits)
-{ return (v2u64){(uint64_t)bits,(uint64_t)(bits>>64)}; }
-static v2u64 b_frexpl(v2u64 value, int *exponent)
-{
-    unsigned __int128 bits=((unsigned __int128)value[1]<<64)|value[0];
-    unsigned __int128 sign=bits&((unsigned __int128)1<<127), hidden=(unsigned __int128)1<<112;
-    unsigned __int128 fraction=bits&(hidden-1);
-    int e=(int)((bits>>112)&0x7fff);
-    *exponent=0;
-    if(e==0x7fff||(!e&&!fraction))return value;
-    if(!e){e=1;while(!(fraction&hidden)){fraction<<=1;--e;}}
-    *exponent=e-16382;
-    return quad_result(sign|((unsigned __int128)16382<<112)|(fraction&(hidden-1)));
-}
-static v2u64 b_ldexpl(v2u64 value, int power)
-{
-    unsigned __int128 bits=((unsigned __int128)value[1]<<64)|value[0];
-    unsigned __int128 sign=bits&((unsigned __int128)1<<127), hidden=(unsigned __int128)1<<112;
-    unsigned __int128 significand=bits&(hidden-1);
-    int64_t e=(int)((bits>>112)&0x7fff);
-    if(e==0x7fff||(!e&&!significand))return value;
-    if(!e){e=1;while(!(significand&hidden)){significand<<=1;--e;}}
-    else significand|=hidden;
-    e+=power;
-    int rounding=fegetround();
-    if(e>=0x7fff){
-        tl_set_guest_errno(34);feraiseexcept(FE_OVERFLOW|FE_INEXACT);
-        bool infinite=rounding==FE_TONEAREST||(rounding==FE_UPWARD&&!sign)||(rounding==FE_DOWNWARD&&sign);
-        unsigned __int128 infinity=(unsigned __int128)0x7fff<<112;
-        return quad_result(sign|(infinite?infinity:infinity-1));
-    }
-    if(e>0)return quad_result(sign|((unsigned __int128)e<<112)|(significand&(hidden-1)));
-    int64_t shift=1-e;
-    unsigned __int128 result=shift>113?0:significand>>shift;
-    unsigned __int128 remainder=shift>113?significand:significand&(((unsigned __int128)1<<shift)-1);
-    if(remainder){
-        bool up=(rounding==FE_UPWARD&&!sign)||(rounding==FE_DOWNWARD&&sign);
-        if(rounding==FE_TONEAREST&&shift<=113){
-            unsigned __int128 half=(unsigned __int128)1<<(shift-1);
-            up=remainder>half||(remainder==half&&(result&1));
-        }
-        if(up)++result;
-        tl_set_guest_errno(34);feraiseexcept(FE_UNDERFLOW|FE_INEXACT);
-    }
-    return quad_result(sign|result);
-}
-
 /* -------------------------------------------------------- strtol & friends */
 
 static long b_strtol(const char *s, char **e, int b) { TL_ERRNO_BEGIN(); long r = strtol(s, e, b); TL_ERRNO_END(); return r; }
@@ -619,7 +617,7 @@ const tl_bionic_entry tl_tab_str[] = {
     TL_DIRECT(iswalpha_l), TL_DIRECT(iswblank_l), TL_DIRECT(iswcntrl_l), TL_DIRECT(iswdigit_l), TL_DIRECT(iswlower_l),
     TL_DIRECT(iswprint_l), TL_DIRECT(iswpunct_l), TL_DIRECT(iswspace_l), TL_DIRECT(iswupper_l), TL_DIRECT(iswxdigit_l),
     TL_DIRECT(towlower), TL_DIRECT(towupper), TL_DIRECT(towlower_l), TL_DIRECT(towupper_l),
-    TL_DATA("_ctype_", g_ctype), TL_WRAP("__ctype_get_mb_cur_max", b___ctype_get_mb_cur_max),
+    TL_DATA("_ctype_", &g_ctype_ptr), TL_WRAP("__ctype_get_mb_cur_max", b___ctype_get_mb_cur_max),
     /* wchar.h */
     TL_WRAP("mbrtowc", b_mbrtowc), TL_WRAP("mbrlen", b_mbrlen), TL_WRAP("mbtowc", b_mbtowc), TL_WRAP("wcrtomb", b_wcrtomb),
     TL_WRAP("mbsnrtowcs", b_mbsnrtowcs), TL_WRAP("mbsrtowcs", b_mbsrtowcs), TL_WRAP("wcsnrtombs", b_wcsnrtombs),
@@ -640,10 +638,9 @@ const tl_bionic_entry tl_tab_str[] = {
     TL_WRAP("strtoll_l", b_strtoll_l), TL_WRAP("strtoull_l", b_strtoull_l), TL_WRAP("strtod", b_strtod), TL_WRAP("strtof", b_strtof),
     TL_WRAP("strtold", b_strtold), TL_WRAP("strtold_l", b_strtold_l),
     TL_DIRECT(getenv), TL_DIRECT(setenv), TL_DIRECT(unsetenv), TL_DATA("environ", &g_environ_var),
-    TL_DIRECT(setjmp), TL_DIRECT(longjmp), TL_DIRECT(fnmatch), TL_DIRECT(getopt_long),
+    TL_DIRECT(setjmp), TL_DIRECT(longjmp), TL_DIRECT(_setjmp), TL_DIRECT(_longjmp), TL_DIRECT(fnmatch), TL_DIRECT(getopt_long),
     TL_DATA("optarg", &optarg), TL_DATA("optind", &optind),
     /* math.h */
-    TL_WRAP("frexpl", b_frexpl), TL_WRAP("ldexpl", b_ldexpl),
     TL_DIRECT(acos), TL_DIRECT(acosf), TL_DIRECT(asin), TL_DIRECT(asinf), TL_DIRECT(atan), TL_DIRECT(atan2), TL_DIRECT(atan2f),
     TL_DIRECT(atanf), TL_DIRECT(cbrtf), TL_DIRECT(cos), TL_DIRECT(cosf), TL_DIRECT(exp), TL_DIRECT(exp2f), TL_DIRECT(expf),
     TL_DIRECT(fmod), TL_DIRECT(fmodf), TL_DIRECT(hypot), TL_DIRECT(ldexp), TL_DIRECT(ldexpf), TL_DIRECT(log), TL_DIRECT(log10),
@@ -651,9 +648,8 @@ const tl_bionic_entry tl_tab_str[] = {
     TL_DIRECT(pow), TL_DIRECT(powf), TL_DIRECT(scalbn), TL_DIRECT(sin), TL_DIRECT(sinf), TL_DIRECT(sqrtf), TL_DIRECT(tan),
     TL_DIRECT(tanf), TL_WRAP("sincosf", b_sincosf), TL_WRAP("sincos", b_sincos),
     TL_DIRECT(sqrt), TL_DIRECT(fmin), TL_DIRECT(fmax), TL_DIRECT(frexp), TL_DIRECT(asinh), TL_DIRECT(tanh),
-    TL_DIRECT(tanhf), TL_DIRECT(cosh), TL_DIRECT(coshf), TL_DIRECT(sinh), TL_DIRECT(sinhf), TL_DIRECT(asinhf), TL_DIRECT(acosh),
-    TL_DIRECT(acoshf), TL_DIRECT(atanh), TL_DIRECT(atanhf), TL_DIRECT(expm1), TL_DIRECT(expm1f), TL_DIRECT(log1p), TL_DIRECT(log1pf),
-    TL_DIRECT(exp2), TL_DIRECT(cbrt), TL_DIRECT(hypotf), TL_DIRECT(frexpf), TL_DIRECT(scalbnf),
+    TL_DIRECT(tanhf), TL_DIRECT(coshf), TL_DIRECT(asinhf),
+    TL_DIRECT(acoshf), TL_DIRECT(atanhf), TL_DIRECT(expm1f), TL_DIRECT(log1pf),
     TL_WRAP("__isnanf", b___isnanf), TL_WRAP("__fpclassifyd", b___fpclassifyd),
     /* locale.h */
     TL_WRAP("setlocale", b_setlocale), TL_WRAP("newlocale", b_newlocale), TL_DIRECT(freelocale), TL_DIRECT(uselocale),
@@ -666,12 +662,14 @@ const tl_bionic_entry tl_tab_str[] = {
     TL_WRAP("fopen", b_fopen), TL_WRAP("freopen", b_freopen), TL_WRAP("freopen64", b_freopen), TL_WRAP("fopen64", b_fopen), TL_WRAP("fseeko64", b_fseeko), TL_WRAP("ftello64", b_ftello), TL_DIRECT(funopen), TL_DIRECT(wcwidth), TL_WRAP("fdopen", b_fdopen), TL_WRAP("fclose", b_fclose), TL_WRAP("fgets", b_fgets),
     TL_WRAP("fread", b_fread), TL_WRAP("fwrite", b_fwrite), TL_WRAP("fseek", b_fseek), TL_WRAP("fseeko", b_fseeko),
     TL_WRAP("ftell", b_ftell), TL_WRAP("ftello", b_ftello), TL_WRAP("fflush", b_fflush), TL_WRAP("fputc", b_fputc),
+    TL_WRAP("getline", b_getline), TL_WRAP("getdelim", b_getdelim), TL_WRAP("flockfile", b_flockfile), TL_WRAP("funlockfile", b_funlockfile),
+    TL_WRAP("getc_unlocked", b_getc_unlocked), TL_WRAP("putc_unlocked", b_putc_unlocked),
     TL_WRAP("putc", b_putc), TL_WRAP("getc", b_getc), TL_WRAP("fgetc", b_getc), TL_WRAP("ungetc", b_ungetc), TL_WRAP("getwc", b_getwc),
     TL_WRAP("putwc", b_putwc), TL_WRAP("ungetwc", b_ungetwc), TL_WRAP("vsprintf", b_vsprintf), TL_WRAP("wcsftime", b_wcsftime),
     TL_WRAP("fputs", b_fputs), TL_WRAP("puts", b_puts), TL_WRAP("feof", b_feof), TL_WRAP("ferror", b_ferror),
     TL_WRAP("clearerr", b_clearerr), TL_WRAP("fileno", b_fileno), TL_WRAP("setbuf", b_setbuf), TL_WRAP("setvbuf", b_setvbuf),
     TL_WRAP("remove", b_remove), TL_WRAP("rename", b_rename),
-    TL_WRAP("snprintf", tl_va_snprintf), TL_WRAP("sprintf", tl_va_sprintf), TL_WRAP("printf", tl_va_printf),
+    TL_WRAP("snprintf", tl_va_snprintf), TL_WRAP("sprintf", tl_va_sprintf), TL_WRAP("printf", tl_va_printf), TL_WRAP("asprintf", tl_va_asprintf),
     TL_WRAP("fprintf", tl_va_fprintf), TL_WRAP("sscanf", tl_va_sscanf), TL_WRAP("fscanf", tl_va_fscanf),
     TL_WRAP("vswprintf", b_vswprintf), TL_WRAP("__fwrite_chk", b___fwrite_chk), TL_WRAP("system", b_system),
     TL_WRAP("sched_getcpu", b_sched_getcpu), TL_DIRECT(wcslcpy), TL_DIRECT(wcslcat), TL_DIRECT(wcscasecmp), TL_DIRECT(wcsncasecmp),
@@ -689,7 +687,8 @@ static size_t b___strlcat_chk(char *d, const char *s, size_t n, size_t dl) { if 
 static char *b___stpcpy_chk(char *d, const char *s, size_t dl) { size_t n = strlen(s); if (n + 1 > dl) chk_fail("__stpcpy_chk"); return stpcpy(d, s); }
 static size_t b___strlcpy_chk(char *d, const char *s, size_t n, size_t dl) { if (n > dl) chk_fail("__strlcpy_chk"); return strlcpy(d, s, n); }
 static char *b___strrchr_chk(const char *s, int c, size_t len) { (void)len; return strrchr(s, c); }
-static char *b___fgets_chk(char *buf, int size, size_t bufsize, void *f) { if ((size_t)size > bufsize) chk_fail("__fgets_chk"); return b_fgets(buf, size, f); }
+/* bionic: __fgets_chk(char *dst, int size, FILE *stream, size_t dst_len) */
+static char *b___fgets_chk(char *buf, int size, void *f, size_t bufsize) { if ((size_t)size > bufsize) chk_fail("__fgets_chk"); return b_fgets(buf, size, f); }
 /* Linux's fd_set is an array of longs, a bit per descriptor */
 static void b___FD_CLR_chk(int fd, uint64_t *set, size_t size) { if (fd < 0 || (size_t)fd >= size * 8) chk_fail("__FD_CLR_chk"); set[fd / 64] &= ~(1ull << (fd % 64)); }
 
@@ -697,20 +696,61 @@ static FILE *g_stdin_var = (FILE *)&g_sF[0], *g_stdout_var = (FILE *)&g_sF[SF_SI
 static void b_perror(const char *msg) { tl_log_line("perror: %s: %s", msg ? msg : "", strerror(errno)); }
 static void b_rewind(void *f) { rewind(map_stream(f)); }
 static wint_t b_fputwc(wchar_t c, void *f) { return fputwc(c, map_stream(f)); }
-static void *b_popen(const char *cmd, const char *mode) { (void)cmd; (void)mode; tl_set_guest_errno(38); return NULL; }
-static int b_pclose(void *f) { (void)f; tl_set_guest_errno(10); return -1; }
+/* popen: no shell here, so the commands apps read from are answered directly -- getprop <name> from the system properties,
+ * cat <file> from the file -- and anything else reads as empty output (never a null stream: code reads it unchecked). */
+int tl_property_get(const char *name, char *value);
+/* lgamma_r: lgamma and the sign of gamma, without the global signgam */
+static double b_lgamma_r(double x, int *sign) { double g = tgamma(x); if (sign) *sign = g < 0 ? -1 : 1; return lgamma(x); }
+static float b_lgammaf_r(float x, int *sign) { float g = tgammaf(x); if (sign) *sign = g < 0 ? -1 : 1; return lgammaf(x); }
+static void *b_popen(const char *cmd, const char *mode)
+{
+    if (!cmd || !mode) { tl_set_guest_errno(22); return NULL; }
+    tl_log_line("bionic: popen(\"%s\", \"%s\")", cmd, mode);
+    if (mode[0] == 'w') { TL_ERRNO_BEGIN(); FILE *f = fopen("/dev/null", "w"); TL_ERRNO_END(); return f; }
+    char *out = NULL; size_t len = 0;
+    FILE *mem = open_memstream(&out, &len);
+    if (!mem) { tl_set_guest_errno(12); return NULL; }
+    while (*cmd == ' ') cmd++;
+    if (!strncmp(cmd, "getprop", 7) && (cmd[7] == 0 || cmd[7] == ' ')) {
+        const char *n = cmd + 7; while (*n == ' ') n++;
+        char name[128]; size_t k = 0;
+        while (n[k] && n[k] != ' ' && k + 1 < sizeof(name)) { name[k] = n[k]; k++; }
+        name[k] = 0;
+        if (name[0]) { char v[92] = ""; tl_property_get(name, v); fprintf(mem, "%s\n", v); }
+    } else if (!strncmp(cmd, "cat ", 4)) {
+        const char *path = cmd + 4; while (*path == ' ') path++;
+        int tl_synth_open(const char *path);
+        int fd = tl_synth_open(path);
+        char buf[1024];
+        if (fd < 0) fd = open(tl_path_resolve(path, buf, sizeof(buf)), O_RDONLY);
+        if (fd >= 0) { ssize_t r; char b[4096]; while ((r = read(fd, b, sizeof(b))) > 0) fwrite(b, 1, (size_t)r, mem); close(fd); }
+    }
+    fclose(mem);
+    FILE *f = fmemopen(NULL, len ? len : 1, "w+");
+    if (f) { if (len) fwrite(out, 1, len, f); rewind(f); }
+    free(out);
+    return f;
+}
+static int b_pclose(void *f) { if (!f) { tl_set_guest_errno(10); return -1; } fclose(map_stream(f)); return 0; }
 static FILE *b_tmpfile(void) { TL_ERRNO_BEGIN(); FILE *f = tmpfile(); TL_ERRNO_END(); return f; }
 /* bionic's mbstate_t is 8 bytes, Darwin's is not; the conversion state is dropped */
 static size_t b_wcsrtombs(char *dst, const wchar_t **src, size_t len, void *ps) { (void)ps; return wcsrtombs(dst, src, len, NULL); }
 
 const tl_bionic_entry tl_tab_str2[] = {
     TL_WRAP("__strcpy_chk", b___strcpy_chk), TL_WRAP("__strcat_chk", b___strcat_chk), TL_WRAP("__strncpy_chk", b___strncpy_chk),
-    TL_WRAP("__stpcpy_chk", b___stpcpy_chk), TL_WRAP("putchar", b_putchar), TL_WRAP("__strlcpy_chk", b___strlcpy_chk), TL_WRAP("__strlcat_chk", b___strlcat_chk), TL_WRAP("__strrchr_chk", b___strrchr_chk), TL_WRAP("__fgets_chk", b___fgets_chk),
+    TL_WRAP("__stpcpy_chk", b___stpcpy_chk), TL_WRAP("putchar", b_putchar), TL_WRAP("__strlcpy_chk", b___strlcpy_chk), TL_WRAP("__strlcat_chk", b___strlcat_chk), TL_WRAP("__strrchr_chk", b___strrchr_chk), TL_WRAP("__fgets_chk", b___fgets_chk), TL_WRAP("__sprintf_chk", tl_va___sprintf_chk), TL_WRAP("__snprintf_chk", tl_va___snprintf_chk), TL_WRAP("__memchr_chk", b___memchr_chk), TL_WRAP("__memrchr_chk", b___memrchr_chk), TL_WRAP("memmem", memmem), TL_WRAP("__stpncpy_chk", b___stpncpy_chk), TL_WRAP("__stpncpy_chk2", b___stpncpy_chk2),
     TL_WRAP("__FD_CLR_chk", b___FD_CLR_chk),
     TL_DATA("stdin", &g_stdin_var), TL_DATA("stdout", &g_stdout_var), TL_DATA("stderr", &g_stderr_var),
     TL_WRAP("perror", b_perror), TL_WRAP("rewind", b_rewind), TL_WRAP("fputwc", b_fputwc), TL_WRAP("popen", b_popen), TL_WRAP("pclose", b_pclose),
     TL_WRAP("tmpfile", b_tmpfile), TL_WRAP("wcsrtombs", b_wcsrtombs),
     TL_DIRECT(strncat), TL_DIRECT(strptime), TL_DIRECT(ldiv), TL_DIRECT(sleep), TL_DIRECT(pause), TL_DIRECT(arc4random_buf), TL_DIRECT(nan), TL_DIRECT(nanf),
+    /* the rest of libm a guest may import (most are inlined as instructions, some libraries call them) */
+    TL_DIRECT(ceilf), TL_DIRECT(copysignf), TL_DIRECT(erfcf), TL_DIRECT(fdim), TL_DIRECT(fdimf), TL_DIRECT(floorf), TL_DIRECT(fma), TL_DIRECT(fmaf),
+    TL_DIRECT(fmaxf), TL_DIRECT(fminf), TL_DIRECT(ilogb), TL_DIRECT(lgamma), TL_DIRECT(lgammaf), TL_WRAP("lgamma_r", b_lgamma_r), TL_WRAP("lgammaf_r", b_lgammaf_r),
+    TL_DIRECT(llrint), TL_DIRECT(llrintf), TL_DIRECT(llround), TL_DIRECT(llroundf), TL_DIRECT(logbf), TL_DIRECT(lrint), TL_DIRECT(lrintf),
+    TL_DIRECT(lround), TL_DIRECT(lroundf), TL_DIRECT(nearbyint), TL_DIRECT(nearbyintf), TL_DIRECT(remainderf), TL_DIRECT(remquo), TL_DIRECT(remquof),
+    TL_DIRECT(rintf), TL_DIRECT(roundf), TL_DIRECT(scalbln), TL_DIRECT(scalblnf), TL_DIRECT(tgamma), TL_DIRECT(tgammaf), TL_DIRECT(truncf),
+    TL_DIRECT(j0), TL_DIRECT(j1), TL_DIRECT(jn), TL_DIRECT(y0), TL_DIRECT(y1), TL_DIRECT(yn),
     TL_DIRECT(ceil), TL_DIRECT(floor), TL_DIRECT(fabs), TL_DIRECT(trunc), TL_DIRECT(cbrt), TL_DIRECT(acosh), TL_DIRECT(atanh), TL_DIRECT(cosh),
     TL_WRAP("feholdexcept", b_fe_env), TL_WRAP("fegetenv", b_fe_env), TL_WRAP("fesetenv", b_fe_env), TL_WRAP("feupdateenv", b_fe_env), TL_WRAP("fegetround", b_fe_ok), TL_WRAP("fesetround", b_fe_ok), TL_WRAP("feclearexcept", b_fe_ok), TL_WRAP("feraiseexcept", b_fe_ok), TL_WRAP("fetestexcept", b_fe_ok),
     TL_DIRECT(regcomp), TL_DIRECT(regexec), TL_DIRECT(regfree), TL_DIRECT(regerror), TL_DIRECT(sinh), TL_DIRECT(sinhf), TL_DIRECT(scalbnf), TL_DIRECT(mbstowcs), TL_DIRECT(wcstombs), TL_DIRECT(exp2), TL_DIRECT(expm1), TL_DIRECT(log1p), TL_DIRECT(hypotf), TL_DIRECT(ilogbf), TL_DIRECT(nextafter),

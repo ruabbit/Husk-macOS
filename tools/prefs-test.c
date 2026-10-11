@@ -2,6 +2,7 @@
 /* Checks the SharedPreferences store: defaults, types, the Editor's puts, and a
  * round trip through the file -- the things the stand-in it replaced got wrong. */
 #include <math.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,8 +43,13 @@ int main(void)
     CHECK(!tl_prefs_contains(p, "gone"), "putting NULL should remove");
 
     printf("5. the file round trip, including awkward values\n");
-    char path[] = "/tmp/husk-prefs-test-XXXXXX";
-    int fd = mkstemp(path); close(fd);
+    char path[PATH_MAX];
+    const char *tmp = getenv("TMPDIR");
+    if (!tmp || !tmp[0]) tmp = "/tmp";
+    if (snprintf(path, sizeof(path), "%s/husk-prefs-test-XXXXXX", tmp) >= (int)sizeof(path)) return 1;
+    int fd = mkstemp(path);
+    if (fd < 0) { perror("mkstemp"); return 1; }
+    close(fd);
     tl_prefs_clear(p);
     tl_prefs_attach(p, path);
     tl_prefs_put_int(p, "i", -2147483647);
@@ -69,8 +75,11 @@ int main(void)
 
     printf("6. a missing or damaged file is not fatal\n");
     tl_prefs *r = tl_prefs_create();
-    CHECK(tl_prefs_attach(r, "/tmp/husk-prefs-does-not-exist"), "a missing file should be fine");
-    FILE *bad = fopen(path, "w"); fputs("this is not a prefs file\n", bad); fclose(bad);
+    char missing[PATH_MAX + 16]; snprintf(missing, sizeof(missing), "%s.missing", path);
+    CHECK(tl_prefs_attach(r, missing), "a missing file should be fine");
+    FILE *bad = fopen(path, "w");
+    if (!bad) { perror("fopen"); unlink(path); return 1; }
+    fputs("this is not a prefs file\n", bad); fclose(bad);
     tl_prefs *s = tl_prefs_create();
     CHECK(!tl_prefs_attach(s, path) && tl_prefs_count(s) == 0, "a foreign file should be refused, not half-read");
     tl_prefs_destroy(q); tl_prefs_destroy(r); tl_prefs_destroy(s);

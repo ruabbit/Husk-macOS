@@ -45,8 +45,12 @@ typedef int32_t (*onload_fn)(void *vm, void *reserved);
 static void *native_of(const char *cls, const char *name, const char *sig)
 {
     void *fn = tl_jni_native(cls, name, sig);
-    if (!fn && !strcmp(cls, "com/unity3d/player/UnityPlayer"))
+    /* Unity 6 registers the player's lifecycle natives (nativeRender, nativePause, ...) on the class that hosts it in an
+     * activity, not on UnityPlayer itself */
+    if (!fn && !strcmp(cls, "com/unity3d/player/UnityPlayer")) {
         fn = tl_jni_native("com/unity3d/player/UnityPlayerForActivityOrService", name, sig);
+        if (!fn) fn = tl_jni_native("com/unity3d/player/UnityPlayerForGameActivity", name, sig);
+    }
     if (!fn) tl_log_line("unity: native %s.%s%s was not registered", cls, name, sig);
     return fn;
 }
@@ -220,6 +224,8 @@ bool tl_unity_run(void)
     /* The UnityPlayer constructor's last native step before it starts the thread. */
     void *init = tl_jni_native("com/unity3d/player/UnityPlayer", "initJni", "(Landroid/content/Context;)V");
     if (init) ((void (*)(void *, void *, void *))init)(tl_jni_env(), U.player, U.activity);
+    else if ((init = tl_jni_native("com/unity3d/player/UnityPlayer", "initJni", "(Landroid/content/Context;I)V")))
+        ((void (*)(void *, void *, void *, int))init)(tl_jni_env(), U.player, U.activity, 0);
     else {
         init = native_of("com/unity3d/player/UnityPlayer", "initJni", "(Landroid/content/Context;ILjava/lang/String;)V");
         if (!init) { atomic_store(&U.state, TL_UNITY_FAILED); return false; }

@@ -19,6 +19,9 @@ static int resumes, focuses, actions[16], keys[16], motion_count, key_count;
 static void check_thread(void) { if (!pthread_equal(pthread_self(), render_thread)) atomic_store(&wrong_thread,true); }
 static void noop(void *env, void *self) { (void)env; (void)self; }
 static void init(void *env, void *self, void *context) { (void)context; noop(env,self); }
+static void init_two(void *env, void *self, void *context, int mode) {
+    init(env,self,context);if(mode!=0)atomic_store(&wrong_thread,true);
+}
 static void init_modern(void *env, void *self, void *context, int mode, jobj *command_line) {
     init(env,self,context);
     if(mode!=0||!command_line||strcmp(tl_jni_string(command_line),""))atomic_store(&wrong_thread,true);
@@ -54,6 +57,7 @@ static void *stop_thread(void *unused) { (void)unused;tl_unity_stop();return NUL
 int main(int argc, char **argv) {
     bool missing=argc>1&&!strcmp(argv[1],"missing-done"), quit=argc>1&&!strcmp(argv[1],"guest-quit");
     bool modern=argc>1&&!strcmp(argv[1],"modern-player");
+    bool two=argc>1&&!strcmp(argv[1],"two-argument-init");
     tl_jni_init();tl_input_install();
     Native natives[]={
         {"initJni","(Landroid/content/Context;)V",init},
@@ -66,6 +70,7 @@ int main(int argc, char **argv) {
     };
     const void **jni=*(const void ***)tl_jni_env();
     int (*register_natives)(void *,void *,const Native *,int)=(void *)jni[215];
+    if(two)natives[0]=(Native){"initJni","(Landroid/content/Context;I)V",init_two};
     if(modern){
         Native base[]={{"initJni","(Landroid/content/Context;ILjava/lang/String;)V",init_modern},natives[7]};
         natives[8]=(Native){"nativeDone","()Z",done_modern};

@@ -21,6 +21,7 @@
 
 #include "husk-tl-internal.h"
 #include "husk-tl-ld.h"
+#include "husk-tl-jni.h"
 
 /* ---------------------------------------------------------------- looper */
 
@@ -101,7 +102,9 @@ static int b_ALooper_pollOnce(int timeout_ms, int *out_fd, int *out_events, void
         pfds[n++] = (struct pollfd){ f->fd, ev, 0 };
     }
     pthread_mutex_unlock(&l->mu);
+    { static int tr = -1; if (tr < 0) tr = getenv("TL_LOOPER_TRACE") ? 2 : 0; if (tr) { char b[200]; int k = 0; for (int i = 0; i < n && k < 180; i++) k += snprintf(b + k, sizeof(b) - (size_t)k, " %d", pfds[i].fd); tl_log_line("looper: poll(%d ms) on%s", timeout_ms, b); } }
     int r = poll(pfds, (nfds_t)n, timeout_ms);
+    { static int tr = -1; if (tr < 0) tr = getenv("TL_LOOPER_TRACE") ? 2 : 0; if (tr) { char b[200]; int k = 0; for (int i = 0; i < n && k < 180; i++) if (pfds[i].revents) k += snprintf(b + k, sizeof(b) - (size_t)k, " %d:%x", pfds[i].fd, pfds[i].revents); tl_log_line("looper: poll -> %d:%s", r, b); } }
     if (r < 0) return ALOOPER_POLL_ERROR;
     if (r == 0) return ALOOPER_POLL_TIMEOUT;
     if (pfds[0].revents & POLLIN) { char buf[64]; while (read(l->wake[0], buf, sizeof(buf)) > 0) {} }
@@ -111,6 +114,7 @@ static int b_ALooper_pollOnce(int timeout_ms, int *out_fd, int *out_events, void
         int ev = ((pfds[i].revents & POLLIN) ? ALOOPER_EVENT_INPUT : 0) | ((pfds[i].revents & POLLOUT) ? ALOOPER_EVENT_OUTPUT : 0)
                | ((pfds[i].revents & POLLERR) ? ALOOPER_EVENT_ERROR : 0) | ((pfds[i].revents & POLLHUP) ? ALOOPER_EVENT_HANGUP : 0);
         if (f->callback) {
+            { static int tr = -1; if (tr < 0) tr = getenv("TL_LOOPER_TRACE") ? 1 : 0; if (tr) tl_log_line("looper: callback for fd %d (%d fds watched)", f->fd, n - 1); }
             int keep = ((int (*)(int, int, void *))f->callback)(f->fd, ev, f->data);
             if (!keep) b_ALooper_removeFd(l, f->fd);
             return ALOOPER_POLL_CALLBACK;
@@ -130,6 +134,130 @@ static int b_ALooper_pollAll(int timeout_ms, int *out_fd, int *out_events, void 
         timeout_ms = 0;
     }
 }
+
+/* ----------------------------------------------------------- choreographer */
+/*
+ * AChoreographer: frame callbacks at the display's vsync, delivered on the thread that asked, through its looper. Flutter's engine
+ * times its frames with it (API 29+). One clock thread ticks at 60 Hz and pokes every choreographer that has callbacks waiting; the
+ * owner thread's looper runs them with that tick's time, as Android's does.
+ */
+#define VSYNC_NS 16666667ll
+typedef struct chcb { int kind; void *fn, *data; int64_t not_before; struct chcb *next; } chcb;    /* kind 0: frame, 1: frame64, 2: vsync */
+typedef struct tl_choreo { tl_looper *looper; int pipe[2]; pthread_mutex_t mu; chcb *pending; void *rate_fn, *rate_data; struct tl_choreo *next; } tl_choreo;
+static __thread tl_choreo *t_choreo;
+static tl_choreo *g_choreos;
+static pthread_mutex_t g_choreo_mu = PTHREAD_MUTEX_INITIALIZER;
+static atomic_llong g_vsync_time;
+
+static int64_t mono_ns(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (int64_t)ts.tv_sec * 1000000000ll + ts.tv_nsec; }
+
+/* What a vsync callback is given: one frame timeline, this vsync's. */
+typedef struct { int64_t frame_time, deadline, expected_present; } tl_choreo_frame;
+static int64_t b_AChoreographerFrameCallbackData_getFrameTimeNanos(const tl_choreo_frame *d) { return d->frame_time; }
+static size_t b_AChoreographerFrameCallbackData_getFrameTimelinesLength(const tl_choreo_frame *d) { (void)d; return 1; }
+static size_t b_AChoreographerFrameCallbackData_getPreferredFrameTimelineIndex(const tl_choreo_frame *d) { (void)d; return 0; }
+static int64_t b_AChoreographerFrameCallbackData_getFrameTimelineVsyncId(const tl_choreo_frame *d, size_t i) { (void)i; return d->frame_time / VSYNC_NS; }
+static int64_t b_AChoreographerFrameCallbackData_getFrameTimelineExpectedPresentationTimeNanos(const tl_choreo_frame *d, size_t i) { (void)i; return d->expected_present; }
+static int64_t b_AChoreographerFrameCallbackData_getFrameTimelineDeadlineNanos(const tl_choreo_frame *d, size_t i) { (void)i; return d->deadline; }
+
+static int choreo_run(int fd, int events, void *data)
+{
+    (void)events;
+    tl_choreo *c = data;
+    char buf[64];
+    while (read(fd, buf, sizeof(buf)) > 0) {}
+    int64_t now = atomic_load(&g_vsync_time);
+    pthread_mutex_lock(&c->mu);
+    chcb *due = NULL, **keep = &c->pending;
+    for (chcb *cb = c->pending; cb;) {
+        chcb *n = cb->next;
+        if (cb->not_before <= now) { *keep = n; cb->next = due; due = cb; } else keep = &cb->next;
+        cb = n;
+    }
+    pthread_mutex_unlock(&c->mu);
+    /* in the order they were posted */
+    chcb *rev = NULL;
+    while (due) { chcb *n = due->next; due->next = rev; rev = due; due = n; }
+    tl_choreo_frame fd_ = { now, now + VSYNC_NS - 2000000, now + 2 * VSYNC_NS };
+    for (chcb *cb = rev; cb;) {
+        chcb *n = cb->next;
+        if (cb->kind == 0) ((void (*)(long, void *))cb->fn)((long)now, cb->data);
+        else if (cb->kind == 1) ((void (*)(int64_t, void *))cb->fn)(now, cb->data);
+        else ((void (*)(const tl_choreo_frame *, void *))cb->fn)(&fd_, cb->data);
+        free(cb);
+        cb = n;
+    }
+    return 1;
+}
+
+static void *choreo_clock(void *arg)
+{
+    (void)arg;
+    pthread_setname_np("husk-vsync");
+    int64_t next = mono_ns();
+    for (;;) {
+        next += VSYNC_NS;
+        int64_t now = mono_ns();
+        if (next > now) { struct timespec ts = { 0, (long)(next - now) }; nanosleep(&ts, NULL); } else next = now;
+        atomic_store(&g_vsync_time, next);
+        pthread_mutex_lock(&g_choreo_mu);
+        for (tl_choreo *c = g_choreos; c; c = c->next) {
+            pthread_mutex_lock(&c->mu);
+            bool any = c->pending != NULL;
+            pthread_mutex_unlock(&c->mu);
+            if (any) { char b = 1; (void)!write(c->pipe[1], &b, 1); }
+        }
+        pthread_mutex_unlock(&g_choreo_mu);
+    }
+    return NULL;
+}
+
+static tl_choreo *b_AChoreographer_getInstance(void)
+{
+    if (t_choreo) return t_choreo;
+    if (!t_looper) { tl_log_line("choreographer: asked for on a thread without a looper"); return NULL; }   /* as on Android */
+    tl_choreo *c = calloc(1, sizeof(*c));
+    c->looper = t_looper;
+    pthread_mutex_init(&c->mu, NULL);
+    if (pipe(c->pipe)) { free(c); return NULL; }
+    fcntl(c->pipe[0], F_SETFL, O_NONBLOCK); fcntl(c->pipe[1], F_SETFL, O_NONBLOCK);
+    b_ALooper_addFd(t_looper, c->pipe[0], ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT, (void *)choreo_run, c);
+    static pthread_t clock_thread;
+    pthread_mutex_lock(&g_choreo_mu);
+    c->next = g_choreos; g_choreos = c;
+    pthread_mutex_unlock(&g_choreo_mu);
+    if (!atomic_load(&g_vsync_time)) atomic_store(&g_vsync_time, mono_ns());
+    static atomic_bool started;
+    if (!atomic_exchange(&started, true)) pthread_create(&clock_thread, NULL, choreo_clock, NULL);
+    t_choreo = c;
+    return c;
+}
+
+static void choreo_post(tl_choreo *c, int kind, void *fn, void *data, int64_t delay_ms)
+{
+    static int tr = -1; if (tr < 0) tr = getenv("TL_CHOREO_TRACE") ? 1 : 0;
+    if (tr) tl_log_line("choreographer: post kind %d on %p", kind, (void *)c);
+    if (!c || !fn) return;
+    chcb *cb = calloc(1, sizeof(*cb));
+    cb->kind = kind; cb->fn = fn; cb->data = data;
+    cb->not_before = delay_ms > 0 ? mono_ns() + delay_ms * 1000000ll : 0;
+    pthread_mutex_lock(&c->mu);
+    cb->next = c->pending; c->pending = cb;
+    pthread_mutex_unlock(&c->mu);
+}
+static void b_AChoreographer_postFrameCallback(tl_choreo *c, void *fn, void *data) { choreo_post(c, 0, fn, data, 0); }
+static void b_AChoreographer_postFrameCallbackDelayed(tl_choreo *c, void *fn, void *data, long ms) { choreo_post(c, 0, fn, data, ms); }
+static void b_AChoreographer_postFrameCallback64(tl_choreo *c, void *fn, void *data) { choreo_post(c, 1, fn, data, 0); }
+static void b_AChoreographer_postFrameCallbackDelayed64(tl_choreo *c, void *fn, void *data, uint32_t ms) { choreo_post(c, 1, fn, data, ms); }
+static void b_AChoreographer_postVsyncCallback(tl_choreo *c, void *fn, void *data) { choreo_post(c, 2, fn, data, 0); }
+/* The refresh rate never changes: a callback is told 60 Hz once, when it registers. */
+static void b_AChoreographer_registerRefreshRateCallback(tl_choreo *c, void *fn, void *data)
+{
+    if (!c || !fn) return;
+    c->rate_fn = fn; c->rate_data = data;
+    ((void (*)(int64_t, void *))fn)(VSYNC_NS, data);
+}
+static void b_AChoreographer_unregisterRefreshRateCallback(tl_choreo *c, void *fn, void *data) { (void)fn; (void)data; if (c) c->rate_fn = NULL; }
 
 /* ----------------------------------------------------------- configuration */
 
@@ -213,15 +341,19 @@ static void *b_AAssetManager_open(void *mgr, const char *name, int mode)
  */
 extern void (*tl_cocos_audio_hook)(const int16_t *samples, int frames, int channels, int rate);
 
-enum { AA_OK = 0, AA_UNAVAILABLE = -899, AA_FORMAT_I16 = 1, AA_STATE_OPEN = 2, AA_STATE_STARTED = 4, AA_STATE_STOPPED = 10, AA_STATE_CLOSED = 12 };
+enum { AA_OK = 0, AA_UNAVAILABLE = -899, AA_TIMEOUT = -885, AA_FORMAT_I16 = 1, AA_FORMAT_FLOAT = 2, AA_STATE_OPEN = 2, AA_STATE_STARTED = 4, AA_STATE_PAUSED = 6,
+       AA_STATE_FLUSHED = 8, AA_STATE_STOPPED = 10, AA_STATE_CLOSED = 12 };
 #define AA_RATE 48000
 #define AA_CHANNELS 2
 #define AA_BURST 1024
 
 typedef int (*aa_data_cb)(void *stream, void *user, void *data, int frames);
-typedef struct aa_builder { aa_data_cb cb; void *user; int direction; } aa_builder;
+typedef struct aa_builder { aa_data_cb cb; void *user; int direction, per_callback, format, channels; } aa_builder;
 typedef struct aa_stream {
     aa_data_cb cb; void *user;
+    int burst;                                  /* frames per data callback */
+    int format, channels;                       /* what the app asked for: 16-bit or float, mono or stereo */
+    _Atomic int64_t frames;                     /* written to the speakers so far */
     atomic_int state, buffer_size;
     atomic_bool run;
     pthread_t thread;
@@ -234,6 +366,10 @@ static int b_AAudioStreamBuilder_delete(aa_builder *b) { free(b); return AA_OK; 
 static void b_AAudioStreamBuilder_setDataCallback(aa_builder *b, aa_data_cb cb, void *user) { b->cb = cb; b->user = user; }
 static void b_AAudioStreamBuilder_setDirection(aa_builder *b, int d) { b->direction = d; }
 static void b_AAudioStreamBuilder_ignore(aa_builder *b, int v) { (void)b; (void)v; }
+static void b_AAudioStreamBuilder_setFramesPerDataCallback(aa_builder *b, int n) { b->per_callback = n; }
+static void b_AAudioStreamBuilder_setFormat(aa_builder *b, int f) { b->format = f; }
+static void b_AAudioStreamBuilder_setChannelCount(aa_builder *b, int n) { b->channels = n; }
+static void b_AAudioStreamBuilder_setChannelMask(aa_builder *b, uint32_t m) { b->channels = __builtin_popcount(m) == 1 ? 1 : 2; }
 static void b_AAudioStreamBuilder_setErrorCallback(aa_builder *b, void *cb, void *user) { (void)b; (void)cb; (void)user; }
 
 static int b_AAudioStreamBuilder_openStream(aa_builder *b, aa_stream **out)
@@ -247,25 +383,53 @@ static int b_AAudioStreamBuilder_openStream(aa_builder *b, aa_stream **out)
     if(!s){*out=NULL;return AA_UNAVAILABLE;}
     pthread_mutex_init(&s->lifecycle,NULL);
     s->cb = b->cb; s->user = b->user;
-    atomic_store(&s->state, AA_STATE_OPEN); atomic_store(&s->buffer_size, AA_BURST * 2);
+    s->burst = b->per_callback > 0 && b->per_callback <= 8192 ? b->per_callback : AA_BURST;
+    s->format = b->format == AA_FORMAT_FLOAT ? AA_FORMAT_FLOAT : AA_FORMAT_I16;
+    s->channels = b->channels == 1 ? 1 : AA_CHANNELS;
+    atomic_store(&s->state, AA_STATE_OPEN); atomic_store(&s->buffer_size, s->burst * 2);
     *out = s;
-    tl_log_line("aaudio: stream opened (%d Hz, %d channels, burst %d, callback=%d)", AA_RATE, AA_CHANNELS, AA_BURST, s->cb != NULL);
+    tl_log_line("aaudio: stream opened (%d Hz, %d channels, %s, %s, burst %d)", AA_RATE, s->channels, s->format == AA_FORMAT_FLOAT ? "float" : "16-bit",
+                s->cb ? "data callback" : "written", s->burst);
     return AA_OK;
 }
 
+/* the app's frames (its format and channel count) as 16-bit stereo for the host; out holds frames * 2 samples */
+static const int16_t *aa_convert(aa_stream *s, const void *in, int frames, int16_t *out)
+{
+    if (s->format == AA_FORMAT_I16 && s->channels == AA_CHANNELS) return in;
+    for (int i = 0; i < frames; i++)
+        for (int c = 0; c < AA_CHANNELS; c++) {
+            int k = i * s->channels + (s->channels == 1 ? 0 : c);
+            if (s->format == AA_FORMAT_FLOAT) { float f = ((const float *)in)[k] * 32767.0f; out[i * 2 + c] = (int16_t)(f > 32767.0f ? 32767 : f < -32768.0f ? -32768 : f); }
+            else out[i * 2 + c] = ((const int16_t *)in)[k];
+        }
+    return out;
+}
+static void aa_play(aa_stream *s, const void *buf, int frames)
+{
+    static __thread int16_t *conv; static __thread int conv_frames;
+    if (frames > conv_frames) { free(conv); conv = malloc((size_t)frames * AA_CHANNELS * sizeof(int16_t)); conv_frames = conv ? frames : 0; }
+    if (!conv) return;
+    const int16_t *pcm = aa_convert(s, buf, frames, conv);
+    if (tl_cocos_audio_hook) tl_cocos_audio_hook(pcm, frames, AA_CHANNELS, AA_RATE);
+    else { struct timespec ts = { 0, (long)((double)frames * 1e9 / AA_RATE) }; nanosleep(&ts, NULL); }
+}
 static void *aa_pump(void *arg)
 {
     aa_stream *s = arg;
     pthread_setname_np("aaudio-pump");
-    int16_t *buf = malloc((size_t)AA_BURST * AA_CHANNELS * sizeof(int16_t));
+    int n = s->burst;
+    /* sized for the app's format (Unity asks for float: a 16-bit buffer was half what it wrote) and the full buffer capacity, as Android's is */
+    size_t frame_bytes = (size_t)s->channels * (s->format == AA_FORMAT_FLOAT ? 4 : 2), cap = (size_t)(n > AA_BURST * 8 ? n : AA_BURST * 8);
+    uint8_t *buf = calloc(cap, frame_bytes);
     while (atomic_load(&s->run)) {
-        memset(buf, 0, (size_t)AA_BURST * AA_CHANNELS * sizeof(int16_t));
-        int r = s->cb(s, s->user, buf, AA_BURST);
+        memset(buf, 0, (size_t)n * frame_bytes);
+        int r = s->cb(s, s->user, buf, n);
         if (!atomic_load(&s->run)) break;
-        { static bool said; if (!said) { for (int i = 0; i < AA_BURST * AA_CHANNELS; i++) if (buf[i]) { said = true; tl_log_line("aaudio: the game's first non-silent burst (sample %d = %d)", i, buf[i]); break; } } }
-        if (tl_cocos_audio_hook) tl_cocos_audio_hook(buf, AA_BURST, AA_CHANNELS, AA_RATE);
-        else { struct timespec ts = { 0, (long)((double)AA_BURST * 1e9 / AA_RATE) }; nanosleep(&ts, NULL); }
-        if (r != 0) { tl_log_line("aaudio: callback requested stop (%d)",r); break; }
+        { static bool said; if (!said) { for (size_t i = 0; i < (size_t)n * frame_bytes; i++) if (buf[i]) { said = true; tl_log_line("aaudio: the game's first non-silent burst (byte %zu)", i); break; } } }
+        aa_play(s, buf, n);
+        atomic_fetch_add(&s->frames, n);
+        if (r != 0) { tl_log_line("aaudio: callback requested stop (%d)", r); break; }
     }
     free(buf);
     atomic_store(&s->run, false);
@@ -275,16 +439,13 @@ static void *aa_pump(void *arg)
 
 static int b_AAudioStream_requestStart(aa_stream *s)
 {
-    /* Blocking read/write playback is not implemented. Configuration probes
-     * may be opened and queried, but must never reach the callback pump. */
-    if (!s->cb) return AA_UNAVAILABLE;
     pthread_mutex_lock(&s->lifecycle);
     if (atomic_load(&s->run)) { pthread_mutex_unlock(&s->lifecycle); return AA_OK; }
-    /* A callback can return STOP without a requestStop call. Reap that pump
-     * before restarting; its previous run flag must not suppress a new start. */
-    if (s->thread_started) { pthread_join(s->thread,NULL); s->thread_started=false; }
-    atomic_store(&s->run,true);
+    /* A callback can return STOP without requestStop. Join before restarting. */
+    if (s->thread_started) { pthread_join(s->thread, NULL); s->thread_started = false; }
     atomic_store(&s->state, AA_STATE_STARTED);
+    if (!s->cb) { pthread_mutex_unlock(&s->lifecycle); return AA_OK; } /* played by write() */
+    atomic_store(&s->run, true);
     pthread_attr_t a; pthread_attr_init(&a); pthread_attr_setstacksize(&a, 1u << 20);
     s->thread_started = pthread_create(&s->thread, &a, aa_pump, s) == 0;
     pthread_attr_destroy(&a);
@@ -307,16 +468,59 @@ static int aa_stop(aa_stream *s, int state)
 static int b_AAudioStream_requestStop(aa_stream *s) { return aa_stop(s, AA_STATE_STOPPED); }
 static int b_AAudioStream_close(aa_stream *s) { aa_stop(s, AA_STATE_CLOSED); pthread_mutex_destroy(&s->lifecycle); free(s); return AA_OK; }
 static int b_AAudioStream_getSampleRate(aa_stream *s) { (void)s; return AA_RATE; }
-static int b_AAudioStream_getChannelCount(aa_stream *s) { (void)s; return AA_CHANNELS; }
-static int b_AAudioStream_getFormat(aa_stream *s) { (void)s; return AA_FORMAT_I16; }
+static int b_AAudioStream_getChannelCount(aa_stream *s) { return s->channels; }
+static int b_AAudioStream_getFormat(aa_stream *s) { return s->format; }
 static int b_AAudioStream_getDeviceId(aa_stream *s) { (void)s; return 0; }
-static int b_AAudioStream_getFramesPerBurst(aa_stream *s) { (void)s; return AA_BURST; }
+static int b_AAudioStream_getFramesPerBurst(aa_stream *s) { return s->burst; }
 static int b_AAudioStream_getBufferCapacityInFrames(aa_stream *s) { (void)s; return AA_BURST * 8; }
 static int b_AAudioStream_getBufferSizeInFrames(aa_stream *s) { return atomic_load(&s->buffer_size); }
 static int b_AAudioStream_setBufferSizeInFrames(aa_stream *s, int n) { atomic_store(&s->buffer_size, n); return n; }
 static int b_AAudioStream_getXRunCount(aa_stream *s) { (void)s; return 0; }
 static int b_AAudioStream_getState(aa_stream *s) { return atomic_load(&s->state); }
 static int b_AAudioStream_read(aa_stream *s, void *buf, int frames, long timeout) { (void)s; (void)buf; (void)frames; (void)timeout; return AA_UNAVAILABLE; }
+static int b_AAudioStream_requestPause(aa_stream *s) { return aa_stop(s, AA_STATE_PAUSED); }
+static int b_AAudioStream_requestFlush(aa_stream *s) { atomic_store(&s->state, AA_STATE_FLUSHED); return AA_OK; }
+static int b_AAudioStream_release(aa_stream *s) { (void)s; return AA_OK; }
+/* a stream without a data callback: the app pushes 16-bit stereo frames, and the host audio's blocking paces it */
+static int b_AAudioStream_write(aa_stream *s, const void *buf, int frames, int64_t timeout)
+{
+    (void)timeout;
+    if (atomic_load(&s->state) != AA_STATE_STARTED) return 0;
+    aa_play(s, buf, frames);
+    atomic_fetch_add(&s->frames, frames);
+    return frames;
+}
+static int b_AAudioStream_waitForStateChange(aa_stream *s, int input, int *next, int64_t timeout_ns)
+{
+    for (int64_t waited = 0;; waited += 5000000) {
+        int st = atomic_load(&s->state);
+        if (st != input || waited >= timeout_ns) { if (next) *next = st; return st != input ? AA_OK : AA_TIMEOUT; }
+        struct timespec ts = { 0, 5000000 }; nanosleep(&ts, NULL);
+    }
+}
+static int b_AAudioStream_getTimestamp(aa_stream *s, int clockid, int64_t *pos, int64_t *ns)
+{
+    (void)clockid;
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t);
+    if (pos) *pos = atomic_load(&s->frames);
+    if (ns) *ns = (int64_t)t.tv_sec * 1000000000ll + t.tv_nsec;
+    return AA_OK;
+}
+static int64_t b_AAudioStream_getFramesWritten(aa_stream *s) { return atomic_load(&s->frames); }
+static int64_t b_AAudioStream_getFramesRead(aa_stream *s) { return atomic_load(&s->frames); }
+static int b_AAudioStream_getPerformanceMode(aa_stream *s) { (void)s; return 10; }            /* NONE */
+static int b_AAudioStream_getSharingMode(aa_stream *s) { (void)s; return 1; }                 /* SHARED */
+static int b_AAudioStream_getUsage(aa_stream *s) { (void)s; return 14; }                      /* GAME */
+static int b_AAudioStream_getContentType(aa_stream *s) { (void)s; return 2; }                 /* MUSIC */
+static int b_AAudioStream_getInputPreset(aa_stream *s) { (void)s; return 6; }                 /* VOICE_RECOGNITION */
+static int b_AAudioStream_getSessionId(aa_stream *s) { (void)s; return -1; }                  /* NONE */
+static int b_AAudioStream_getAllowedCapturePolicy(aa_stream *s) { (void)s; return 1; }        /* ALL */
+static bool b_AAudioStream_false(aa_stream *s) { (void)s; return false; }
+static uint32_t b_AAudioStream_getChannelMask(aa_stream *s) { return s->channels == 1 ? 1 : 3; }   /* MONO / STEREO */
+static int b_AAudioStream_getSpatializationBehavior(aa_stream *s) { (void)s; return 1; }      /* AUTO */
+static int b_AAudioStream_getHardwareChannelCount(aa_stream *s) { (void)s; return AA_CHANNELS; }
+static int b_AAudioStream_getHardwareSampleRate(aa_stream *s) { (void)s; return AA_RATE; }
+static int b_AAudioStream_getHardwareFormat(aa_stream *s) { (void)s; return AA_FORMAT_I16; }
 static const char *b_AAudio_convertResultToText(int r) { (void)r; return "AAudio is not available"; }
 
 /* AAssetDir: the files directly under an asset directory, across the APKs */
@@ -516,24 +720,80 @@ static void b_ANativeActivity_flags(void *a, uint32_t add, uint32_t remove) { (v
 static void b_ANativeActivity_input(void *a, uint32_t flags) { (void)a; (void)flags; }
 
 
-typedef struct tl_nwindow { atomic_int refs; int width, height, format; void *layer; } tl_nwindow;
-static tl_nwindow g_window = { 1, 1080, 2400, 1, NULL };
+typedef struct tl_nwindow { atomic_int refs; int width, height, format; void *layer; jobj *texture; void *bits; } tl_nwindow;
+static tl_nwindow g_window = { 1, 1080, 2400, 1, NULL, NULL, NULL };
 
 void tl_nwindow_configure(int w, int h, void *layer) { g_window.width = w; g_window.height = h; g_window.layer = layer; }
+void tl_nwindow_resize(int w, int h) { g_window.width = w; g_window.height = h; }
 void *tl_nwindow_get(void) { atomic_fetch_add(&g_window.refs, 1); return &g_window; }
 void *tl_nwindow_native(void *window) { return window ? ((tl_nwindow *)window)->layer : NULL; }
 int tl_nwindow_width(void *window) { return window ? ((tl_nwindow *)window)->width : 0; }
 int tl_nwindow_height(void *window) { return window ? ((tl_nwindow *)window)->height : 0; }
+/* A window on a TextureView's SurfaceTexture (a Surface made on one): drawn off-screen, each frame handed to the texture. */
+void *tl_nwindow_texture(void *window) { return window ? ((tl_nwindow *)window)->texture : NULL; }
+/* rgba (w x h, top row first unless flip) to the texture's next frame */
+void tl_nwindow_post(void *window, const void *rgba, int w, int h, bool flip)
+{
+    tl_nwindow *win = window;
+    if (!win || !win->texture) return;
+    jvalue a[4]; a[0].j = (int64_t)(uintptr_t)rgba; a[1].i = w; a[2].i = h; a[3].z = flip;
+    tl_jni_call(win->texture, "huskPostRgba", "(JIIZ)V", a);
+    if (tl_jni_pending()) tl_jni_clear();
+}
 
-static void *b_ANativeWindow_fromSurface(void *env, void *surface) { (void)env; (void)surface; atomic_fetch_add(&g_window.refs, 1); return &g_window; }
+static void b_atrace_noop(void) {}
+static bool b_atrace_false(void) { return false; }
+int tl_AndroidBitmap_getInfo(void *env, void *bitmap, void *info);
+int tl_AndroidBitmap_lockPixels(void *env, void *bitmap, void **addr);
+int tl_AndroidBitmap_unlockPixels(void *env, void *bitmap);
+int32_t tl_AndroidBitmap_getDataSpace(void *env, void *bitmap);
+static void *b_ANativeWindow_fromSurface(void *env, void *surface)
+{
+    (void)env;
+    jobj *tex = surface ? tl_jni_get_field(surface, "huskTexture", "Landroid/graphics/SurfaceTexture;").l : NULL;
+    if (tl_jni_pending()) { tl_jni_clear(); tex = NULL; }
+    if (tex) {
+        tl_nwindow *w = calloc(1, sizeof(*w));
+        atomic_store(&w->refs, 1); w->format = 1; w->texture = tl_jni_ref(tex);
+        jobj *sz = tl_jni_call(tex, "huskSize", "()[I", NULL).l;
+        if (tl_jni_pending()) tl_jni_clear();
+        if (sz && sz->arr.len >= 2) { w->width = ((int32_t *)sz->arr.data)[0]; w->height = ((int32_t *)sz->arr.data)[1]; }
+        if (w->width <= 0 || w->height <= 0) { w->width = g_window.width; w->height = g_window.height; }
+        tl_log_line("ndk: native window on a SurfaceTexture, %dx%d", w->width, w->height);
+        return w;
+    }
+    atomic_fetch_add(&g_window.refs, 1); return &g_window;
+}
 static void b_ANativeWindow_acquire(tl_nwindow *w) { if (w) atomic_fetch_add(&w->refs, 1); }
-static void b_ANativeWindow_release(tl_nwindow *w) { if (w) atomic_fetch_sub(&w->refs, 1); }
+static void b_ANativeWindow_release(tl_nwindow *w)
+{
+    if (!w) return;
+    if (atomic_fetch_sub(&w->refs, 1) == 1 && w != &g_window) { free(w->bits); free(w); }
+}
+/* software drawing (ANativeWindow_lock): only texture windows have a buffer the app can write */
+typedef struct { int32_t width, height, stride, format; void *bits; uint32_t reserved[6]; } tl_nwbuffer;
+static int b_ANativeWindow_lock(tl_nwindow *w, tl_nwbuffer *out, void *dirty)
+{
+    (void)dirty;
+    if (!w || !w->texture || !out) return -22;
+    if (!w->bits) w->bits = calloc((size_t)w->width * w->height, 4);
+    if (!w->bits) return -12;
+    out->width = w->width; out->height = w->height; out->stride = w->width; out->format = 1; out->bits = w->bits;
+    return 0;
+}
+static int b_ANativeWindow_unlockAndPost(tl_nwindow *w)
+{
+    if (!w || !w->texture || !w->bits) return -22;
+    tl_nwindow_post(w, w->bits, w->width, w->height, false);
+    return 0;
+}
 static int b_ANativeWindow_getWidth(tl_nwindow *w) { return w ? w->width : 0; }
 static int b_ANativeWindow_getHeight(tl_nwindow *w) { return w ? w->height : 0; }
 static int b_ANativeWindow_getFormat(tl_nwindow *w) { return w ? w->format : 0; }
 static int b_ANativeWindow_setBuffersGeometry(tl_nwindow *w, int width, int height, int format)
 {
-    (void)width; (void)height; (void)format; (void)w;
+    (void)format;
+    if (w && w != &g_window && width > 0 && height > 0 && (width != w->width || height != w->height)) { w->width = width; w->height = height; free(w->bits); w->bits = NULL; }
     return 0;
 }
 static void *b_ANativeWindow_toSurface(void *env, void *w) { (void)env; (void)w; return NULL; }
@@ -592,6 +852,20 @@ const tl_bionic_entry tl_tab_ndk[] = {
     TL_WRAP("ALooper_acquire", b_ALooper_acquire), TL_WRAP("ALooper_release", b_ALooper_release),
     TL_WRAP("ALooper_wake", b_ALooper_wake), TL_WRAP("ALooper_pollOnce", b_ALooper_pollOnce), TL_WRAP("ALooper_pollAll", b_ALooper_pollAll),
     TL_WRAP("ALooper_addFd", b_ALooper_addFd), TL_WRAP("ALooper_removeFd", b_ALooper_removeFd),
+    TL_WRAP("AChoreographer_getInstance", b_AChoreographer_getInstance),
+    TL_WRAP("AChoreographer_postFrameCallback", b_AChoreographer_postFrameCallback),
+    TL_WRAP("AChoreographer_postFrameCallbackDelayed", b_AChoreographer_postFrameCallbackDelayed),
+    TL_WRAP("AChoreographer_postFrameCallback64", b_AChoreographer_postFrameCallback64),
+    TL_WRAP("AChoreographer_postFrameCallbackDelayed64", b_AChoreographer_postFrameCallbackDelayed64),
+    TL_WRAP("AChoreographer_postVsyncCallback", b_AChoreographer_postVsyncCallback),
+    TL_WRAP("AChoreographer_registerRefreshRateCallback", b_AChoreographer_registerRefreshRateCallback),
+    TL_WRAP("AChoreographer_unregisterRefreshRateCallback", b_AChoreographer_unregisterRefreshRateCallback),
+    TL_WRAP("AChoreographerFrameCallbackData_getFrameTimeNanos", b_AChoreographerFrameCallbackData_getFrameTimeNanos),
+    TL_WRAP("AChoreographerFrameCallbackData_getFrameTimelinesLength", b_AChoreographerFrameCallbackData_getFrameTimelinesLength),
+    TL_WRAP("AChoreographerFrameCallbackData_getPreferredFrameTimelineIndex", b_AChoreographerFrameCallbackData_getPreferredFrameTimelineIndex),
+    TL_WRAP("AChoreographerFrameCallbackData_getFrameTimelineVsyncId", b_AChoreographerFrameCallbackData_getFrameTimelineVsyncId),
+    TL_WRAP("AChoreographerFrameCallbackData_getFrameTimelineExpectedPresentationTimeNanos", b_AChoreographerFrameCallbackData_getFrameTimelineExpectedPresentationTimeNanos),
+    TL_WRAP("AChoreographerFrameCallbackData_getFrameTimelineDeadlineNanos", b_AChoreographerFrameCallbackData_getFrameTimelineDeadlineNanos),
     /* configuration */
     TL_WRAP("AConfiguration_new", b_AConfiguration_new), TL_WRAP("AConfiguration_delete", b_AConfiguration_delete),
     TL_WRAP("AConfiguration_fromAssetManager", b_AConfiguration_fromAssetManager), TL_WRAP("AConfiguration_getLanguage", b_AConfiguration_getLanguage),
@@ -608,8 +882,8 @@ const tl_bionic_entry tl_tab_ndk[] = {
     TL_WRAP("AAudioStreamBuilder_openStream", b_AAudioStreamBuilder_openStream), TL_WRAP("AAudioStreamBuilder_setDeviceId", b_AAudioStreamBuilder_ignore),
     TL_WRAP("AAudioStreamBuilder_setBufferCapacityInFrames", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setInputPreset", b_AAudioStreamBuilder_ignore),
     TL_WRAP("AAudioStreamBuilder_setPerformanceMode", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setUsage", b_AAudioStreamBuilder_ignore),
-    TL_WRAP("AAudioStreamBuilder_setSampleRate", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setChannelCount", b_AAudioStreamBuilder_ignore),
-    TL_WRAP("AAudioStreamBuilder_setFormat", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setSharingMode", b_AAudioStreamBuilder_ignore),
+    TL_WRAP("AAudioStreamBuilder_setSampleRate", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setChannelCount", b_AAudioStreamBuilder_setChannelCount),
+    TL_WRAP("AAudioStreamBuilder_setFormat", b_AAudioStreamBuilder_setFormat), TL_WRAP("AAudioStreamBuilder_setSharingMode", b_AAudioStreamBuilder_ignore),
     TL_WRAP("AAudioStream_requestStart", b_AAudioStream_requestStart), TL_WRAP("AAudioStream_requestStop", b_AAudioStream_requestStop),
     TL_WRAP("AAudioStream_close", b_AAudioStream_close), TL_WRAP("AAudioStream_getSampleRate", b_AAudioStream_getSampleRate),
     TL_WRAP("AAudioStream_getChannelCount", b_AAudioStream_getChannelCount), TL_WRAP("AAudioStream_getFormat", b_AAudioStream_getFormat),
@@ -617,6 +891,24 @@ const tl_bionic_entry tl_tab_ndk[] = {
     TL_WRAP("AAudioStream_getBufferCapacityInFrames", b_AAudioStream_getBufferCapacityInFrames), TL_WRAP("AAudioStream_getBufferSizeInFrames", b_AAudioStream_getBufferSizeInFrames),
     TL_WRAP("AAudioStream_setBufferSizeInFrames", b_AAudioStream_setBufferSizeInFrames), TL_WRAP("AAudioStream_getXRunCount", b_AAudioStream_getXRunCount),
     TL_WRAP("AAudioStream_getState", b_AAudioStream_getState), TL_WRAP("AAudioStream_read", b_AAudioStream_read),
+    TL_WRAP("AAudioStreamBuilder_setFramesPerDataCallback", b_AAudioStreamBuilder_setFramesPerDataCallback),
+    TL_WRAP("AAudioStreamBuilder_setContentType", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setSessionId", b_AAudioStreamBuilder_ignore),
+    TL_WRAP("AAudioStreamBuilder_setAllowedCapturePolicy", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setPrivacySensitive", b_AAudioStreamBuilder_ignore),
+    TL_WRAP("AAudioStreamBuilder_setPackageName", b_AAudioStreamBuilder_ignore), TL_WRAP("AAudioStreamBuilder_setAttributionTag", b_AAudioStreamBuilder_ignore),
+    TL_WRAP("AAudioStreamBuilder_setChannelMask", b_AAudioStreamBuilder_setChannelMask), TL_WRAP("AAudioStreamBuilder_setIsContentSpatialized", b_AAudioStreamBuilder_ignore),
+    TL_WRAP("AAudioStreamBuilder_setSpatializationBehavior", b_AAudioStreamBuilder_ignore),
+    TL_WRAP("AAudioStream_write", b_AAudioStream_write), TL_WRAP("AAudioStream_waitForStateChange", b_AAudioStream_waitForStateChange),
+    TL_WRAP("AAudioStream_getTimestamp", b_AAudioStream_getTimestamp), TL_WRAP("AAudioStream_release", b_AAudioStream_release),
+    TL_WRAP("AAudioStream_getFramesRead", b_AAudioStream_getFramesRead), TL_WRAP("AAudioStream_getFramesWritten", b_AAudioStream_getFramesWritten),
+    TL_WRAP("AAudioStream_getPerformanceMode", b_AAudioStream_getPerformanceMode), TL_WRAP("AAudioStream_getSharingMode", b_AAudioStream_getSharingMode),
+    TL_WRAP("AAudioStream_requestPause", b_AAudioStream_requestPause), TL_WRAP("AAudioStream_requestFlush", b_AAudioStream_requestFlush),
+    TL_WRAP("AAudioStream_getUsage", b_AAudioStream_getUsage), TL_WRAP("AAudioStream_getContentType", b_AAudioStream_getContentType),
+    TL_WRAP("AAudioStream_getInputPreset", b_AAudioStream_getInputPreset), TL_WRAP("AAudioStream_getSessionId", b_AAudioStream_getSessionId),
+    TL_WRAP("AAudioStream_getAllowedCapturePolicy", b_AAudioStream_getAllowedCapturePolicy), TL_WRAP("AAudioStream_isPrivacySensitive", b_AAudioStream_false),
+    TL_WRAP("AAudioStream_getChannelMask", b_AAudioStream_getChannelMask), TL_WRAP("AAudioStream_isContentSpatialized", b_AAudioStream_false),
+    TL_WRAP("AAudioStream_getSpatializationBehavior", b_AAudioStream_getSpatializationBehavior),
+    TL_WRAP("AAudioStream_getHardwareChannelCount", b_AAudioStream_getHardwareChannelCount), TL_WRAP("AAudioStream_getHardwareSampleRate", b_AAudioStream_getHardwareSampleRate),
+    TL_WRAP("AAudioStream_getHardwareFormat", b_AAudioStream_getHardwareFormat),
     TL_WRAP("AAssetManager_openDir", b_AAssetManager_openDir), TL_WRAP("AAssetDir_getNextFileName", b_AAssetDir_getNextFileName),
     TL_WRAP("AAssetDir_close", b_AAssetDir_close), TL_WRAP("deflateBound", b_deflateBound),
     TL_WRAP("AAssetManager_fromJava", b_AAssetManager_fromJava), TL_WRAP("AAssetManager_open", b_AAssetManager_open),
@@ -624,12 +916,19 @@ const tl_bionic_entry tl_tab_ndk[] = {
     TL_WRAP("AAsset_getLength64", b_AAsset_getLength), TL_WRAP("AAsset_getRemainingLength", b_AAsset_getRemainingLength),
     TL_WRAP("AAsset_getRemainingLength64", b_AAsset_getRemainingLength), TL_WRAP("AAsset_getBuffer", b_AAsset_getBuffer),
     TL_WRAP("AAsset_seek", b_AAsset_seek), TL_WRAP("AAsset_seek64", b_AAsset_seek), TL_WRAP("AAsset_isAllocated", b_AAsset_isAllocated),
+    /* systrace (libandroid): nothing records traces here */
+    TL_WRAP("ATrace_beginSection", b_atrace_noop), TL_WRAP("ATrace_endSection", b_atrace_noop), TL_WRAP("ATrace_isEnabled", b_atrace_false),
+    TL_WRAP("ATrace_beginAsyncSection", b_atrace_noop), TL_WRAP("ATrace_endAsyncSection", b_atrace_noop), TL_WRAP("ATrace_setCounter", b_atrace_noop),
+    /* bitmaps (libjnigraphics) */
+    TL_WRAP("AndroidBitmap_getInfo", tl_AndroidBitmap_getInfo), TL_WRAP("AndroidBitmap_lockPixels", tl_AndroidBitmap_lockPixels),
+    TL_WRAP("AndroidBitmap_unlockPixels", tl_AndroidBitmap_unlockPixels), TL_WRAP("AndroidBitmap_getDataSpace", tl_AndroidBitmap_getDataSpace),
     /* windows */
     TL_WRAP("ANativeWindow_fromSurface", b_ANativeWindow_fromSurface), TL_WRAP("ANativeWindow_acquire", b_ANativeWindow_acquire),
     TL_WRAP("ANativeWindow_release", b_ANativeWindow_release), TL_WRAP("ANativeWindow_getWidth", b_ANativeWindow_getWidth),
     TL_WRAP("ANativeWindow_getHeight", b_ANativeWindow_getHeight), TL_WRAP("ANativeWindow_getFormat", b_ANativeWindow_getFormat),
     TL_WRAP("ANativeWindow_setBuffersGeometry", b_ANativeWindow_setBuffersGeometry),
-    TL_WRAP("ANativeWindow_toSurface", b_ANativeWindow_toSurface),
+    TL_WRAP("ANativeWindow_toSurface", b_ANativeWindow_toSurface), TL_WRAP("ANativeWindow_lock", b_ANativeWindow_lock),
+    TL_WRAP("ANativeWindow_unlockAndPost", b_ANativeWindow_unlockAndPost),
     TL_WRAP("AInputQueue_attachLooper", b_AInputQueue_attachLooper), TL_WRAP("AInputQueue_detachLooper", b_AInputQueue_detachLooper),
     TL_WRAP("AInputQueue_hasEvents", b_AInputQueue_hasEvents), TL_WRAP("AInputQueue_getEvent", b_AInputQueue_getEvent),
     TL_WRAP("AInputQueue_preDispatchEvent", b_AInputQueue_preDispatchEvent), TL_WRAP("AInputQueue_finishEvent", b_AInputQueue_finishEvent),

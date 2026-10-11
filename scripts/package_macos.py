@@ -8,6 +8,17 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 
+def assert_bundle_idle(destination):
+    """Refuse replacement even when packaging is an implicit build dependency."""
+    root = destination.resolve()
+    processes = subprocess.check_output(['ps', '-ww', '-axo', 'pid=,comm='], text=True)
+    for line in processes.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) != 2 or not fields[1].startswith('/'):
+            continue
+        if Path(fields[1]).resolve().is_relative_to(root):
+            raise RuntimeError(f'Cannot replace running bundle {root} (PID {fields[0]}); quit it normally first')
+
 def copytree(source, destination):
     if destination.exists(): shutil.rmtree(destination)
     shutil.copytree(source, destination, symlinks=True)
@@ -18,6 +29,7 @@ def sign(path, entitlements=None, identity="-"):
     subprocess.run([*args,str(path)],check=True)
 
 def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=None):
+    assert_bundle_idle(destination)
     if destination.exists(): shutil.rmtree(destination)
     (destination/'Contents/MacOS').mkdir(parents=True)
     shutil.copy2(app/'Contents/Info.plist',destination/'Contents/Info.plist')

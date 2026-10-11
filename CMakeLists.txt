@@ -43,20 +43,31 @@ target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security")
 target_compile_options(SharedLibrary PRIVATE -I ${MAC}/SharedCore)
 
 add_library(GameActivityRuntime STATIC
+    ${CLASSIC}/husk-tl-sound.c
     ${NEXT}/husk-tl-ld.c ${NEXT}/husk-tl-a64.c ${NEXT}/husk-tl-xmem.c ${NEXT}/husk-tl-va.c ${NEXT}/husk-tl-codewrite.c
     ${NEXT}/husk-tl-bionic.c ${NEXT}/husk-tl-bionic-str.c ${NEXT}/husk-tl-bionic-io.c
     ${NEXT}/husk-tl-bionic-net.c ${NEXT}/husk-tl-bionic-pthread.c ${NEXT}/husk-tl-bionic-cxx.c
-    ${NEXT}/husk-tl-bionic-ndk.c ${NEXT}/husk-tl-opensles.c
+    ${NEXT}/husk-tl-bionic-ndk.c ${NEXT}/husk-tl-bionic-sys.c ${NEXT}/husk-tl-bionic-ldbl.c ${NEXT}/husk-tl-opensles.c
     ${NEXT}/husk-tl-jni.c ${NEXT}/husk-tl-jni-hle.c ${NEXT}/husk-tl-jni-loop.c
     ${NEXT}/husk-tl-jni-input.c ${NEXT}/husk-tl-jni-assetstream.c ${NEXT}/husk-tl-jni-tls.c
     ${NEXT}/husk-tl-jni-http.c ${NEXT}/husk-tl-jni-security.c ${NEXT}/husk-tl-jni-fmod.c ${NEXT}/husk-tl-jni-gms.c
-    ${NEXT}/husk-tl-jni-minecraft.c ${NEXT}/husk-tl-jni-text.c ${NEXT}/husk-tl-dexindex.c
+    ${NEXT}/husk-tl-jni-minecraft.c ${NEXT}/husk-tl-jni-text.c ${NEXT}/husk-tl-jni-audiotrack.c ${NEXT}/husk-tl-dexindex.c
+    ${NEXT}/husk-tl-dvm.c ${NEXT}/husk-tl-dvm-natives.c ${NEXT}/husk-tl-dvm-jvm.c
+    ${NEXT}/husk-tl-dvm-annotations.c ${NEXT}/husk-tl-dvm-proxy.c ${NEXT}/husk-tl-dvm-android.c
+    ${NEXT}/husk-tl-dvm-graphics.c ${NEXT}/husk-tl-dvm-audio.c ${NEXT}/husk-tl-dvm-sqlite.c
+    ${NEXT}/husk-tl-dvm-media.c ${NEXT}/husk-tl-dvm-sensors.m ${NEXT}/husk-tl-dvm-web.m
+    ${NEXT}/husk-tl-dvm-gles10.c ${NEXT}/husk-tl-dvm-gles10ext.c
+    ${NEXT}/husk-tl-dvm-gles11.c ${NEXT}/husk-tl-dvm-gles11ext.c
+    ${NEXT}/husk-tl-dvm-gles20.c ${NEXT}/husk-tl-dvm-gles30.c
+    ${NEXT}/husk-tl-dvm-gles31.c ${NEXT}/husk-tl-dvm-gles32.c
     ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-unity.c ${NEXT}/husk-tl-gamepad.c
     ${NEXT}/husk-tl-audio.c ${NEXT}/husk-tl-http.m ${NEXT}/husk-tl-vulkan.m)
 target_include_directories(GameActivityRuntime PUBLIC ${NEXT} PRIVATE ${CLASSIC})
 target_compile_options(GameActivityRuntime PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
-target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv "-framework Foundation" "-framework Security"
-    "-framework AudioToolbox" "-framework QuartzCore" "-framework Metal")
+target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv sqlite3 "-framework Foundation" "-framework Security"
+    "-framework AudioToolbox" "-framework QuartzCore" "-framework Metal" "-framework AppKit"
+    "-framework CoreText" "-framework ImageIO" "-framework WebKit" "-framework VideoToolbox"
+    "-framework CoreMedia" "-framework CoreVideo" "-framework Accelerate")
 add_library(NativeRuntime ALIAS GameActivityRuntime)
 
 add_executable(MinecraftProbe tests/macos/MinecraftProbe.c)
@@ -122,6 +133,7 @@ add_custom_target(PackageMac ALL
     DEPENDS HuskMac NativeRunner Fixtures ${VM_PACKAGE_DEPENDS} VERBATIM)
 
 enable_testing()
+add_test(NAME macos-package-guard COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/PackageGuard.py)
 add_executable(VMExitFixture tests/macos/VMExitFixture.m)
 target_compile_options(VMExitFixture PRIVATE -fobjc-arc)
 target_link_libraries(VMExitFixture PRIVATE "-framework Foundation")
@@ -149,7 +161,12 @@ add_test(NAME unity-lifecycle COMMAND UnityLifecycleTests)
 add_test(NAME unity-incomplete-destroy COMMAND UnityLifecycleTests missing-done)
 add_test(NAME unity-guest-quit COMMAND UnityLifecycleTests guest-quit)
 add_test(NAME unity-modern-player COMMAND UnityLifecycleTests modern-player)
-set_tests_properties(unity-lifecycle unity-incomplete-destroy unity-guest-quit unity-modern-player PROPERTIES TIMEOUT 10)
+add_test(NAME unity-two-argument-init COMMAND UnityLifecycleTests two-argument-init)
+set_tests_properties(unity-lifecycle unity-incomplete-destroy unity-guest-quit unity-modern-player unity-two-argument-init PROPERTIES TIMEOUT 10)
+add_executable(AndroidRuntimeTests tests/macos/AndroidRuntime.c)
+target_link_libraries(AndroidRuntimeTests PRIVATE NativeRuntime)
+add_test(NAME android-runtime-contracts COMMAND AndroidRuntimeTests)
+set_tests_properties(android-runtime-contracts PROPERTIES TIMEOUT 10)
 add_executable(MacNativeLaunchTests tests/macos/NativeLaunchTests.swift ${MAC}/SharedLibrary/NativeLaunch.swift src/app/Husk/ApkMetadata.swift)
 target_compile_options(MacNativeLaunchTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacNativeLaunchTests PRIVATE SharedCore)

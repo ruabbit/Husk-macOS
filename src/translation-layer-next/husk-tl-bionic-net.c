@@ -221,6 +221,8 @@ static long b_recv(int fd, void *p, size_t n, int flags)
 {
     TL_ERRNO_BEGIN(); long r = recv(fd, p, n, msg_flags_to_darwin(flags)); int e = errno; TL_ERRNO_END(); NTRACE("recv(fd %d, %zu) -> %ld errno %d", fd, n, r, r < 0 ? e : 0); return r;
 }
+static long b_sendto(int fd, const void *p, size_t n, int flags, const void *g, socklen_t glen);
+static long b___sendto_chk(int fd, const void *p, size_t n, size_t bl, int flags, const void *g, socklen_t glen) { (void)bl; return b_sendto(fd, p, n, flags, g, glen); }
 static long b_sendto(int fd, const void *p, size_t n, int flags, const void *g, socklen_t glen)
 {
     struct sockaddr_storage s; socklen_t sl = 0;
@@ -272,6 +274,25 @@ static long b_recvmsg(int fd, guest_msghdr *g, int flags)
     }
     TL_ERRNO_END();
     return r;
+}
+/* sendmmsg / recvmmsg: Darwin has neither; one message at a time (QUIC and DNS libraries batch with them) */
+typedef struct { guest_msghdr hdr; unsigned int len; } guest_mmsghdr;
+static int b_sendmmsg(int fd, guest_mmsghdr *v, unsigned int n, int flags)
+{
+    unsigned int i = 0;
+    for (; i < n; i++) { long r = b_sendmsg(fd, &v[i].hdr, flags); if (r < 0) return i ? (int)i : -1; v[i].len = (unsigned int)r; }
+    return (int)i;
+}
+static int b_recvmmsg(int fd, guest_mmsghdr *v, unsigned int n, int flags, void *timeout)
+{
+    (void)timeout;
+    unsigned int i = 0;
+    for (; i < n; i++) {
+        long r = b_recvmsg(fd, &v[i].hdr, i ? flags | 0x40 /* MSG_DONTWAIT */ : flags);
+        if (r < 0) return i ? (int)i : -1;
+        v[i].len = (unsigned int)r;
+    }
+    return (int)i;
 }
 
 static int b_shutdown(int fd, int how) { TL_ERRNO_BEGIN(); int r = shutdown(fd, how); TL_ERRNO_END(); return r; }
@@ -399,6 +420,13 @@ static int b_getaddrinfo(const char *node, const char *service, const guest_addr
     return 0;
 }
 
+/* bionic's own: getaddrinfo on a network (netid/mark are Android's network selection; there is one network here) */
+static int b_android_getaddrinfofornet(const char *node, const char *service, const guest_addrinfo *gh, unsigned netid, unsigned mark, guest_addrinfo **res)
+{
+    (void)netid; (void)mark;
+    return b_getaddrinfo(node, service, gh, res);
+}
+
 static void b_freeaddrinfo(guest_addrinfo *a)
 {
     while (a) { guest_addrinfo *n = a->ai_next; free(a); a = n; }
@@ -448,13 +476,49 @@ static unsigned b_if_nametoindex(const char *n) { return if_nametoindex(n); }
 static int b_inet_pton(int af, const char *src, void *dst) { int d = dom_to_darwin(af); return d < 0 ? -1 : inet_pton(d, src, dst); }
 static const char *b_inet_ntop(int af, const void *src, char *dst, socklen_t size) { int d = dom_to_darwin(af); return d < 0 ? NULL : inet_ntop(d, src, dst, size); }
 
+/*
+ * getifaddrs: the host's interfaces with IPv4 or IPv6 addresses, in bionic's struct ifaddrs (the same fields, Linux sockaddrs). Each
+ * entry is one allocation holding its name and addresses, so freeifaddrs frees the chain entry by entry. Flags keep their meaning;
+ * IFF_MULTICAST is 0x1000 on Linux, 0x8000 here.
+ */
+#include <ifaddrs.h>
+#include <net/if.h>
+typedef struct guest_ifaddrs { struct guest_ifaddrs *next; char *name; uint32_t flags; void *addr, *netmask, *ifu, *data; } guest_ifaddrs;
+static int b_getifaddrs(guest_ifaddrs **out)
+{
+    struct ifaddrs *list;
+    if (getifaddrs(&list) != 0) { tl_set_guest_errno(tl_errno_to_guest(errno)); return -1; }
+    guest_ifaddrs *head = NULL, **tail = &head;
+    for (struct ifaddrs *i = list; i; i = i->ifa_next) {
+        if (!i->ifa_addr || (i->ifa_addr->sa_family != AF_INET && i->ifa_addr->sa_family != AF_INET6)) continue;
+        size_t nl = strlen(i->ifa_name) + 1;
+        uint8_t *blk = calloc(1, sizeof(guest_ifaddrs) + 3 * 32 + nl);
+        guest_ifaddrs *g = (guest_ifaddrs *)blk;
+        uint8_t *sa = blk + sizeof(guest_ifaddrs);
+        g->name = (char *)(sa + 96); memcpy(g->name, i->ifa_name, nl);
+        uint32_t f = i->ifa_flags & 0x3FF & ~0x20u;
+        if (i->ifa_flags & IFF_MULTICAST) f |= 0x1000;
+        g->flags = f;
+        sa_from_darwin(i->ifa_addr, sa, 32); g->addr = sa;
+        if (i->ifa_netmask) { struct sockaddr_storage m; memcpy(&m, i->ifa_netmask, i->ifa_netmask->sa_len < sizeof(m) ? i->ifa_netmask->sa_len : sizeof(m));
+                              m.ss_family = i->ifa_addr->sa_family; sa_from_darwin((struct sockaddr *)&m, sa + 32, 32); g->netmask = sa + 32; }
+        if (i->ifa_dstaddr && (i->ifa_flags & (IFF_BROADCAST | IFF_POINTOPOINT))) { sa_from_darwin(i->ifa_dstaddr, sa + 64, 32); g->ifu = sa + 64; }
+        *tail = g; tail = &g->next;
+    }
+    freeifaddrs(list);
+    *out = head;
+    return 0;
+}
+static void b_freeifaddrs(guest_ifaddrs *g) { while (g) { guest_ifaddrs *n = g->next; free(g); g = n; } }
+
 const tl_bionic_entry tl_tab_net[] = {
+    TL_WRAP("getifaddrs", b_getifaddrs), TL_WRAP("freeifaddrs", b_freeifaddrs),
     TL_WRAP("socket", b_socket), TL_WRAP("socketpair", b_socketpair), TL_WRAP("bind", b_bind), TL_WRAP("connect", b_connect),
     TL_WRAP("listen", b_listen), TL_WRAP("accept", b_accept), TL_WRAP("accept4", b_accept4), TL_WRAP("send", b_send),
-    TL_WRAP("recv", b_recv), TL_WRAP("sendto", b_sendto), TL_WRAP("recvfrom", b_recvfrom), TL_WRAP("__recvfrom_chk", b___recvfrom_chk), TL_WRAP("sendmsg", b_sendmsg),
-    TL_WRAP("recvmsg", b_recvmsg), TL_WRAP("shutdown", b_shutdown), TL_WRAP("getsockname", b_getsockname),
+    TL_WRAP("recv", b_recv), TL_WRAP("sendto", b_sendto), TL_WRAP("__sendto_chk", b___sendto_chk), TL_WRAP("recvfrom", b_recvfrom), TL_WRAP("__recvfrom_chk", b___recvfrom_chk), TL_WRAP("sendmsg", b_sendmsg),
+    TL_WRAP("recvmsg", b_recvmsg), TL_WRAP("sendmmsg", b_sendmmsg), TL_WRAP("recvmmsg", b_recvmmsg), TL_WRAP("shutdown", b_shutdown), TL_WRAP("getsockname", b_getsockname),
     TL_WRAP("getpeername", b_getpeername), TL_WRAP("setsockopt", b_setsockopt), TL_WRAP("getsockopt", b_getsockopt),
-    TL_WRAP("getaddrinfo", b_getaddrinfo), TL_WRAP("freeaddrinfo", b_freeaddrinfo), TL_WRAP("gai_strerror", b_gai_strerror),
+    TL_WRAP("getaddrinfo", b_getaddrinfo), TL_WRAP("android_getaddrinfofornet", b_android_getaddrinfofornet), TL_WRAP("freeaddrinfo", b_freeaddrinfo), TL_WRAP("gai_strerror", b_gai_strerror),
     TL_WRAP("getnameinfo", b_getnameinfo), TL_WRAP("gethostbyname", b_gethostbyname), TL_WRAP("gethostbyaddr", b_gethostbyaddr),
     TL_WRAP("if_nametoindex", b_if_nametoindex), TL_WRAP("inet_pton", b_inet_pton), TL_WRAP("inet_ntop", b_inet_ntop),
     TL_DIRECT(inet_addr), TL_DIRECT(inet_aton), TL_DIRECT(inet_ntoa), TL_WRAP("htons", b_htons), TL_WRAP("ntohs", b_htons), TL_WRAP("htonl", b_htonl), TL_WRAP("ntohl", b_htonl),
