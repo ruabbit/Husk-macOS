@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-11 NativeActivity / Egg, Inc. 接入
+
+从干净的 `3de61f0` 开始补入上游已有的 NativeActivity 驱动。macOS 已编译共享驱动及其 UE4 JNI 链接依赖，资料库、SessionController 和 NativeRunner 增加 `nativeactivity` 分发、32 APK 集合复核、manifest 包名/库名/launcher alias/横竖屏、固定画布及触摸/键盘/手柄。旧导入动态获得入口，不要求重新下载；Unreal profile 尚未开放。启动元数据按 binary XML 的真实层级读取，其他 Activity 或 application 的元数据不会选成游戏入口。
+
+活动线程串行执行 NDK 回调，暂停回调返回后才确认暂停；关闭依次撤销焦点、暂停、销毁窗口/输入队列、stop/destroy，并 join 线程后才确认 storage-closed。缺少 onDestroy、onCreate 抛出 JNI 异常或进程提前退出均失败，不写正常关闭回执。加载与停止共用宿主串行队列，保留默认失焦继续和已有 AppKit 鼠标修复。采用上游开放 PR [#82](https://github.com/Leviidev/Husk/pull/82)（head `e304785404971b088eb0703b3aca3916aba44bcd`）的 ActivityThread.currentApplication 修复；复用现有 Application 单例，未将 PR 记为已合并。
+
+当前候选已在唯一 `build/macos` 完成全量构建和原地打包，默认 CTest **29/29 通过**；`verify_macos_bundle.py` 通过 **17 个 Mach-O** 的 arm64、签名、权限和依赖闭包检查。覆盖 NativeActivity 正常生命周期、缺失销毁、guest finish、onCreate 失败、JNI Application 单例、NDK 触摸/键盘/虚拟手柄，以及正式 AppKit 响应方法的点击/拖动/失焦。包级回归已确认旧索引获得 NativeActivity 入口、Runner 在执行前拒绝伪造引擎，资料库/原有会话回归也通过。实体手柄和真实游戏内输入尚未验收。
+
+真实 Egg, Inc.（`com.auxbrain.egginc`，versionCode 111359）只运行一次隔离、静音、无窗口的生产驱动探测。读取现有 base 与三个分包，测试数据在 `build/macos/TestResults/NativeActivityEgg`。主库和 PairIP 依赖已加载，故障发生在 libegginc.so 的原生构造函数、早于 ANativeActivity_onCreate 和首帧：PLT 槽 `0x17636b8` 仍为未重定位的 `0x1625d90`，间接分支到该地址触发 SIGSEGV。诊断处理器记录并回收进程，无系统崩溃窗口。尚未证明 PairIP 是根因，没有跳过保护、猜测偏移打补丁或重复启动已知失败样本；**Egg 仍未通过运行验证**。
+
+候选更新已完成。用户确认通过 ⌘Q 退出后，系统仍残留 PID 27488；只读采样显示空闲事件循环，无候选内 Runner/VM、无网络句柄。对这一已授权退出的残留主进程发送 SIGTERM 后确认回收，实际通过 package_macos.py 的活动进程保护，随后原地打包。完整验证后通过 CUA 按 Product 完整路径只启动一次，确认新 PID 314 指向当前候选；CUA 随后的 AX 读取仍报 native pipe 断开，**前台详情页/按钮的可见检查未完成**。未重复启动 Egg。主 App SHA-256 为 `3ceb1973ba0a6e5df05362af9c88c014ad4f7e97ff1f157b3d091041d7cd1bb8`，NativeRunner 为 `8ef38085380095987ae0caffc70b0dc8e175d30d6d68682e2f7fdf2fda0a2d08`。
+
+日志复用 `build/logs/current-nativeactivity-build.log`、`current-nativeactivity-tests.log`、`current-nativeactivity-egg.log`、`current-nativeactivity-egg-result.json`。用户 APK、存档和 Android 磁盘未写入。每日 09:00 的原任务已更新并读回确认：新功能同步须在同一轮完成对应 macOS 适配和验证；未完成的具体交付与兼容缺口保持开放，不以合并历史或旧测试关闭。
+
 ## 2026-10-11 上游运行时合并与 macOS 编译接入
 
 本轮开始时工作树干净，位于 `codex/macos-p0`，两个 origin 分支与本地一致，无未完成 Git 操作。fetch 得到上游 `a08b695..8a9dc1b` 共 75 个提交、3,210 个变化路径，主要新增 Java/Dalvik 框架、Flutter、GameMaker、Python/Web 路径及底层 JNI/NDK 修复。先将本地 main 快进至上游，再以真实 merge 合入 macOS，未使用 ours 策略。Store / Play 登录和 ANGLE / MoltenVK 构建脚本、补丁在该范围内无新改动。

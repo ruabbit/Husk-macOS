@@ -1,5 +1,14 @@
 # 审计发现
 
+## 2026-10-11 NativeActivity 与 Egg, Inc.
+
+- 上游通用 NativeActivity 入口来自 `b7480b6c11a7bac9bb97cd93f277f3bebcbc21cc`，早已是当前分支祖先；此前缺口是 macOS 未编入和分发。共享驱动原有暂停从宿主直接发回调、没有 stop/join，不能直接套用 macOS 的正常关闭回执。现已让所有 NDK 回调在同一活动线程执行，并在销毁返回、线程回收后确认关闭。依据 [NDK 回调契约](https://developer.android.com/ndk/reference/struct/a-native-activity-callbacks)，窗口销毁回调必须等 guest 不再访问窗口后返回。
+- [PR #82](https://github.com/Leviidev/Husk/pull/82) 在核对时仍开放，head 为 `e304785404971b088eb0703b3aca3916aba44bcd`。采用其中的 ActivityThread 类和 currentApplication 静态 HLE，返回与 Activity.getApplication 相同的对象；该 PR 的 iPadOS 报告不是 Egg 或 macOS 的验证结果。
+- Egg 的 manifest launcher 是 `com.auxbrain.egginc.EggIncActivity`，`android.app.lib_name=egginc`，应用类为 `com.pairip.vmencryption.KeyImportApplication`，竖屏。base 加三个分包已交给真实加载器；主库在 arm64 split。启动元数据解析增加 XML 层级，避免选中其他组件或 application 的同名 metadata。
+- 单次隔离探测的 PC/fault 为 `0x1625d90`，LR 为 `0x70416257a8`。libegginc.so 的首个 init-array 构造函数 RVA `0x1621794` 在 `0x16217a4` 调用 PLT `0x16413c0`；该 PLT 从槽 `0x17636b8` 读出的仍是原始解析器地址 `0x1625d90`。静态核对 DT_RELA、DT_JMPREL 没有该槽的重定位；此 ELF 未声明 Android APS2 或 RELR。DT_INIT 为 `0x17a0000`，PairIP 依赖在崩溃前已完成构造函数。当前仅能证明未重定位跳转发生于原生初始化，不能将保护组件的存在当作因果证明。
+- Egg 尚未进入 ANativeActivity_onCreate、没有首帧。下一步应核对 DT_INIT 与动态符号/PLT 初始化契约以及上游 loader 的相关修复；保留原 APK，不跳过初始化或猜测地址补丁。没有相关修复时不重复运行这一失败样本。实现回归通过和 GUI 入口开放均不能代替游戏运行验证。
+- 当前 Product 已原地更新，默认 29 项回归及 17 个 Mach-O 包校验通过。用户确认退出后仍残留旧 PID，核对空闲线程、无 Runner/VM/网络句柄后发送 SIGTERM 回收，再通过真实打包保护。新候选仅启动一次，PID/路径已核对；CUA 的 AX 连接仍失败，前台可见检查未完成，见 [progress.md](progress.md)。
+
 ## 2026-10-08 审查修复
 
 审查核对：哈希白名单与 Orbit 文案已在上一轮修复，本轮去掉样本哈希对 runtime 判断的最后一个兼容分支。xcode-27 是 GitHub 官方 arm64 预览标签，本轮 CI 改为稳定 macos-26，远程仍未验证。VM 依赖实际要求27.0.0，已用打包元数据贯通 UI/启动/校验。实际闭包发现 QEMU → libssh → OpenSSL 3；macOS 许可文档明确该组合和缺失 notices/对应源码阻塞发行。

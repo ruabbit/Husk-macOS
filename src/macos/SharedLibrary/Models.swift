@@ -38,6 +38,7 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
         if fixture != nil { return "orbit" }
         if (1...32).contains(apkNames.count) && abis.contains("arm64-v8a") {
             if engine == "Minecraft" { return "minecraft" }
+            if engine == "NativeActivity" { return "nativeactivity" }
             if engine?.hasPrefix("Unity") == true { return "unity" }
         }
         return nil

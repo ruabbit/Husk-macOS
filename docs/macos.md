@@ -1,10 +1,10 @@
 # 原生 macOS 开发版
 
-当前原生运行入口包含 **Orbit Garden / Dusk、Minecraft 和 Unity arm64 APK 集合**。Minecraft 与 Unity 使用真实 Android ELF、bionic/JNI 适配、ANGLE/Metal 和 AudioQueue，各自在独立 NativeRunner 中执行。资料库统一显示“开始游戏”，测试覆盖记录在开发文档中。旧 Play/本地导入按当前运行组件重新判定，无需重下，保留原有设置和存档。
+当前原生运行入口包含 **Orbit Garden / Dusk、Minecraft、Unity 和 NativeActivity arm64 APK 集合**。它们使用 Android ELF、bionic/JNI 适配、ANGLE/Metal 和 AudioQueue，在独立 NativeRunner 中执行。资料库统一显示“开始游戏”，测试覆盖记录在开发文档中。旧 Play/本地导入按当前运行组件重新判定，无需重下，保留原有设置和存档。各游戏的实际验证范围及候选交付状态见 [开发记录](development/macos/progress.md)。
 
-上游 main 的源码已合并到 `a08b695`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
+上游 main 的源码已合并到 `8a9dc1b`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
 
-本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md)、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 和 [上游接入现况](development/macos/upstream-parity.md)。完整 DEX/ART、Unreal、Cocos、SDL、通用 NativeActivity、Godot 和 Rockstar 尚未接入 macOS 原生启动链路。
+本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md)、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 和 [上游接入现况](development/macos/upstream-parity.md)。Java / Unity 6、Unreal、Cocos、SDL、Godot、Rockstar 等仍有原生启动链路缺口。
 
 ## 构建与运行
 
@@ -42,13 +42,13 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 | `library.json` | 版本化索引、游戏设置及上次游玩时间 |
 | `Games/<id>` | APK 副本、图标、扫描报告和导入元数据 |
 | `Saves/<id>/checkpoint.json` | 与游戏文件分开的存档 |
-| `Saves/<id>/data` | Minecraft / Unity 管理的游戏数据和设置；其 checkpoint 只记录正常关闭回执 |
+| `Saves/<id>/data` | Minecraft / Unity / NativeActivity 管理的游戏数据和设置；其 checkpoint 只记录正常关闭回执 |
 | `Logs/<session UUID>` | Runner 状态事件及独立 stderr |
 | `Staging`、`Trash` | 导入/移除事务暂存；不包含原始用户文件 |
 
 “移除游戏”保留存档；同一包重新导入后恢复使用。“清除存档”是详情页中的独立操作，并有确认。运行中的游戏禁止删除和清除存档。损坏索引或存档保留原文件并报告错误。同包、同签名且版本号更高的更新会原子替换游戏文件，保留应用身份、设置、上次游玩时间和存档。降级、签名不一致、损坏下载以及运行中的应用更新会被拒绝。安装事务日志用于恢复在文件替换和索引提交之间中断的更新。旧版单 APK 导入仍可读取；不能验证旧签名的安装不会被自动覆盖。
 
-普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft 或 Unity 的 arm64 APK 集合。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft 和 Unity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
+普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft、Unity 或 NativeActivity 的 arm64 APK 集合。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft、Unity 和 NativeActivity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
 
 ## Unity 运行
 
@@ -63,6 +63,12 @@ build/macos/MacUnitySession build/macos/Product/HuskMac.app \
   "$HOME/Library/Application Support/org.husk.HuskMac" GAME_ID \
   build/macos/TestResults/UnityReal --seconds 20
 ```
+
+## NativeActivity 运行
+
+通用 NativeActivity 驱动复用上游实现，launcher 的 `android.app.lib_name` 决定入口库；未指定时搜索导出 `ANativeActivity_onCreate` 的库。manifest 元数据按真实 XML 层级选择，支持 Activity alias 和固定横竖画布。触摸、键盘和手柄通过 NDK 输入队列交给 guest；所有生命周期回调在同一活动线程执行。正常关闭等待窗口、输入队列和 Activity 的销毁回调返回，并 join 线程后才写 `storage-closed`；缺少销毁回调或启动异常按失败处理。软键盘/IME 和实体手柄尚未验收。
+
+2026-10-11 的 Egg, Inc. 隔离后台探测失败：libegginc.so 在原生构造函数中调用未重定位的 PLT 槽，尚未进入 `ANativeActivity_onCreate` 或提交首帧。当前不能视为 Egg 已可玩。共享 JNI 已采用上游开放 [PR #82](https://github.com/Leviidev/Husk/pull/82) 的 Application 单例修复，该 PR 不能解决所有原生初始化问题。精确证据与后续工作见 [接入现况](development/macos/upstream-parity.md)。
 
 ## Google Play
 

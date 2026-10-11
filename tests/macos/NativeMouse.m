@@ -7,17 +7,22 @@
 #define tl_ga_mouse_relative recordRelative
 #define tl_unity_touch recordUnityTouch
 #define tl_unity_key recordUnityKey
+#define tl_na_touch recordUnityTouch
+#define tl_na_key recordNativeKey
 #import "../../src/macos/NativeRunner/main.m"
 #undef main
 #undef tl_ga_mouse
 #undef tl_ga_mouse_relative
 #undef tl_unity_touch
 #undef tl_unity_key
+#undef tl_na_touch
+#undef tl_na_key
 
 static struct { int action, buttons; float x,y,scroll; BOOL relative; } received[64];
 static int count;
 static int unityKey, unityKeyEvents;
 void recordUnityKey(int code,bool down,int repeat) { (void)down;(void)repeat;unityKey=code;unityKeyEvents++; }
+void recordNativeKey(int code,bool down) { recordUnityKey(code,down,0); }
 void recordUnityTouch(int phase,int id,float x,float y) { (void)id;recordMouse(phase,x,y,0,0); }
 void recordMouse(int action,float x,float y,int buttons,float scroll)
 {
@@ -153,7 +158,8 @@ int main(void) { @autoreleasepool {
     CHECK(received[1].relative && received[2].relative && received[2].buttons==1);
     CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));
     CHECK(received[3].buttons==0);
-    minecraft=NO;unity=YES;runner.loaded=YES;runner.heldKeys=[NSMutableSet new];count=0;
+    for(int profile=0;profile<2;profile++){
+    minecraft=NO;unity=profile==0;nativeactivity=profile==1;unityKeyEvents=0;runner.loaded=YES;runner.heldKeys=[NSMutableSet new];count=0;
     CHECK(mouse(view,NSEventTypeLeftMouseDown,bar));
     CHECK(mouse(view,NSEventTypeLeftMouseDragged,inside));
     CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));
@@ -170,7 +176,8 @@ int main(void) { @autoreleasepool {
     CHECK(count==5&&received[4].action==3&&view.mouseButtons==0&&runner.heldKeys.count==0);
     CHECK(unityKeyEvents==2&&[runner.state isEqual:@"running"]);
     CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));CHECK(count==5);
-    puts("PASS Unity click/drag mapping, ignored bars/right button, keyboard and focus-loss cancellation");
+    puts("PASS native engine click/drag mapping, ignored bars/right button, keyboard and focus-loss cancellation");
+    }
     CHECK(!window.visible);
     [window close];
     puts("PASS captured move/drag forwards relative input without changing the system cursor");

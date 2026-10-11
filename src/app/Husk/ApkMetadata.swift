@@ -145,6 +145,7 @@ enum ApkMetadata {
     struct Element {
         let name: String
         let attributes: [Attr]
+        let depth: Int
     }
 
     struct Attr {
@@ -170,6 +171,7 @@ enum ApkMetadata {
         var pool: StringPool?
         var resourceIds: [UInt32] = []
         var out: [Element] = []
+        var depth = 0
         var p = Int(r.u16(2))
 
         while p + 8 <= data.count {
@@ -206,7 +208,10 @@ enum ApkMetadata {
                                       value: pool.string(rawIndex)
                                              ?? pool.string(Int(typed))))
                 }
-                out.append(Element(name: name, attributes: attrs))
+                out.append(Element(name: name, attributes: attrs, depth: depth))
+                depth += 1
+            case 0x0103:                                // end element
+                depth = max(0, depth - 1)
             default:
                 break
             }

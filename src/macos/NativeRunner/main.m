@@ -11,6 +11,7 @@
 #include "husk-tl-egl.h"
 #include "husk-tl-gameactivity.h"
 #include "husk-tl-unity.h"
+#include "husk-tl-nativeactivity.h"
 #include "husk-tl-bionic.h"
 #include "husk-tl-gamepad.h"
 #include "husk-tl-audio.h"
@@ -29,12 +30,12 @@ static NSMutableArray<NSString *> *splitPaths;
 static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *diagnostics;
 static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow;
 static int variant, exitStatus;
-static BOOL minecraft, unity, portrait;
-static NSString *packageName;
-static BOOL guestRuntime(void) { return minecraft || unity; }
-static NSString *runtimeName(void) { return unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
-static void unityGuestExit(int status) {
-    tl_log_line("unity: guest requested process exit %d before lifecycle acknowledgement",status);
+static BOOL minecraft, unity, nativeactivity, portrait;
+static NSString *packageName, *nativeLibrary;
+static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity; }
+static NSString *runtimeName(void) { return nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
+static void activityGuestExit(int status) {
+    tl_log_line("%s: guest requested process exit %d before lifecycle acknowledgement",runtimeName().UTF8String,status);
     // The isolated process has no completed destroy receipt. Exit normally so
     // the supervisor reports the failure without a macOS crash dialog.
     _exit(70);
@@ -58,7 +59,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property BOOL loaded, changingPause, lifecycleDestroyed;
 @property BOOL requestedPause;
 @property NSDate *pauseStarted, *launchStarted;
-@property dispatch_queue_t unityQueue;
+@property dispatch_queue_t lifecycleQueue;
 @property NSArray<NSString *> *runtimePaths;
 @property NSMutableSet<NSNumber *> *heldKeys;
 @property MacTextInput *textInput;
@@ -135,7 +136,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
             drag?2:down?0:1;
         // AppKit raises for scrollingDeltaY on ordinary mouse events.
         tl_ga_mouse(action,x,y,self.mouseButtons,event.type==NSEventTypeScrollWheel?event.scrollingDeltaY:0);
-    } else if(unity) {
+    } else if(unity||nativeactivity) {
         if(![self.runner.state isEqual:@"running"]||self.runner.changingPause||(!press&&!release&&!drag)||event.buttonNumber!=0)return;
         if((release||drag)&&!(self.mouseButtons&1))return;
         NSPoint guest=[self renderPointForViewPoint:point];
@@ -145,7 +146,8 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
         }
         if(press)self.mouseButtons|=1;
         if(release)self.mouseButtons&=~1;
-        tl_unity_touch(press?0:release?2:1,0,guest.x,guest.y);
+        if(nativeactivity)tl_na_touch(press?0:release?2:1,0,guest.x,guest.y);
+        else tl_unity_touch(press?0:release?2:1,0,guest.x,guest.y);
         self.runner.lastClick=@{@"x":@(guest.x),@"y":@(guest.y),@"buttons":@(self.mouseButtons)};
     } else {
         NSPoint guest=[self renderPointForViewPoint:point];
@@ -272,12 +274,13 @@ static int androidKey(unsigned code)
 {
     if(atomic_load(&finished)||[self.state isEqual:@"stopping"])return;
     [self transition:@"stopping" reason:reason];[self clearInput];
-    if(unity && self.unityQueue) {
+    if((unity||nativeactivity) && self.lifecycleQueue) {
         // Initialization and join share a queue, so stop during loading cannot
         // race the loader or miss a thread that has not been created yet.
-        dispatch_async(self.unityQueue,^{
-            tl_audio_set_muted(true);tl_audio_set_paused(false);tl_unity_stop();
-            BOOL ok=tl_unity_get_state()==TL_UNITY_DESTROYED;
+        dispatch_async(self.lifecycleQueue,^{
+            tl_audio_set_muted(true);tl_audio_set_paused(false);
+            if(nativeactivity)tl_na_stop();else tl_unity_stop();
+            BOOL ok=nativeactivity?tl_na_get_state()==TL_NA_DESTROYED:tl_unity_get_state()==TL_UNITY_DESTROYED;
             dispatch_async(dispatch_get_main_queue(),^{[self gameStopped:ok];});
         });return;
     }
@@ -305,16 +308,16 @@ static int androidKey(unsigned code)
     int key=androidKey(code);if(!key)return;
     if(down){if(![self.state isEqual:@"running"]||self.changingPause)return;[self.heldKeys addObject:@(key)];}
     else [self.heldKeys removeObject:@(key)];
-    if(unity)tl_unity_key(key,down,repeat?1:0);else tl_ga_key(key,down,repeat?1:0);
+    if(nativeactivity)tl_na_key(key,down);else if(unity)tl_unity_key(key,down,repeat?1:0);else tl_ga_key(key,down,repeat?1:0);
 }
 - (void)clearInput {
     [self releaseCursor];
     if([self.textInput isKindOfClass:GameView.class])((GameView *)self.textInput).mouseButtons=0;
     mac_input_clear(&input);
     if(guestRuntime()&&self.loaded){
-        for(NSNumber *key in self.heldKeys){if(unity)tl_unity_key(key.intValue,false,0);else tl_ga_key(key.intValue,false,0);}
+        for(NSNumber *key in self.heldKeys){if(nativeactivity)tl_na_key(key.intValue,false);else if(unity)tl_unity_key(key.intValue,false,0);else tl_ga_key(key.intValue,false,0);}
         [self.heldKeys removeAllObjects];
-        if(unity)tl_unity_touch(3,0,0,0);else {tl_ga_touch(3,0,0,0);tl_ga_mouse_cancel();}
+        if(nativeactivity)tl_na_touch(3,0,0,0);else if(unity)tl_unity_touch(3,0,0,0);else {tl_ga_touch(3,0,0,0);tl_ga_mouse_cancel();}
         tl_pad_state empty={0};if(tl_pad_connected(0))tl_pad_update(0,&empty);
     }
 }
@@ -334,10 +337,10 @@ static int androidKey(unsigned code)
     BOOL pause=[self.state isEqual:@"running"];
     if(self.changingPause)return;
     [self clearInput];
-    if(unity){
+    if(unity||nativeactivity){
         self.changingPause=YES;self.requestedPause=pause;self.pauseStarted=NSDate.date;
         if(!pause)tl_audio_set_paused(false);
-        tl_unity_set_paused(pause);return;
+        if(nativeactivity)tl_na_set_paused(pause);else tl_unity_set_paused(pause);return;
     }
     if(minecraft) {
         self.changingPause=YES;
@@ -359,22 +362,33 @@ static int androidKey(unsigned code)
 - (void)frame
 {
     @autoreleasepool {
-    if(unity){
-        self.ticks=tl_unity_frames();tl_unity_state state=tl_unity_get_state();
-        if(state==TL_UNITY_FAILED){[self finish:NO reason:@"Unity 运行或关闭失败，请查看日志。"];return;}
+    if(unity||nativeactivity){
+        self.ticks=nativeactivity?tl_na_frames():tl_unity_frames();
+        tl_unity_state state=tl_unity_get_state();
+        if(nativeactivity){
+            switch(tl_na_get_state()){
+                case TL_NA_RUNNING:state=TL_UNITY_RUNNING;break;
+                case TL_NA_PAUSED:state=TL_UNITY_PAUSED;break;
+                case TL_NA_STOPPING:state=TL_UNITY_STOPPING;break;
+                case TL_NA_DESTROYED:state=TL_UNITY_DESTROYED;break;
+                case TL_NA_FAILED:state=TL_UNITY_FAILED;break;
+                default:state=TL_UNITY_STARTING;break;
+            }
+        }
+        if(state==TL_UNITY_FAILED){[self finish:NO reason:@"游戏运行或关闭失败，请查看日志。"];return;}
         if([self.state isEqual:@"stopping"])return;
         if(state==TL_UNITY_STOPPING||state==TL_UNITY_DESTROYED){[self stop:@"guest-quit"];return;}
         if([self.state isEqual:@"starting"]){
             if(self.loaded&&state==TL_UNITY_RUNNING&&self.ticks>0){
                 [self transition:@"running" reason:@"game-ready"];
                 if(!headless&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
-            }else if(-self.launchStarted.timeIntervalSinceNow>90){[self finish:NO reason:@"Unity 启动超时，请查看日志。"];}
+            }else if(-self.launchStarted.timeIntervalSinceNow>90){[self finish:NO reason:@"游戏启动超时，请查看日志。"];}
         }
         if(self.changingPause){
             if(state==(self.requestedPause?TL_UNITY_PAUSED:TL_UNITY_RUNNING)){
                 self.changingPause=NO;tl_audio_set_paused(self.requestedPause);
                 [self transition:self.requestedPause?@"paused":@"running" reason:self.requestedPause?@"pause-acknowledged":@"resume-acknowledged"];
-            }else if(-self.pauseStarted.timeIntervalSinceNow>15){[self finish:NO reason:@"Unity 未响应暂停或继续请求，请查看日志。"];}
+            }else if(-self.pauseStarted.timeIntervalSinceNow>15){[self finish:NO reason:@"游戏未响应暂停或继续请求，请查看日志。"];}
         }
         return;
     }
@@ -418,7 +432,9 @@ static int androidKey(unsigned code)
         NSString *source=message[@"source"];
         if([source isEqual:@"key"]) {[self guestKey:[message[@"code"] unsignedIntValue] down:[message[@"down"] boolValue] repeat:NO];}
         else if(minecraft&&[source isEqual:@"touch"]) {tl_ga_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
-        else if(unity&&[source isEqual:@"touch"]) {tl_unity_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
+        else if((unity||nativeactivity)&&[source isEqual:@"touch"]) {
+            if(nativeactivity)tl_na_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);
+            else tl_unity_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"mouse"]) {tl_ga_mouse([message[@"action"] intValue],[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue],[message[@"scroll"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"relative-mouse"]) {tl_ga_mouse_relative([message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"text"]&&self.textInput.textInputActive&&[message[@"text"] isKindOfClass:NSString.class]) {
@@ -479,7 +495,7 @@ static int androidKey(unsigned code)
         NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
         return [scan isKindOfClass:NSDictionary.class] && [scan[@"ok"] boolValue] &&
             [scan[@"hasManifest"] boolValue] && [scan[@"engine"] isKindOfClass:NSString.class] &&
-            (unity?[scan[@"engine"] hasPrefix:@"Unity"]:[scan[@"engine"] isEqual:@"Minecraft"]) &&
+            (nativeactivity?[scan[@"engine"] isEqual:@"NativeActivity"]:unity?[scan[@"engine"] hasPrefix:@"Unity"]:[scan[@"engine"] isEqual:@"Minecraft"]) &&
             [scan[@"abis"] isKindOfClass:NSArray.class] && [scan[@"abis"] containsObject:@"arm64-v8a"];
     }
     NSString *catalogPath=[NSBundle.mainBundle pathForResource:@"fixture-catalog" ofType:@"json"];
@@ -555,19 +571,27 @@ static int androidKey(unsigned code)
         if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);}
         tl_ld_set_verbosity(2);tl_jni_set_trace(0);tl_egl_offscreen_windows(headless);
         for(NSString *split in splitPaths)tl_ld_queue_split(split.fileSystemRepresentation);
-        if(unity){
+        if(unity||nativeactivity){
             self.runtimePaths=@[apkPath,data,packageName,angle,frames?:@""];
-            self.launchStarted=NSDate.date;self.unityQueue=dispatch_queue_create("org.husk.unity.lifecycle",DISPATCH_QUEUE_SERIAL);
-            tl_guest_exit_hook=unityGuestExit;
-            dispatch_async(self.unityQueue,^{ @autoreleasepool {
+            self.launchStarted=NSDate.date;self.lifecycleQueue=dispatch_queue_create("org.husk.game.lifecycle",DISPATCH_QUEUE_SERIAL);
+            tl_guest_exit_hook=activityGuestExit;
+            dispatch_async(self.lifecycleQueue,^{ @autoreleasepool {
                 tl_unity_config configuration={.apk_path=self.runtimePaths[0].fileSystemRepresentation,
                     .data_dir=self.runtimePaths[1].fileSystemRepresentation,.package_name=self.runtimePaths[2].UTF8String,
                     .width=(int)surfaceWidth,.height=(int)surfaceHeight,.metal_layer=(__bridge void *)layer,
                     .angle_egl=self.runtimePaths[3].fileSystemRepresentation,.frame_dir=frames?self.runtimePaths[4].fileSystemRepresentation:NULL,.frame_every=-60};
-                tl_unity_register_pad_sink();BOOL ok=tl_unity_start(&configuration)&&tl_unity_run();
+                BOOL ok;
+                if(nativeactivity){
+                    tl_ga_config nativeConfiguration={.apk_path=configuration.apk_path,.data_dir=configuration.data_dir,
+                        .package_name=configuration.package_name,.width=configuration.width,.height=configuration.height,
+                        .metal_layer=configuration.metal_layer,.angle_egl=configuration.angle_egl,
+                        .frame_dir=configuration.frame_dir,.frame_every=configuration.frame_every};
+                    tl_na_set_library(nativeLibrary.UTF8String);
+                    ok=tl_na_start(&nativeConfiguration)&&tl_na_run();
+                }else{tl_unity_register_pad_sink();ok=tl_unity_start(&configuration)&&tl_unity_run();}
                 dispatch_async(dispatch_get_main_queue(),^{
                     self.loaded=ok;
-                    if(!ok)[self finish:NO reason:@"Unity 运行时加载失败，请查看日志。"];
+                    if(!ok)[self finish:NO reason:@"游戏运行时加载失败，请查看日志。"];
                 });
             }});
         }else{
@@ -635,12 +659,13 @@ int main(int argc,const char **argv)
             else if([arg isEqual:@"--pause-inactive"])pauseInactive=YES;
             else if([arg isEqual:@"--portrait"])portrait=YES;
             else if(i+1<argc&&[arg isEqual:@"--package"])packageName=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--native-library"])nativeLibrary=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--session"])sessionID=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--apk"])apkPath=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--split"])[splitPaths addObject:@(argv[++i])];
             else if(i+1<argc&&[arg isEqual:@"--apk-sha256"])apkDigest=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--checkpoint"])checkpointPath=@(argv[++i]);
-            else if(i+1<argc&&[arg isEqual:@"--runtime"]){NSString *runtime=@(argv[++i]);if(![runtime isEqual:@"orbit"]&&![runtime isEqual:@"minecraft"]&&![runtime isEqual:@"unity"])return 64;minecraft=[runtime isEqual:@"minecraft"];unity=[runtime isEqual:@"unity"];}
+            else if(i+1<argc&&[arg isEqual:@"--runtime"]){NSString *runtime=@(argv[++i]);if(![runtime isEqual:@"orbit"]&&![runtime isEqual:@"minecraft"]&&![runtime isEqual:@"unity"]&&![runtime isEqual:@"nativeactivity"])return 64;minecraft=[runtime isEqual:@"minecraft"];unity=[runtime isEqual:@"unity"];nativeactivity=[runtime isEqual:@"nativeactivity"];}
             else if(i+1<argc&&[arg isEqual:@"--variant"])variant=atoi(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--title"])gameTitle=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--diagnostics"])diagnostics=@(argv[++i]);
@@ -648,8 +673,10 @@ int main(int argc,const char **argv)
         }
         if(![[NSUUID alloc] initWithUUIDString:sessionID]||!apkPath||!checkpointPath||variant<0||variant>1)return 64;
         if(splitPaths.count>=TL_LD_MAX_APKS || (!guestRuntime() && splitPaths.count))return 64;
-        if(portrait&&!unity)return 64;
-        if(unity&&(!packageName.length||packageName.length>199||[packageName rangeOfCharacterFromSet:
+        if(portrait&&!unity&&!nativeactivity)return 64;
+        if(nativeLibrary&&(!nativeactivity||!nativeLibrary.length||nativeLibrary.length>56||[nativeLibrary rangeOfCharacterFromSet:
+            [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-"] invertedSet]].location!=NSNotFound))return 64;
+        if((unity||nativeactivity)&&(!packageName.length||packageName.length>199||[packageName rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"] invertedSet]].location!=NSNotFound))return 64;
         if(guestRuntime()){
             NSArray<NSString *> *hashes=[apkDigest componentsSeparatedByString:@":"];
@@ -659,7 +686,7 @@ int main(int argc,const char **argv)
         }
         gameTitle=gameTitle?:@"Orbit Garden";
         if(diagnostics){if(!automation)return 64;[NSFileManager.defaultManager createDirectoryAtPath:diagnostics withIntermediateDirectories:YES attributes:nil error:NULL];}
-        if(guestRuntime()){surfaceWidth=unity&&portrait?720:1280;surfaceHeight=unity&&portrait?1280:720;}
+        if(guestRuntime()){surfaceWidth=portrait?720:1280;surfaceHeight=portrait?1280:720;}
         mac_runtime_diagnostics_install();signal(SIGPIPE,SIG_IGN);
         Runner *runner=[Runner new];[runner transition:@"starting" reason:@"launch"];
         NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;

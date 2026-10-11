@@ -61,6 +61,7 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-dvm-gles20.c ${NEXT}/husk-tl-dvm-gles30.c
     ${NEXT}/husk-tl-dvm-gles31.c ${NEXT}/husk-tl-dvm-gles32.c
     ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-unity.c ${NEXT}/husk-tl-gamepad.c
+    ${NEXT}/husk-tl-nativeactivity.c ${NEXT}/husk-tl-jni-ue4.c
     ${NEXT}/husk-tl-audio.c ${NEXT}/husk-tl-http.m ${NEXT}/husk-tl-vulkan.m)
 target_include_directories(GameActivityRuntime PUBLIC ${NEXT} PRIVATE ${CLASSIC})
 target_compile_options(GameActivityRuntime PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
@@ -72,6 +73,10 @@ add_library(NativeRuntime ALIAS GameActivityRuntime)
 
 add_executable(MinecraftProbe tests/macos/MinecraftProbe.c)
 target_link_libraries(MinecraftProbe PRIVATE GameActivityRuntime)
+add_executable(NativeActivityProbe tests/macos/NativeActivityProbe.m ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(NativeActivityProbe PRIVATE ${MAC}/NativeRunner)
+target_compile_options(NativeActivityProbe PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
+target_link_libraries(NativeActivityProbe PRIVATE NativeRuntime "-framework Foundation")
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
     ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c
@@ -164,6 +169,14 @@ add_test(NAME unity-modern-player COMMAND UnityLifecycleTests modern-player)
 add_test(NAME unity-two-argument-init COMMAND UnityLifecycleTests two-argument-init)
 set_tests_properties(unity-lifecycle unity-incomplete-destroy unity-guest-quit unity-modern-player unity-two-argument-init PROPERTIES TIMEOUT 10)
 add_executable(AndroidRuntimeTests tests/macos/AndroidRuntime.c)
+add_executable(NativeActivityLifecycleTests tests/macos/NativeActivityLifecycle.c)
+target_include_directories(NativeActivityLifecycleTests PRIVATE ${CLASSIC})
+target_link_libraries(NativeActivityLifecycleTests PRIVATE NativeRuntime)
+add_test(NAME nativeactivity-lifecycle COMMAND NativeActivityLifecycleTests)
+add_test(NAME nativeactivity-incomplete-destroy COMMAND NativeActivityLifecycleTests missing-destroy)
+add_test(NAME nativeactivity-guest-finish COMMAND NativeActivityLifecycleTests guest-finish)
+add_test(NAME nativeactivity-create-failed COMMAND NativeActivityLifecycleTests create-failed)
+set_tests_properties(nativeactivity-lifecycle nativeactivity-incomplete-destroy nativeactivity-guest-finish nativeactivity-create-failed PROPERTIES TIMEOUT 10)
 target_link_libraries(AndroidRuntimeTests PRIVATE NativeRuntime)
 add_test(NAME android-runtime-contracts COMMAND AndroidRuntimeTests)
 set_tests_properties(android-runtime-contracts PROPERTIES TIMEOUT 10)

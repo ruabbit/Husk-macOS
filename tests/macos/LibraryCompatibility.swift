@@ -62,6 +62,10 @@ import HuskCore
             try check(!hashOnlyGame.playable, "sample-hash-cannot-grant-runtime-capability")
             try check(games[4].runtime == "unity" && games[4].unavailableReason == nil,
                       "previous-play-unity-imports-gain-runtime-without-reimport")
+            var native = unity
+            native["engine"] = "NativeActivity"
+            let nativeGame = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: native))
+            try check(nativeGame.runtime == "nativeactivity", "existing-nativeactivity-import-gains-driver-without-reimport")
             unity["engine"] = "Unity (Mono)"; unity["apkNames"] = (0..<32).map { "split\($0).apk" }
             let mono = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: unity))
             try check(mono.runtime == "unity", "unity-mono-and-32-apk-sets-use-driver")
@@ -90,11 +94,19 @@ import HuskCore
             try await session.wait(until: { !session.active }, timeout: 10)
             try check(session.state == "failed" && session.error?.contains("运行入口") == true,
                       "helper-rejects-forged-unity-engine-before-execution")
+            records[1]["engine"] = "NativeActivity"; legacy["games"] = records
+            try JSONSerialization.data(withJSONObject: legacy).write(to: paths.index)
+            let (falseNative, nativeFiles, nativeCheckpoint) = try await reopened.prepare(unknown.id)
+            try session.start(executable: app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
+                              game: falseNative, apk: nativeFiles[0], checkpoint: nativeCheckpoint, logs: paths.logs, headless: true)
+            try await session.wait(until: { !session.active }, timeout: 10)
+            try check(session.state == "failed" && session.error?.contains("运行入口") == true,
+                      "helper-rejects-forged-nativeactivity-engine-before-execution")
             try Data("modified APK".utf8).append(to: files[0])
             var refused = false
             do { _ = try await reopened.prepare(unknown.id) } catch { refused = true }
             try check(refused, "launch-still-enforces-import-hash")
-            print("Library upgrade: 12 checks passed")
+            print("Library upgrade: 14 checks passed")
         } catch {
             if session.active { session.stop(); try? await session.wait(until: { !session.active }, timeout: 10) }
             print("FAIL \(error.localizedDescription)"); exit(1)

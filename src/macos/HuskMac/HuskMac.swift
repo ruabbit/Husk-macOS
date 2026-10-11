@@ -254,6 +254,7 @@ struct GameDetail: View {
                         Text(game.title).font(.largeTitle.weight(.bold))
                         Text(game.runtime == "orbit" ? "收集八颗星星，避开穿行的障碍。" :
                              game.runtime == "minecraft" ? "Minecraft · macOS 原生运行" :
+                             game.runtime == "nativeactivity" ? "macOS 原生运行" :
                              game.runtime == "unity" ? "Unity · macOS 原生运行" : "已导入资料库").foregroundStyle(.secondary)
                         if let last = game.lastPlayed { Text("上次游玩：\(last.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
                     }
@@ -279,7 +280,7 @@ struct GameDetail: View {
                                 Label("WASD 移动，鼠标控制视角；其他按键可在游戏中设置", systemImage: "keyboard")
                                 Label("支持手柄与中文文字输入", systemImage: "gamecontroller")
                                 Label("Esc 打开游戏菜单；结束游戏时等待世界保存完成", systemImage: "pause.circle")
-                            } else if game.runtime == "unity" {
+                            } else if game.runtime == "unity" || game.runtime == "nativeactivity" {
                                 Label("鼠标点击和拖动对应屏幕触摸", systemImage: "cursorarrow")
                                 Label("键盘和手柄操作取决于游戏本身", systemImage: "gamecontroller")
                                 Label("⌘P 暂停或继续；⌘Q 结束游戏", systemImage: "pause.circle")

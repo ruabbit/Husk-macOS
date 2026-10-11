@@ -31,6 +31,7 @@ void *tl_nwindow_get(void);
 void tl_ue4_hle_install(const char *pkg, const char *apk, const char *data, const char *ext_files);
 void tl_ue4_set_activity(jobj *activity);
 const char *tl_ue4_meta(const char *key);
+extern void (*tl_native_activity_finish_hook)(void *activity);
 
 #define CLS "com/epicgames/ue4/GameActivity"
 
@@ -66,7 +67,7 @@ struct ANativeActivity {
 
 static struct {
     tl_ga_config cfg;
-    char apk[1024], data[512], pkg[128], frame_dir[512], angle_egl[600], angle_gles[600];
+    char apk[1024], data[512], pkg[256], frame_dir[512], angle_egl[600], angle_gles[600];
     char internal_dir[600], ext_dir[700], obb_dir[800], obb_file[900];
     jobj *activity;
     ANativeActivity na;
@@ -75,8 +76,19 @@ static struct {
     char main_lib[64];                     /* the library that exports ANativeActivity_onCreate */
     void *window;
     pthread_t ui;
-    bool started;
+    bool started, thread_created;
+    void (*on_create)(ANativeActivity *, void *, size_t);
+    atomic_int state;
+    atomic_bool pause_requested, stop_requested;
 } N;
+
+void tl_na_set_library(const char *name)
+{
+    if (atomic_load(&N.state) == TL_NA_UNLOADED && name)
+        snprintf(N.main_lib, sizeof(N.main_lib), "lib%s.so", name);
+}
+tl_na_state tl_na_get_state(void) { return atomic_load(&N.state); }
+static void request_finish(void *activity) { (void)activity; atomic_store(&N.stop_requested, true); }
 
 static void load_library(const char *name)
 {
@@ -147,38 +159,43 @@ void tl_inq_axes(int device, const float *axes48);
 static void na_pad_key(jobj *ev, int device, int action, int keycode, int64_t down_ms, int64_t event_ms)
 {
     (void)down_ms; (void)event_ms;
-    tl_inq_key(device, 0x00000401, action, keycode);
+    if (tl_na_get_state() == TL_NA_RUNNING) tl_inq_key(device, 0x00000401, action, keycode);
     tl_jni_unref(ev);
 }
 static void na_pad_motion(jobj *ev, int device, int source, int64_t down_ms, int64_t event_ms)
 {
     (void)source; (void)down_ms; (void)event_ms;
     float a[48];
-    if (tl_input_event_axes(ev, a)) tl_inq_axes(device, a);
+    if (tl_na_get_state() == TL_NA_RUNNING && tl_input_event_axes(ev, a)) tl_inq_axes(device, a);
     tl_jni_unref(ev);
 }
 
 /* A NativeActivity game that is not Unreal: load its libraries (the manifest names one; here, whichever of the app's own libraries exports ANativeActivity_onCreate). */
-struct na_libs { char name[6][64]; int n; };
+struct na_libs { char name[256][256]; int n; };
 static void na_lib_cb(const char *name, uint64_t size, void *user)
 {
     (void)size;
     struct na_libs *l = user;
     static const char *const support[] = { "libc++_shared", "libSDL", "libopenal", "libsentry", "libFirebase", "libcrashlytics", "libandroidx" };
     for (size_t i = 0; i < sizeof(support) / sizeof(support[0]); i++) if (!strncmp(name, support[i], strlen(support[i]))) return;
-    if (l->n < 6) snprintf(l->name[l->n++], 64, "%s", name);
+    if (l->n < 256) snprintf(l->name[l->n++], 256, "%s", name);
 }
 static bool start_generic(void)
 {
     struct na_libs libs = { .n = 0 };
-    tl_ld_apk_libs(na_lib_cb, &libs);
+    if (N.main_lib[0]) { snprintf(libs.name[libs.n++], 256, "%s", N.main_lib); N.main_lib[0] = 0; }
+    else tl_ld_apk_libs(na_lib_cb, &libs);
     if (tl_ld_has_lib("libc++_shared.so")) load_library("c++_shared");
     for (int i = 0; i < libs.n; i++) {
-        char base[64]; snprintf(base, sizeof(base), "%s", libs.name[i] + 3); base[strlen(base) - 3] = 0;
+        /* Inspect exports before invoking JNI_OnLoad: unrelated ad/crash SDKs
+         * must not be initialized merely while looking for the game entry. */
+        tl_lib *l = tl_ld_load(libs.name[i]);
+        if (!l || !tl_ld_sym(l, "ANativeActivity_onCreate")) continue;
+        char base[256]; snprintf(base, sizeof(base), "%s", libs.name[i] + 3); base[strlen(base) - 3] = 0;
         load_library(base);
         if (tl_jni_pending()) { tl_log_line("na: loading %s failed", libs.name[i]); tl_jni_clear(); continue; }
-        tl_lib *l = tl_ld_find_lib(libs.name[i]);
-        if (l && tl_ld_sym(l, "ANativeActivity_onCreate")) { snprintf(N.main_lib, sizeof(N.main_lib), "%s", libs.name[i]); break; }
+        N.on_create = tl_ld_sym(l, "ANativeActivity_onCreate");
+        snprintf(N.main_lib, sizeof(N.main_lib), "%s", libs.name[i]); break;
     }
     if (!N.main_lib[0]) { tl_log_line("na: no library exports ANativeActivity_onCreate"); return false; }
     tl_log_line("na: native activity in %s", N.main_lib);
@@ -211,7 +228,7 @@ static void drop_empty_saves(const char *dir, int depth)
     closedir(d);
 }
 
-bool tl_na_start(const tl_ga_config *cfg)
+static bool na_load(const tl_ga_config *cfg)
 {
     N.cfg = *cfg;
     snprintf(N.apk, sizeof(N.apk), "%s", cfg->apk_path);
@@ -246,7 +263,9 @@ bool tl_na_start(const tl_ga_config *cfg)
         tl_jni_declare("android/app/NativeActivity", "android/app/Activity");
         N.activity = tl_jni_new_object(tl_jni_class("android/app/NativeActivity"));
         tl_hle_set_activity(N.activity);
-        return start_generic();
+        bool ok = start_generic();
+        if (ok) atomic_store(&N.state, TL_NA_STARTING);
+        return ok;
     }
     tl_ue4_hle_install(cfg->package_name, cfg->apk_path, cfg->data_dir, N.ext_dir);
     drop_empty_saves(N.data, 0);
@@ -274,10 +293,21 @@ bool tl_na_start(const tl_ga_config *cfg)
     }
     tl_log_line("ue4: libraries loaded");
     setenv("TL_PAD_DPAD", "keys", 0);          /* the D-pad as DPAD_* keys, which the engine maps like a stick's arrows */
-    static const tl_pad_sink sink = { na_pad_key, na_pad_motion };
-    tl_pad_set_sink(&sink);
+    N.on_create = tl_ld_sym(tl_ld_find_lib("libUE4.so"), "ANativeActivity_onCreate");
+    if (!N.on_create) return false;
     N.started = true;
+    atomic_store(&N.state, TL_NA_STARTING);
     return true;
+}
+
+bool tl_na_start(const tl_ga_config *cfg)
+{
+    if (tl_na_get_state() != TL_NA_UNLOADED) return false;
+    atomic_store(&N.state, TL_NA_STARTING);
+    tl_native_activity_finish_hook = request_finish;
+    bool ok = na_load(cfg);
+    if (!ok) atomic_store(&N.state, TL_NA_FAILED);
+    return ok;
 }
 
 static void *ui_main(void *arg)
@@ -310,9 +340,7 @@ static void *ui_main(void *arg)
     }
 
     /* NativeActivity: the system calls the library's entry point with the activity it describes. */
-    tl_lib *lib = tl_ld_find_lib(N.generic ? N.main_lib : "libUE4.so");
-    void (*on_create)(ANativeActivity *, void *, size_t) = lib ? tl_ld_sym(lib, "ANativeActivity_onCreate") : NULL;
-    if (!on_create) { tl_log_line("na: the library has no ANativeActivity_onCreate"); return NULL; }
+    if (!N.on_create) { tl_log_line("na: the library has no ANativeActivity_onCreate"); atomic_store(&N.state, TL_NA_FAILED); return NULL; }
     jobj *assets = tl_hle_assets();
     void *(*from_java)(void *, void *) = tl_bionic_find("AAssetManager_fromJava");
     N.na.callbacks = &N.callbacks;
@@ -322,14 +350,25 @@ static void *ui_main(void *arg)
     N.na.assetManager = from_java ? from_java(env, assets) : NULL;
     N.na.obbPath = N.obb_dir;
     tl_log_line("ue4: ANativeActivity_onCreate");
-    on_create(&N.na, NULL, 0);
-    if (tl_jni_pending()) { tl_log_line("ue4: a Java exception is pending after onCreate"); tl_jni_clear(); }
+    N.on_create(&N.na, NULL, 0);
+    if (tl_jni_pending()) {
+        tl_log_line("na: a Java exception is pending after onCreate");
+        tl_jni_clear();
+        /* onCreate may have allocated resources before failing. Destroy those
+         * on the same thread, but never start or publish a running activity. */
+        atomic_store(&N.state, TL_NA_STOPPING);
+        if (N.callbacks.onDestroy) N.callbacks.onDestroy(&N.na);
+        tl_jni_clear();
+        atomic_store(&N.state, TL_NA_FAILED);
+        return NULL;
+    }
+    bool failed = false;
     tl_log_line("ue4: onCreate returned; callbacks start=%p resume=%p window=%p", (void *)N.callbacks.onStart, (void *)N.callbacks.onResume, (void *)N.callbacks.onNativeWindowCreated);
 
     N.window = tl_nwindow_get();
     if (N.callbacks.onStart) N.callbacks.onStart(&N.na);
     if (N.callbacks.onResume) N.callbacks.onResume(&N.na);
-    if (N.callbacks.onInputQueueCreated) N.callbacks.onInputQueueCreated(&N.na, (void *)&N);          /* a queue nothing arrives through */
+    if (N.callbacks.onInputQueueCreated) N.callbacks.onInputQueueCreated(&N.na, (void *)&N);
     if (!N.generic) {
         typedef void (*win_fn)(void *env, void *self, uint8_t portrait, int depth);
         win_fn set_window_info = (win_fn)NATIVE("nativeSetWindowInfo", "(ZI)V");
@@ -348,15 +387,46 @@ static void *ui_main(void *arg)
     }
     tl_log_line("ue4: lifecycle delivered");
 
-    /* The activity's message loop: nothing to serve beyond keeping the thread (and its looper) alive. */
+    /* All callbacks belong to this activity thread. Publish state only after
+     * callbacks return, so the host cannot acknowledge an unfinished pause. */
+    bool paused = false;
+    atomic_store(&N.state, TL_NA_RUNNING);
     int (*poll_once)(int, int *, int *, void **) = tl_bionic_find("ALooper_pollOnce");
-    for (;;) { poll_once(200, NULL, NULL, NULL); if (tl_jni_pending()) tl_jni_clear(); }
+    while (!failed && !atomic_load(&N.stop_requested)) {
+        bool requested = atomic_load(&N.pause_requested);
+        if (requested != paused) {
+            if (requested) {
+                if (N.callbacks.onWindowFocusChanged) N.callbacks.onWindowFocusChanged(&N.na, 0);
+                if (N.callbacks.onPause) N.callbacks.onPause(&N.na);
+            } else {
+                if (N.callbacks.onResume) N.callbacks.onResume(&N.na);
+                if (N.callbacks.onWindowFocusChanged) N.callbacks.onWindowFocusChanged(&N.na, 1);
+            }
+            paused = requested;
+            atomic_store(&N.state, paused ? TL_NA_PAUSED : TL_NA_RUNNING);
+        }
+        poll_once(16, NULL, NULL, NULL);
+        if (tl_jni_pending()) { failed = true; tl_jni_clear(); }
+    }
+    atomic_store(&N.state, TL_NA_STOPPING);
+    if (!paused) {
+        if (N.callbacks.onWindowFocusChanged) N.callbacks.onWindowFocusChanged(&N.na, 0);
+        if (N.callbacks.onPause) N.callbacks.onPause(&N.na);
+    }
+    if (N.callbacks.onNativeWindowDestroyed) N.callbacks.onNativeWindowDestroyed(&N.na, N.window);
+    if (N.callbacks.onInputQueueDestroyed) N.callbacks.onInputQueueDestroyed(&N.na, (void *)&N);
+    if (N.callbacks.onStop) N.callbacks.onStop(&N.na);
+    if (N.callbacks.onDestroy) N.callbacks.onDestroy(&N.na); else failed = true;
+    if (tl_jni_pending()) { failed = true; tl_jni_clear(); }
+    atomic_store(&N.state, failed ? TL_NA_FAILED : TL_NA_DESTROYED);
     return NULL;
 }
 
 bool tl_na_run(void)
 {
-    if (!N.started) return false;
+    if (!N.started || N.thread_created) return false;
+    static const tl_pad_sink sink = { na_pad_key, na_pad_motion };
+    tl_pad_set_sink(&sink);
     /* The OBB is inside the APK: say where, so the engine finds it where it expects. */
     if (!N.generic) {
         unsigned long long off = 0, size = 0;
@@ -368,7 +438,10 @@ bool tl_na_run(void)
     pthread_attr_t a;
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, 8u << 20);
-    if (pthread_create(&N.ui, &a, ui_main, NULL) != 0) return false;
+    int error = pthread_create(&N.ui, &a, ui_main, NULL);
+    pthread_attr_destroy(&a);
+    if (error) { atomic_store(&N.state, TL_NA_FAILED); return false; }
+    N.thread_created = true;
     return true;
 }
 
@@ -376,20 +449,20 @@ unsigned long tl_vk_frames_presented(void);
 unsigned long tl_na_frames(void) { return tl_egl_frames_presented() + tl_vk_frames_presented(); }
 
 void tl_inq_touch(int phase, int id, float x, float y);
-void tl_na_touch(int phase, int id, float x, float y) { tl_inq_touch(phase, id, x, y); }
+void tl_na_touch(int phase, int id, float x, float y) { if (tl_na_get_state() == TL_NA_RUNNING) tl_inq_touch(phase, id, x, y); }
+void tl_na_key(int keycode, bool down) { if (tl_na_get_state() == TL_NA_RUNNING) tl_inq_key(0, 0x101, down ? 0 : 1, keycode); }
 /* The app left the screen or came back: the engine is told as an activity is -- onPause and the window losing focus, onResume and gaining it -- so it stops drawing and
  * silences its audio instead of feeding a GPU iOS will no longer let it have. Only real changes are passed on. */
 void tl_na_set_paused(bool paused)
 {
-    static atomic_bool is_paused;
-    if (!N.started || !N.callbacks.onResume) return;
-    if (atomic_exchange(&is_paused, paused) == paused) return;
-    tl_log_line("ue4: %s", paused ? "pausing" : "resuming");
-    if (paused) {
-        if (N.callbacks.onWindowFocusChanged) N.callbacks.onWindowFocusChanged(&N.na, 0);
-        if (N.callbacks.onPause) N.callbacks.onPause(&N.na);
-    } else {
-        if (N.callbacks.onResume) N.callbacks.onResume(&N.na);
-        if (N.callbacks.onWindowFocusChanged) N.callbacks.onWindowFocusChanged(&N.na, 1);
+    atomic_store(&N.pause_requested, paused);
+}
+
+void tl_na_stop(void)
+{
+    atomic_store(&N.stop_requested, true);
+    if (N.thread_created) {
+        pthread_join(N.ui, NULL);
+        N.thread_created = false;
     }
 }

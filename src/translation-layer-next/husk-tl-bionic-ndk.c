@@ -715,7 +715,8 @@ static int32_t b_AKeyEvent_getFlags(const tl_ievent *e) { return e->flags; }
 static int32_t b_AKeyEvent_getMetaState(const tl_ievent *e) { return e->meta; }
 static int32_t b_AKeyEvent_getRepeatCount(const tl_ievent *e) { (void)e; return 0; }
 static int32_t b_AKeyEvent_getScanCode(const tl_ievent *e) { (void)e; return 0; }
-static void b_ANativeActivity_noop(void *a) { (void)a; }
+void (*tl_native_activity_finish_hook)(void *activity);
+static void b_ANativeActivity_noop(void *a) { if (tl_native_activity_finish_hook) tl_native_activity_finish_hook(a); }
 static void b_ANativeActivity_flags(void *a, uint32_t add, uint32_t remove) { (void)a; (void)add; (void)remove; }
 static void b_ANativeActivity_input(void *a, uint32_t flags) { (void)a; (void)flags; }
 
