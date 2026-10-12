@@ -16,7 +16,7 @@ Java 依赖从固定的原始 Lineage vda-v12 缓存只读提取，校验镜像 
 
 未完成：真实 Unity 6/Flutter/SDL 等各应用兼容；Java 手柄；WebKit 持久化关闭；前台 IME/画布交互；其余独立 native profiles；Egg 的未重定位 PLT 初始化；个人 Play/passkey 登录。PR #82 在本轮只读复查仍 open / 未合并，已采用的 JNI 修复保留。没有重跑 Egg、Hole.io 或 VM。各项具体下一步见 [upstream-parity.md](upstream-parity.md)，不得用共同 fixture 通过关闭真实应用待办。
 
-证据：`build/logs/current-upstream-build.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-candidate.json` 和 `build/macos/bundle-verification.json`。代码与合并已具备提交条件；提交推送与远端 SHA 读回作为最后交付步骤。
+证据：`build/logs/current-upstream-build.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-candidate.json` 和 `build/macos/bundle-verification.json`。合并与平台适配保存为 `fcce001b7e53230d5b945c6dd7998d6e357dc272`，已正常推送并读回确认：`origin/main=f0bd526cdf15356cac1d272cfebe6a5ea11ef6fa`，`origin/codex/macos-p0=fcce001b7e53230d5b945c6dd7998d6e357dc272`。没有 force push，保留两个 merge parent；当前仍在 macOS 分支。此后仅补交付记录，不改变已验证候选代码。GitHub [本轮 Native macOS CI](https://github.com/ruabbit/Husk-macOS/actions/runs/38193490652) 已实际启动，记录时运行中；旧 `12f3cc0` 的远程 CI 已通过，但不能替代本轮新资源准备步骤的结果。
 
 ## 2026-10-11 NativeActivity / Egg, Inc. 接入
 
