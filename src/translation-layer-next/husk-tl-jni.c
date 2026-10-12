@@ -389,14 +389,17 @@ static jvalue *field_slot(jobj *o, tl_jfield *f)
     if (f->detached) return &f->dval;
     if (f->is_static) return &f->cls->statics[f->index];
     /* an interpreter object's slots are its own: never grown from here */
-    if (tl_dvm && o && o->cls && o->cls->dvm && f->index >= o->nfields) {
-        static __thread jvalue scratch;
-        scratch.j = 0;
-        return &scratch;
+    if (tl_dvm) {
+        /* count before array, as the interpreter's writers publish them (dvm_slots_for) */
+        uint32_t n = __atomic_load_n(&o->nfields, __ATOMIC_ACQUIRE);
+        jvalue *sl = __atomic_load_n(&o->fields, __ATOMIC_ACQUIRE);
+        if (sl && f->index < n) return &sl[f->index];
+        if (o->cls && o->cls->dvm) { static __thread jvalue scratch; scratch.j = 0; return &scratch; }
+        jvalue *dvm_grow_slots(jobj *, uint32_t);
+        return &dvm_grow_slots(o, f->index + 8)[f->index];
     }
     if (f->index >= o->nfields) {
         uint32_t n = f->index + 8;
-        if (tl_dvm) { jvalue *dvm_grow_slots(jobj *, uint32_t); return &dvm_grow_slots(o, n)[f->index]; }
         o->fields = realloc(o->fields, n * sizeof(jvalue));
         memset(o->fields + o->nfields, 0, (n - o->nfields) * sizeof(jvalue));
         o->nfields = n;
@@ -521,11 +524,29 @@ static jvalue null_receiver(const tl_jmeth *m)
     tl_jni_throw("java/lang/NullPointerException", msg);
     return g_zero;
 }
+/* String.<init> called on an AllocObject'd String (Dex2C-made natives build strings this way, as new-instance + invoke-direct):
+ * ART makes the string with StringFactory and points every reference to the receiver at the result. References here are the
+ * object itself, so the placeholder becomes that string in place. */
+static bool string_init_in_place(jobj *self, tl_jmeth *m, const jvalue *args)
+{
+    if (!self || self->kind != TL_K_OBJECT || !m->cls || strcmp(m->name, "<init>") || strcmp(m->cls->name, "java/lang/String")) return false;
+    bool dvm_string_init(const char *sig, const jvalue *p, jvalue *ret);
+    jvalue r = {0};
+    if (!dvm_string_init(m->sig, args, &r) || !r.l) return true;           /* the exception is pending */
+    jobj *str = r.l;
+    self->kind = TL_K_STRING; self->cls = str->cls;
+    self->str.utf8 = strdup(str->str.utf8 ? str->str.utf8 : "");
+    self->str.len16 = str->str.len16; self->str.u16 = NULL;
+    if (str->str.u16) { self->str.u16 = malloc((size_t)str->str.len16 * 2 + 2); memcpy(self->str.u16, str->str.u16, (size_t)str->str.len16 * 2); self->str.u16[str->str.len16] = 0; }
+    tl_jni_unref(str);
+    return true;
+}
 static jvalue call_a(int kind, jobj *self, void *mid, const jvalue *args)
 {
     tl_jmeth *m = mid_ok(mid);
     if (!m) return g_zero;
     if (kind != 2 && !self) return null_receiver(m);
+    if (kind != 2 && string_init_in_place(self, m, args)) return g_zero;
     return invoke(kind == 2 ? NULL : self, m, kind == 1, args);
 }
 static jvalue call_va(int kind, jobj *self, void *mid, tl_va_list *ap)
@@ -535,6 +556,7 @@ static jvalue call_va(int kind, jobj *self, void *mid, tl_va_list *ap)
     if (kind != 2 && !self) return null_receiver(m);
     jvalue args[40];
     args_from_va(m, ap, args);
+    if (kind != 2 && string_init_in_place(self, m, args)) return g_zero;
     return invoke(kind == 2 ? NULL : self, m, kind == 1, args);
 }
 
@@ -594,8 +616,12 @@ static uint8_t jni_IsInstanceOf(void *env, jo obj, jo cls)
     (void)env;
     if (!obj) return 1;
     if (!cls || cls->kind != TL_K_CLASS) return 0;
-    if (!obj->cls) return 0;
-    return assignable(obj->cls, cls->klass.jc);
+    /* what getClass() says: a class object is a java.lang.Class (Dex2C's check-cast of one asks this) */
+    tl_jclass *dvm_object_class(jobj *o);
+    tl_jclass *oc = dvm_object_class(obj);
+    if (!oc && obj->kind == TL_K_CLASS) oc = tl_jni_class("java/lang/Class");
+    if (!oc) return 0;
+    return assignable(oc, cls->klass.jc);
 }
 
 static int32_t jni_Throw(void *env, jo t) { (void)env; t_pending = t; return 0; }

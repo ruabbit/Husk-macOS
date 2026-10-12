@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 import shutil
 import subprocess
+from build_java_runtime import verify as verify_java
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,8 +29,11 @@ def sign(path, entitlements=None, identity="-"):
     if entitlements: args += ["--entitlements",str(entitlements)]
     subprocess.run([*args,str(path)],check=True)
 
-def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=None):
+def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=None, java_runtime=None):
     assert_bundle_idle(destination)
+    if java_runtime is None:
+        raise RuntimeError('A verified Java runtime is required')
+    verify_java(java_runtime, check_sources=True)
     if destination.exists(): shutil.rmtree(destination)
     (destination/'Contents/MacOS').mkdir(parents=True)
     shutil.copy2(app/'Contents/Info.plist',destination/'Contents/Info.plist')
@@ -56,6 +60,8 @@ def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=No
     for name in ['OrbitGarden.apk','OrbitGardenDusk.apk']: shutil.copy2(fixtures/name,fixture_dest/name)
     shutil.copy2(fixtures/'fixture-catalog.json',resources/'fixture-catalog.json')
     copytree(deps/'notices',resources/'Notices')
+    copytree(java_runtime,resources/'JavaRuntime')
+    shutil.copy2(ROOT/'dependencies/java-runtime.lock.json',resources/'Notices/java-runtime.lock.json')
     shutil.copy2(ROOT/'LICENSE',resources/'Notices/Husk-LICENSE')
     shutil.copy2(ROOT/'dependencies/macos.lock.json',resources/'Notices/macos.lock.json')
     sign(frameworks/'libANGLE-shared.dylib',identity=identity);sign(frameworks/'MoltenVK.framework',identity=identity)
@@ -69,4 +75,5 @@ if __name__=='__main__':
     for name in ['app','runner','deps','fixtures','destination']: p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--identity',default='-',help='Explicit identity only; default is local ad-hoc, never automatic certificate selection')
     p.add_argument('--vm-runner',type=Path,help='Optional, already packaged native VM helper')
+    p.add_argument('--java-runtime',type=Path,required=True,help='Verified Java boot class path and source-built framework')
     package(**vars(p.parse_args()))

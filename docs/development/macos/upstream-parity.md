@@ -1,49 +1,39 @@
 # 上游功能与 macOS 接入现况
 
-核对日期：2026-10-11（Asia/Shanghai）。本轮 fetch 两个远程后，上游 `main` 从 `a08b695` 前进到 `8a9dc1bffc63c2d7cc6c5c3642c8d2ac4ae8bcd0`，共 75 个提交、3,210 个变化路径。本地 fork main 已快进并合入 macOS 工作树；来源锁与 Git 祖先记录本次范围。源码同步和下表的平台接入分别验收。
+核对日期：2026-10-12（Asia/Shanghai）。fetch 后上游 `main` 从 `8a9dc1b` 前进到 `f0bd526cdf15356cac1d272cfebe6a5ea11ef6fa`，共 70 个提交、139 个路径。fork main 快进后真实合入 macOS，无文本冲突；保留已有 AppKit 窗口、固定画布、鼠标处理、默认失焦继续、独立 Runner 与存储关闭约束。源码历史、平台接入、具体应用兼容分别验收。
 
-## 已确认的迁移遗漏
+## 当前接入范围
 
-Unity 的上游原生启动入口在 `00ecffb`（北京时间 2026-10-05）加入，Store 在 `bac475a`（北京时间 2026-10-08）加入。它们都已进入 macOS 分支的 Git 历史。此前 macOS 构建与分发遗漏了 Unity；2026-10-10 已将驱动编入 NativeRunner，并接通资料库启动、分包、输入和生命周期。各游戏仍需分别验证。
-
-NativeActivity 的上游 `b7480b6` 同样早已合入，但没有 macOS 入口。2026-10-11 已补完整运行链路和回归，更新 Product 并单次重开；Egg 的具体原生初始化故障仍未修复，不能将入口接入等同于游戏兼容。
-
-| 功能 | 上游实现与来源 | 当前 macOS 接入 | 尚缺的工作 |
+| 功能 | 上游入口 | macOS 当前状态 | 开放缺口 |
 | --- | --- | --- | --- |
-| Unity 旧版原生驱动 | `husk-tl-unity.c`、共享 loader/JNI/HLE | 已接入独立 Runner；支持新旧 UnityPlayer 接口、32 APK 集合、横竖固定画布、鼠标触摸/键盘/手柄、暂停和销毁确认 | Subway Surf 年龄界面可显示和拖动；Fruit Ninja 黑屏、Hole.io 首帧前崩溃仍待修复；IME、实际玩法和实体手柄未验收 |
-| Java / Dalvik、Unity 6 | 上游 `e590b87`、`4313ac0` 引入解释器和 Java 框架，`db2c9e5` 明确将 Unity 6 分发至 `.java` | Dalvik 核心、JNI、图形/GLES、媒体、音频、SQLite、传感器和 WebView 已编入 macOS；未打包 Android boot class path 或接入 `--runtime java` | macOS 仍沿用旧 Unity 分发，不能视为已采用 Unity 6 的新启动链路；须完成下节资源、分发和销毁协议，Hole.io 不重复启动验证 |
-| Flutter、GameMaker、Python/Kivy、Web 应用 | 本次上游新增各驱动或 WebKit 路径 | 源码已合并，未接入 macOS 的 Runner / 平台窗口 | 各自补启动、输入、暂停、关闭与对应样本验证 |
-| NativeActivity | `b7480b6` 的 `husk-tl-nativeactivity.c`；开放 PR #82 的 Application 单例修复 | 已编译驱动，接入资料库/Runner、32 分包、manifest 库名/方向/alias、触摸/键盘/手柄、同线程生命周期和 join 后的 storage-closed | 当前候选已更新，默认 29 项回归和包校验通过。Egg 在 native 构造函数未重定位 PLT 跳转失败，未到 onCreate 或首帧；前台入口、IME、真实交互与实体手柄未验收 |
-| Cocos、SDL、Rockstar、Godot、Unreal | `TLReport.nativeEngine` 已识别，`husk-tl-unity-app.c` 有对应启动分发 | 尚无 macOS 分发；UE4 JNI 仅作为 NativeActivity 共享驱动的链接依赖编入 | 按上游入口逐个接入 macOS，不能仅修改 playable |
-| Minecraft / GameActivity | `husk-tl-gameactivity.c` | 已编入，独立 NativeRunner 驱动 | 已有指定样本证据；其他版本和游戏功能仍需对应验证 |
-| Play 商店 | `src/app/Husk/Play`，`bac475a` 及后续修复 | macOS 复用 Protobuf、PlayDevice、PlayAPI，使用原生商店窗口、Keychain 和 APK 集合导入 | 个人账号登录失败；已购交付、OBB / 按需 PAD 尚未验收 |
-| Play 登录修复 | `ca70a4b` 为两处 auth 请求添加 `droidguard_results` | 两处参数均已同步 | 当前用户遇到 Google 浏览器拒绝；不能通过重复合并这个补丁解决 |
-| 图形依赖补丁 | 本轮 ANGLE / MoltenVK 构建脚本与补丁无增量；共享 EGL 增加纹理窗口与同步修复 | 共享 EGL 已编入，保留 macOS 离屏 glFinish / 60 Hz 节流；固定图形二进制未重建 | 更早的 iOS SPIRV-Cross 补丁仍未在 macOS 固定 MoltenVK 二进制中验收 |
+| Java / Dalvik、Unity 6 | `TLReport.nativeEngine`、`husk.AppRunner`、共享 DVM | 已打包固定 boot class path、framework-res 与源码构建 DEX；新增独立 `--runtime java`，32 分包、manifest 方向、固定画布、触摸/键盘、IME 桥接、暂停和销毁回执 | 本轮真实 DEX fixture 的生产会话已通过；Unity 6 等真实应用的首帧/玩法/保存尚未验收；Java 手柄事件桥与前台 IME 待补 |
+| Cocos（无 FMOD）、SDL（无 DXVK）、Python、Flutter、libGDX、Java、React Native、.NET / Xamarin | 上游本轮将 SDL/Python/Flutter 也交给 Java | 资料库与 Runner 按上游相同条件分发至上述 Java 路径；旧导入从现有扫描报告补全元数据，旧 Unity 额外只读复扫一次识别 Unity 6 | 共同运行链路已接通，各引擎的插件、图形和真实应用兼容仍需各自验证，不能凭分类或通用 fixture 宣称可玩 |
+| Unity 旧版 | `husk-tl-unity.c`、共享 loader/JNI/HLE | 保留独立 Runner、32 分包、键鼠/手柄、同线程暂停/销毁确认；Unity 6 不再误走此路径 | Subway Surf 年龄界面和拖动来自 10/10 证据；Fruit Ninja 黑屏，Hole.io 旧路径首帧崩溃，未将旧结果当成本候选通过；旧 Unity IME 未接 |
+| NativeActivity | `b7480b6`、PR #82 的 Application 单例修复 | 10/11 已接入，当前保留 manifest 库名/方向/alias、32 分包、触摸/键盘/手柄和确认销毁 | Egg 原生构造函数未重定位 PLT 跳转尚未修复；未到 onCreate 或首帧。PR #82 在 10/12 再查仍 open / 未合并 |
+| WebView / Web 应用 | 共享 `husk-tl-dvm-web.m` 与 Java Web 桥 | Java WebView 绑定 AppKit 固定画布与命中容器，避免后台测试创建上游 harness 的可见窗口；补 macOS 透明合成 | 独立 Web profile 未接。WebKit 持久化关闭无确认协议：使用过 website data store 的会话明确拒绝正常 storage-closed；不能把移除视图当成保存成功 |
+| Cocos + FMOD、SDL + DXVK、Godot、Unreal、Rockstar、GameMaker | 各自共享 native driver | 尚无 macOS profile；UE4 JNI 仅为 NativeActivity 的链接依赖 | 逐个补编译/分发、生命周期/输入、关闭回执和样本验证；不能只扩大 playable |
+| Minecraft / GameActivity | `husk-tl-gameactivity.c` | 既有独立 Runner 与 AppKit 输入修复保留，默认回归通过 | 历史指定样本通过不等于本轮重测或其他版本通过 |
+| Store / Play 登录 | 共享 PlayAPI、`ca70a4b` 的 auth 参数 | 本轮共享 Play 目录无增量，保留 macOS 商店/下载/Keychain/分包导入；登录前邮箱步骤保持删除 | 个人账号/passkey 仍被 Google 拒绝；需本人实际验证且会话可用才能关闭。已购交付、OBB/PAD、设备配置仍待补 |
+| 图形依赖 | 共享 EGL 和 GLES；固定 ANGLE/MoltenVK | 本轮没有固定图形依赖构建/补丁增量；共享 EGL/GLES 更新已编入，保留 macOS 离屏提交与节流 | 更早的 iOS SPIRV-Cross 补丁仍未在 macOS 固定 MoltenVK 中验收 |
 
-核对入口：根目录 `CMakeLists.txt` 的 `GameActivityRuntime` 与 `MAC_PLAY_SOURCES`；`src/macos/SharedLibrary/Models.swift` 的 `runtime`；`src/macos/NativeRunner/main.m` 的参数检查与生命周期；`src/macos/SharedLibrary/SessionController.swift` 的存储关闭判断。上游参照 `src/app/Husk/TranslationLayer.swift`、`TLUnityView.swift` 及 `src/app/project.yml`。
+检查入口：`CMakeLists.txt` 的 NativeRuntime / JavaRuntimeResources / PackageMac，`Models.swift`、`LibraryRepository.swift`、`NativeLaunch.swift`、`SessionController.swift`、`NativeRunner/main.m` 与 `MacJavaRuntime.m`；对照上游 `TLReport.nativeEngine`、`TLUnityView.swift` 和 `src/app/project.yml`。本轮 iOS 工程新增无条件复制 Java 资源，macOS 的 PackageMac 本来逐次打包，并增加内容和来源校验。
 
-## 后续执行与同步验收
+## 本轮 Java 交付证据
 
-Unity 旧版运行链路已补齐；NativeActivity 源码接入、默认回归和候选更新已完成。继续定位实际游戏问题和其他引擎的 macOS 接入。保留 AppKit 固定画布、真实鼠标事件处理、默认失焦继续、独立 Runner 和正常关闭存储的协议。不能用新增白名单或成功编译替代游戏验证。Play 登录继续核对上游实现和补丁，当前 Chrome 调试连接方案已被 Google 拒绝，不记作已完成。
+固定资源来源为上游 lineage-v2 的原始 `vda-v12.qcow2`，SHA-256 `a8dbaecc8fdcd682991b078d6bbb7df6972e459208634fa8dcbad24f17208d6a`。只读提取 ART/libcore、ICU、Conscrypt、tzdata 和 framework-res；不使用用户 VM 磁盘。JDK 21 / 固定 D8 编译当前仓库 Java 源码，打包 194 个资源文件及原始 NOTICE，逐项记录 SHA-256。源码/工具/资源任一不匹配则拒绝打包。源镜像缓存复用，临时原始磁盘与 APEX 提取文件已删除。
 
-每日任务除 Git 合并外，还要对照上游引擎列表、Store、登录及依赖构建变化，在同一轮完成迁移范围内所需的编译、分发、生命周期/输入适配和对应验证，更新实际候选后才报告该功能已交付。即使上游没有新提交，已记录的平台接入缺口也仍是待办，继续推进既有迁移范围；不能以“源码已同步”将它们关闭。较大的未完成项保存已实现部分、具体证据和下一步，保持开放并主动继续。每轮更新本文件与 progress.md。原每日 09:00 任务已采用此要求，未新建重复任务。
+`tl_javaapp_stop` 等待 Activity/Service 销毁和 SharedPreferences 写入完成，join AppMain / GL / 音频混合器，关闭新建 guest worker 的入口并等待 Java/原生线程真正退出（包括 pthread_exit 和 TLS 析构），再检查 SQLite。未提交事务、残留线程、失败写入、异常销毁或 WebKit 未确认关闭不会被写成保存成功。现有 SessionController 仍要求 storage-closed 与进程回收两者都完成。
 
-当前 NativeActivity 候选默认 CTest **29/29** 与 **17 个 Mach-O** 的签名、权限、依赖闭包检查通过。新增四项 NativeActivity 回归覆盖回调线程、暂停/销毁完成、主动 finish、onCreate 异常，并扩充 manifest 元数据层级、AppKit 鼠标、NDK 触摸/键盘/虚拟手柄和旧资料库升级/伪造引擎拒绝。Subway Surf 的年龄界面和输入证据仍来自 2026-10-10；Egg 本轮单次探测失败。Fruit Ninja 黑屏和 Hole.io 首帧失败未复验，真实 Google 账号 / passkey 登录仍未通过。
+最终默认 **CTest 40/40**；包校验通过 **17 个 Mach-O** 的架构、签名、权限与依赖闭包，以及 **194 个 Java 资源**。新增真实 Dalvik boot、UTF-8/UTF-16/资源 ID/损坏 GLES manifest、正常/异常/写失败/残留线程/未提交 SQLite 生命周期、原生线程 TLS 关闭、打包 Runner 端到端会话；扩充 AppKit 输入法、真实 NSEvent 和旧资料库升级测试。生产会话验证触摸/键盘回调、失焦继续、暂停/恢复、最终 preferences 持久化、唯一 storage-closed 和进程回收。所有样本为独立测试数据，静音且无可见游戏窗口。
 
-## NativeActivity 交付与 Egg 下一步
+日志复用 `build/logs/current-upstream-build.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`；包证据为 `build/macos/bundle-verification.json`。当前候选只在 `build/macos/Product/HuskMac.app` 原地覆盖，保留现有 `HUSK_BUILD_VM=ON` 配置。候选重开/远端提交状态见 [progress.md](progress.md)。`actionlint` 通过；新 CI 资源准备配置的 GitHub 执行仍需真实结果，不能记作通过。Android 组件对应源码与发行许可仍是 P6 开放项。
 
-1. 当前 Product 已完成原地打包、默认 CTest 及包校验；新主程序单次启动为 PID 314。CUA 仍无法读取 AX，连接恢复后核对 Egg 详情页运行入口，保留未完成的前台验证。
-2. 入口可用不表示 Egg 已兼容；没有相关修复时不要再启动当前会崩溃的样本。继续验证真实游戏的首帧、交互、暂停、保存和回收。
-3. Egg 的 libegginc.so 构造函数通过 PLT 槽 `0x17636b8` 跳到原始 `0x1625d90`，尚无该槽为何未重定位的根因。核对 DT_INIT 和上游 loader 变更；保留 APK 与用户数据，不跳过保护或用猜测偏移补丁。证据和精确范围见 [findings.md](findings.md) 的 NativeActivity 段。
+## 下一轮优先事项
 
+1. Java 手柄：接 `tl_pad_sink` 到 AppRunner 所属线程的 KeyEvent / joystick MotionEvent，保留设备/轴信息；用真实 DEX 回调、断连/失焦释放和暂停期间输入验证。不能将宿主计数器当作输入成功。
+2. WebKit：明确 website data store 与用户存档的生命周期，建立可确认的持久化关闭；完成画布透明合成、缩放后点击和取消/销毁验证。当前使用过数据存储的会话按关闭未完成处理。
+3. 真实 Unity 6 / SDL / Flutter：共同 Java 路径已具备生产 fixture 证据，后续在独立数据上逐个验证首帧、交互、保存重开；将具体缺失 API 和失败堆栈写回本表。Hole.io 旧路径的崩溃不能冒充新路径结果。
+4. Egg：继续核对 DT_INIT / PLT 初始化，而非重复启动。已知 `libegginc.so` 构造函数 RVA `0x1621794` 调用 PLT `0x16413c0`，槽 `0x17636b8` 仍为 `0x1625d90`，缺少该槽的 ELF 重定位；当前仅证明初始化跳转失败，不能把 PairIP 存在当作根因。本轮 loader 增量是依赖符号搜索和 x18 SP 改写，没有证明已修复 Egg 的故障。详见 [findings.md](findings.md)。
+5. 其余 native profiles 按上表逐个推进；Play 登录保留用户实测失败结论，不重复声称已有 auth 参数补丁解决了 Google 拒绝。
 
-## Java / Unity 6 下一步
-
-本轮已实际编入上游共享模块，并修复链接缺少的 Vorbis 解码器。无需重新实现解释器。尚缺以下启动链路，保持待办：
-
-1. 将 `scripts/build_java_runtime.sh` 与 `src/java-framework/build.sh` 从上游作者的绝对路径改为受控资源输入。锁定 libcore / ICU / Conscrypt / framework-res 的来源与 hash，构建 `husk-framework.dex`，补许可证与打包验证；不能读写用户的运行中 Android 磁盘来凑依赖。
-2. 复用 `husk-tl-unity-app.c` 的 `java_boot` 顺序，在独立 NativeRunner 增加 Java profile、资源校验、32 分包与 manifest 分发。对齐 `TLReport.nativeEngine` 对 Unity 6、纯 Java、libGDX 等的选择，不能仅扩大资料库可运行判断。
-3. `tl_javaapp_set_paused` 当前仅发事件，`tl_javaapp_start` 未提供可 join 的完整停止接口。需要让 `husk.AppRunner` 的关闭完成回到宿主，收束 AppMain / GL / 音频线程，再写 `storage-closed`；保留会话失败时不报保存成功的约束。
-4. 接入 AppKit 画布、触摸/键盘、IME 与 WebView 宿主，在独立测试数据上验证首帧、交互、暂停、保存关闭和进程回收后再交付。
-
-前一轮上游合并时，构建测试目标曾通过隐式 PackageMac 依赖提前替换活动候选，随后已增加打包入口进程保护。本轮在用户确认退出后回收空闲残留主进程，通过该保护再更新 Product，没有替换运行中的包。当前单次重开的新进程指向已验证候选；只有前台 AX/可见检查因 CUA 连接失败尚未完成。
+每日同步必须在同一轮完成可确定的平台编译、分发、窗口/输入、生命周期和验证，并更新当前候选；较大的未完成项继续保持开放、保存具体证据与下一步。Git 祖先或旧测试通过都不能替代这些验收。

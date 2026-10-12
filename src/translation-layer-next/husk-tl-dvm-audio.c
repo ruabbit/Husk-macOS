@@ -62,7 +62,7 @@ typedef struct { bool used, paused; int sample, id, loops; double pos, step; flo
 
 static struct {
     pthread_mutex_t mu; pthread_cond_t room, work;
-    pthread_t thread; bool started;
+    pthread_t thread; bool started, stopping;
     stream s[MAX_STREAMS];
     sample smp[MAX_SAMPLES];
     voice v[MAX_VOICES];
@@ -86,7 +86,8 @@ static void *mixer_main(void *arg)
     static int16_t out[BLOCK * 2];
     for (;;) {
         pthread_mutex_lock(&M.mu);
-        while (!active_locked()) pthread_cond_wait(&M.work, &M.mu);
+        while (!active_locked() && !M.stopping) pthread_cond_wait(&M.work, &M.mu);
+        if (M.stopping) { pthread_mutex_unlock(&M.mu); break; }
         memset(acc, 0, sizeof(acc));
         for (int i = 0; i < MAX_STREAMS; i++) {
             stream *s = &M.s[i];
@@ -127,11 +128,25 @@ static void *mixer_main(void *arg)
 
 static void ensure_started_locked(void)
 {
-    if (M.started) return;
-    M.started = true;
+    if (M.started || M.stopping) return;
     if (!tl_cocos_audio_hook) tl_audio_install();
     pthread_attr_t at; pthread_attr_init(&at);
-    pthread_create(&M.thread, &at, mixer_main, NULL);
+    M.started = pthread_create(&M.thread, &at, mixer_main, NULL) == 0;
+    pthread_attr_destroy(&at);
+}
+
+void tl_dvm_audio_shutdown(void)
+{
+    void tl_audio_set_muted(bool), tl_audio_set_paused(bool);
+    tl_audio_set_muted(true); tl_audio_set_paused(false);
+    pthread_mutex_lock(&M.mu);
+    M.stopping = true;
+    for (int i = 0; i < MAX_STREAMS; i++) M.s[i].used = false;
+    for (int i = 0; i < MAX_VOICES; i++) M.v[i].used = false;
+    pthread_cond_broadcast(&M.room); pthread_cond_broadcast(&M.work);
+    bool join = M.started;
+    pthread_mutex_unlock(&M.mu);
+    if (join) pthread_join(M.thread, NULL);
 }
 
 /* ------------------------------------------------------------------ streams */
@@ -139,6 +154,7 @@ static void ensure_started_locked(void)
 static int stream_open(int rate, int channels)
 {
     pthread_mutex_lock(&M.mu);
+    if (M.stopping) { pthread_mutex_unlock(&M.mu); return -1; }
     ensure_started_locked();
     int id = -1;
     for (int i = 0; i < MAX_STREAMS && id < 0; i++) if (!M.s[i].used) id = i;

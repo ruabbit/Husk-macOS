@@ -1,5 +1,16 @@
 # 审计发现
 
+## 2026-10-12 Java / Unity 6
+
+- 上游将 Unity 6、SDL（DXVK 除外）、Python、Flutter 等交给 Java，缺口在 macOS 的受控 boot 资源、框架编译和 Runner 接线。当前已复用上游真实实现接入；未重写引擎或只加白名单。
+- `tl_manifest_gles` 原定义在 SDL driver 导致 Java host 链接失败。共享模块拆分后，GLES manifest 编码/资源 ID/损坏边界回归通过。
+- 原 `tl_javaapp_set_paused` 无回调完成确认；原 AppMain/GL 为 detached 常驻线程。已补状态回执、同线程销毁、显式 join，preferences 失败传递、SQLite 完整事务检查和真实 DEX/生产会话验证。
+- 在线程入口函数返回前递减计数不能证明 TLS 析构结束。现在 Java 与 bionic worker 保留 Mach thread send right，等待 kernel thread 终止，并在关闭阶段禁止新建 worker；pthread_exit / TLS 延迟和残留 worker 测试均通过。
+- 旧资料库 Hole.io 等记录仍写 Unity (IL2CPP)；仅用新规则判断旧 engine 字符串会再次漏接。旧 Unity 索引先只读复扫并按 digest 缓存，测试确认不写原索引。没有再次运行 Hole.io。
+- WebView 的视图移除不能证明 WebKit 数据进程完成持久化。macOS host 使用过 website data store 时拒绝正常关闭回执；这保持为明确缺口，下一步不能仅删除此检查。
+- 控制库共用的 Android 组件来自固定、未使用过的原始 qcow2；本轮只读提取后清理临时磁盘，原用户数据未参与依赖准备。资源哈希和原始 NOTICE 不替代发行对应源码审核。
+- 最终 40/40 默认回归与包验证通过，当前 App 单次启动，但随后 CUA 通道又断开。真实引擎、前台 IME/画布和实体控制器仍不能用后台 fixture 结果代替。
+
 ## 2026-10-11 NativeActivity 与 Egg, Inc.
 
 - 上游通用 NativeActivity 入口来自 `b7480b6c11a7bac9bb97cd93f277f3bebcbc21cc`，早已是当前分支祖先；此前缺口是 macOS 未编入和分发。共享驱动原有暂停从宿主直接发回调、没有 stop/join，不能直接套用 macOS 的正常关闭回执。现已让所有 NDK 回调在同一活动线程执行，并在销毁返回、线程回收后确认关闭。依据 [NDK 回调契约](https://developer.android.com/ndk/reference/struct/a-native-activity-callbacks)，窗口销毁回调必须等 guest 不再访问窗口后返回。

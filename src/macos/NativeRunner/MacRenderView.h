@@ -7,6 +7,7 @@
 @property(readonly) CAMetalLayer *surface;
 @property(readonly) NSSize renderSize;
 @property(readonly) NSRect contentRect;
+@property(readonly) NSView *webContainer;
 - (instancetype)initWithFrame:(NSRect)frame renderSize:(NSSize)size;
 - (NSPoint)renderPointForViewPoint:(NSPoint)point;
 @end

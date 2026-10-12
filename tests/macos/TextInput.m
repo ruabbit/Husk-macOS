@@ -17,5 +17,19 @@ int main(void) { @autoreleasepool {
     CHECK([input.inputText isEqual:@"P4 世界"]);
     NSRange actual;NSAttributedString *part=[input attributedSubstringForProposedRange:NSMakeRange(3,99) actualRange:&actual];
     CHECK([part.string isEqual:@"世界"]);CHECK(actual.length==2);
-    puts("PASS native composition, UTF-16 selection, grapheme deletion and replacement");return 0;
+    NSMutableArray *commits=[NSMutableArray new],*commands=[NSMutableArray new];
+    input.committedText=^(NSString *text){[commits addObject:text];};
+    input.textCommand=^(unsigned key){[commands addObject:@(key)];};
+    [input receiveText:@"" selection:NSMakeRange(0,0) marked:NSMakeRange(NSNotFound,0)];
+    [input setMarkedText:@"shi🙂" selectedRange:NSMakeRange(5,0) replacementRange:NSMakeRange(NSNotFound,0)];
+    [input deleteBackward:nil];
+    CHECK(input.hasMarkedText&&[input.inputText isEqual:@"shi"]&&commits.count==0&&commands.count==0);
+    [input insertText:@"世界" replacementRange:NSMakeRange(NSNotFound,0)];
+    CHECK(commits.count==1&&[commits[0] isEqual:@"世界"]&&!input.hasMarkedText&&input.inputText.length==0);
+    [input setMarkedText:@"中" selectedRange:NSMakeRange(1,0) replacementRange:NSMakeRange(NSNotFound,0)];
+    [input unmarkText];[input unmarkText];
+    CHECK(commits.count==2&&[commits[1] isEqual:@"中"]);
+    [input deleteBackward:nil];[input deleteForward:nil];[input moveLeft:nil];[input moveRight:nil];
+    CHECK(([commands isEqual:@[@51,@117,@123,@124]]));
+    puts("PASS native composition, UTF-16 selection, grapheme deletion, Java commit and command delivery");return 0;
 } }

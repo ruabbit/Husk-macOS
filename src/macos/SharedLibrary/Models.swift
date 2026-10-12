@@ -24,18 +24,28 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     public let sourceName: String
     public let apkNames: [String]
     public let digest: String
-    public let engine: String?
+    public var engine: String?
     public let abis: [String]
     public let fixture: FixtureManifest?
     public var packageName: String? = nil
     public var versionCode: Int? = nil
     public var signerSHA256: [String]? = nil
+    public var dexCount: Int? = nil
+    public var libraryNames: [String]? = nil
+    public var webKind: String? = nil
     public var settings: GameSettings
     public var lastPlayed: Date?
     // Capability belongs to this installed runtime, not to the version which
     // imported the APK. Codable ignores the old persisted unavailableReason.
     public var runtime: String? {
         if fixture != nil { return "orbit" }
+        guard (1...32).contains(apkNames.count), abis.isEmpty || abis.contains("arm64-v8a") else { return nil }
+        if abis.isEmpty { return (dexCount ?? 0) > 0 && webKind == nil ? "java" : nil }
+        if engine == "Unity 6" { return "java" }
+        if ["Python", "Flutter", "libGDX", "Java", "React Native", ".NET / Xamarin"].contains(engine ?? "") { return "java" }
+        if engine == nil && (dexCount ?? 0) > 0 { return "java" }
+        if engine == "Cocos", let libraries = libraryNames, !libraries.contains("libfmod.so") { return "java" }
+        if engine == "SDL", let libraries = libraryNames, !libraries.contains(where: { $0.hasPrefix("libdxvk") }) { return "java" }
         if (1...32).contains(apkNames.count) && abis.contains("arm64-v8a") {
             if engine == "Minecraft" { return "minecraft" }
             if engine == "NativeActivity" { return "nativeactivity" }

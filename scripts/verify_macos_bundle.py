@@ -8,12 +8,14 @@ from pathlib import Path
 import plistlib
 import re
 import subprocess
+from build_java_runtime import verify as verify_java
 
 def command(*args):
     return subprocess.run([str(a) for a in args], capture_output=True, text=True, check=True)
 
 def verify(app):
     command('codesign','--verify','--deep','--strict',app)
+    java = verify_java(app/'Contents/Resources/JavaRuntime', check_sources=True)
     icons={}
     for bundle in [app,*sorted((app/'Contents/Helpers').glob('*.app'))]:
         info=plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
@@ -103,7 +105,10 @@ def verify(app):
     if not vm.exists(): forbidden.append('libqemu')
     for path in app.rglob('*'):
         assert not any(term in path.name for term in forbidden),path
-    return {'passed':True,'app':str(app),'binaries':results,'icons':icons,'signing':'local ad-hoc unless an explicit identity was supplied'}
+    return {'passed':True,'app':str(app),'binaries':results,'icons':icons,
+            'javaRuntime':{'imageSHA256':java['imageSHA256'],'files':len(java['files']),
+                           'frameworkSHA256':java['files']['husk-framework.dex']['sha256']},
+            'signing':'local ad-hoc unless an explicit identity was supplied'}
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('app',type=Path);parser.add_argument('--output',type=Path)

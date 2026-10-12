@@ -16,12 +16,17 @@ private struct Scan: Decodable {
     let verdict: String
     let engine: String?
     let abis: [String]
+    let dexCount: Int?
+    struct NativeLibrary: Decodable { let name: String }
+    let libraries: [NativeLibrary]?
+    let webKind: String?
 }
 
 public actor LibraryRepository {
     public nonisolated let paths: LibraryPaths
     private let trustedFixtureHash: String
     private let fm = FileManager.default
+    private var upgradedScans = [String: Scan]()
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; return encoder
     }()
@@ -87,10 +92,30 @@ public actor LibraryRepository {
     private func readIndex() throws -> LibraryIndex {
         guard fm.fileExists(atPath: paths.index.path) else { return LibraryIndex() }
         do {
-            let result = try JSONDecoder().decode(LibraryIndex.self, from: Data(contentsOf: paths.index))
+            var result = try JSONDecoder().decode(LibraryIndex.self, from: Data(contentsOf: paths.index))
             guard result.schema == 1, Set(result.games.map(\.id)).count == result.games.count,
                   result.games.allSatisfy({ Self.validID($0.id) && $0.apkNames.allSatisfy(Self.validName) })
             else { throw LibraryFailure("资料库格式不受支持；原文件已保留。") }
+            // Enrich old imports in memory. Listing never rewrites the user's index.
+            for i in result.games.indices where result.games[i].dexCount == nil {
+                let path = paths.game(result.games[i].id).appendingPathComponent("scan.json")
+                var report = (try? Data(contentsOf: path)).flatMap { try? JSONDecoder().decode(Scan.self, from: $0) }
+                // Old scans predate Unity 6 detection. Rescan once per APK digest
+                // in this repository instance; never rewrite files while listing.
+                if result.games[i].engine?.hasPrefix("Unity") == true {
+                    let key = result.games[i].digest
+                    if upgradedScans[key] == nil {
+                        let apks = result.games[i].apkNames.map { paths.game(result.games[i].id).appendingPathComponent($0) }
+                        if let fresh = try? scan(apks).0 { upgradedScans[key] = fresh }
+                    }
+                    if let fresh = upgradedScans[key] { report = fresh; result.games[i].engine = fresh.engine }
+                }
+                if let report {
+                    result.games[i].dexCount = report.dexCount
+                    result.games[i].libraryNames = report.libraries?.map(\.name)
+                    result.games[i].webKind = report.webKind
+                }
+            }
             return result
         } catch { throw LibraryFailure("无法读取资料库；原文件已保留。\(error.localizedDescription)") }
     }
@@ -285,6 +310,7 @@ public actor LibraryRepository {
                                importedAt: Date(), sourceName: sourceName, apkNames: names, digest: digest,
                                engine: fixture != nil ? "Husk Orbit" : report.engine, abis: report.abis, fixture: fixture,
                                settings: GameSettings(), lastPlayed: nil)
+        game.dexCount = report.dexCount; game.libraryNames = report.libraries?.map(\.name); game.webKind = report.webKind
         game.packageName = packageID; game.versionCode = version; game.signerSHA256 = signing[0]
         if let previous { game.settings = previous.settings; game.lastPlayed = previous.lastPlayed }
         if let iconName = fixture?.icon ?? metadata.iconEntry, let data = Self.entry(base, iconName, limit: 4 << 20) {

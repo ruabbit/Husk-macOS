@@ -41,7 +41,10 @@ struct AppDiagnosis: Identifiable, Equatable {
     /// Libraries of commercial app protectors: they check the device and the app's own files, and stop the app off a real phone.
     private static let protectorLibraries = ["libjiagu", "libDexHelper", "libsecexe", "libsecmain", "libprotectClass", "libdexprotector",
                                              "libapp_shield", "libNSaferOnly", "libshell-super", "libtup", "libAppGuard", "libxloader",
-                                             "libarmour", "libnesec", "libSecShell", "libkwscmm", "libmobisec"]
+                                             "libarmour", "libnesec", "libSecShell", "libkwscmm", "libmobisec",
+                                             // seen in Play apps: ByteDance's metasec (TikTok, CapCut), Netflix's, Akamai's bot manager
+                                             // (eBay), and games whose own library refuses uncertified devices (Clash Royale, HCR2)
+                                             "libmetasec", "libcf2a", "libakamaibap", "libakamaibmp", "libk30d", "libsupercell_", "libfingersoft_hcr2", "libfp"]
 
     static func preflight(_ app: TLApp) -> AppDiagnosis? {
         guard let r = app.report else { return nil }
@@ -131,6 +134,27 @@ struct AppDiagnosis: Identifiable, Equatable {
                                         || $0.contains("GooglePlayServicesNotAvailableException") }),
            lines.contains(where: { $0.contains("the app finished") }) {
             return googleDiagnosis(l)
+        }
+
+        // An app whose work is done by Linux programs it starts as processes of their own (Winlator's and GameNative's Box64 and Wine,
+        // a proot userland): its own screens run, the programs can not, as an iOS app may not start processes
+        if let l = lines.first(where: { $0.contains("the app started a process:") }),
+           ["box64", "box86", "wine", "proot", "/usr/bin/", "imagefs", "rootfs", "termux", "ld-linux"].contains(where: { l.localizedCaseInsensitiveContains($0) }) {
+            let prog = l.components(separatedBy: "the app started a process: ").last?.components(separatedBy: " -- ").first ?? "a program"
+            return AppDiagnosis(kind: .missingFeature, title: "Runs Linux programs as separate processes",
+                                detail: "This app does its main work in Linux programs it starts as processes of their own (here \(prog.prefix(120))). "
+                                    + "Its own screens run in Husk, but iOS does not let an app start other processes, so those programs, and the "
+                                    + "games or tools they run, can not start yet.",
+                                evidence: l)
+        }
+
+        // An app that only works signed in to a Google account: it asked Android's account picker, got none, and closed
+        if let l = lines.last(where: { $0.contains("ChooseTypeAndAccountActivity") || $0.contains("AccountManager.newChooseAccountIntent") }),
+           lines.contains(where: { $0.contains("the app finished") }) {
+            return AppDiagnosis(kind: .needsGoogle, title: "Needs a Google account",
+                                detail: "This app only works signed in to a Google account. It asked Android to pick one, and Husk has no Google "
+                                    + "accounts to offer, so the app closed.",
+                                evidence: l)
         }
 
         // A game whose data comes as an expansion file the store did not install

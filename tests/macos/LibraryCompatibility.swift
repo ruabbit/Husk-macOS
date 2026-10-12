@@ -72,6 +72,28 @@ import HuskCore
             unity["abis"] = ["armeabi-v7a"]
             let arm32 = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: unity))
             try check(!arm32.playable, "unity-arm32-stays-unavailable")
+            for engine in ["Unity 6", "Python", "Flutter", "libGDX", "Java", "React Native", ".NET / Xamarin", "Cocos", "SDL"] {
+                var java = unity; java["engine"] = engine; java["abis"] = ["arm64-v8a"]
+                java["dexCount"] = 1; java["libraryNames"] = ["libmain.so"]
+                let candidate = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: java))
+                try check(candidate.runtime == "java", "upstream-java-dispatch-\(engine)")
+            }
+            var excluded = unity; excluded["abis"] = ["arm64-v8a"]; excluded["engine"] = "SDL"; excluded["libraryNames"] = ["libdxvk.so"]
+            let dxvk = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: excluded))
+            try check(!dxvk.playable, "sdl-dxvk-does-not-use-java")
+
+            // Old saved engine labels must not strand Unity 6 on the JNI driver.
+            let migrationPaths = LibraryPaths(root: paths.root.appendingPathComponent("LegacyUnity"))
+            let migration = try LibraryRepository(paths: migrationPaths, trustedFixtureHash: "")
+            _ = try await migration.importGame(cases.appendingPathComponent("unity6-scan.apk"))
+            var old = try JSONSerialization.jsonObject(with: Data(contentsOf: migrationPaths.index)) as! [String: Any]
+            var oldGames = old["games"] as! [[String: Any]]
+            oldGames[0]["engine"] = "Unity (IL2CPP)"; oldGames[0].removeValue(forKey: "dexCount")
+            old["games"] = oldGames
+            let oldBytes = try JSONSerialization.data(withJSONObject: old); try oldBytes.write(to: migrationPaths.index)
+            let upgraded = try await migration.games()
+            try check(upgraded[0].engine == "Unity 6" && upgraded[0].runtime == "java" &&
+                      (try Data(contentsOf: migrationPaths.index)) == oldBytes, "legacy-unity6-rescanned-without-index-write")
 
             // A stale or forged index cannot grant the helper a different runtime.
             // The actual APK is still the synthetic unsupported case, never guest code.
@@ -106,7 +128,7 @@ import HuskCore
             var refused = false
             do { _ = try await reopened.prepare(unknown.id) } catch { refused = true }
             try check(refused, "launch-still-enforces-import-hash")
-            print("Library upgrade: 14 checks passed")
+            print("PASS Library compatibility and legacy Java dispatch")
         } catch {
             if session.active { session.stop(); try? await session.wait(until: { !session.active }, timeout: 10) }
             print("FAIL \(error.localizedDescription)"); exit(1)

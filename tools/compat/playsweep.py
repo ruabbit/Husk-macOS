@@ -12,10 +12,12 @@ import argparse, glob, json, os, re, subprocess, sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 BIN = '/Volumes/GTAV/husk2/bin'
-JAVA = '/Volumes/GTAV/husk2/java/javaapp-test'
+JAVA = os.environ.get('HUSK_JAVAAPP', '/Volumes/GTAV/husk2/java/javaapp-test')
 SCAN = '/Volumes/GTAV/husk2/tl-scan'
-NATIVE = {'Unity (IL2CPP)': 'unity-test', 'Unity': 'unity-test', 'Unity (Mono)': 'unity-test', 'Flutter': 'flutter-test',
-          'Cocos': 'cocos-test', 'SDL': 'sdl-test', 'Python': 'sdl-test'}
+# the harness of the driver the app picks for each engine (TranslationLayer.swift's nativeEngine)
+NATIVE = {'Unity (IL2CPP)': 'unity-test', 'Unity': 'unity-test', 'Unity (Mono)': 'unity-test',           'Cocos': 'cocos-test', 'Godot': 'godot-test', 'GameMaker': 'gamemaker-test',
+          'NativeActivity': 'ue-test', 'Unreal Engine': 'ue-test', 'Rockstar': 'gta-test', 'Minecraft': 'ga-test'}
+# harnesses that take a screenshot when told to (TL_CTL), rather than leaving frames in a folder
 
 def apks(d):
     fs = sorted(glob.glob(os.path.join(d, '*.apk')), key=len)
@@ -51,7 +53,7 @@ def main():
         rep = json.loads(subprocess.run([SCAN, base] + splits, capture_output=True, text=True).stdout or '{}')
         engine = rep.get('engine') or ''
         log, shot = os.path.join(a.out, pkg + '.log'), os.path.join(a.out, pkg + '.png')
-        for f in (log, shot):
+        for f in (log, shot, shot[:-4] + '.web.png'):
             if os.path.exists(f): os.remove(f)
         env = dict(os.environ, TL_AUDIO_MUTE='1', TL_PACKAGE=pkg, TL_PKG=pkg, TMPDIR='/Volumes/GTAV/husk2/tmp')
         abis = rep.get('abis') or []
@@ -62,12 +64,21 @@ def main():
         if engine in NATIVE:
             harness = NATIVE[engine]
             env['TL_SPLITS'] = ':'.join(splits)
-            cmd = [os.path.join(BIN, harness), base, str(a.secs), '1748', '804']
+            cmd = [os.path.join(BIN, harness), base, str(a.secs + 20), '1748', '804']
+            # a screenshot near the end of the run, through the harness's control file (every native harness reads one)
+            ctl = os.path.join(a.out, pkg + '.ctl')
+            open(ctl, 'w').write('wait %d\nshot %s\nquit\n' % (a.secs * 1000, shot))
+            env['TL_CTL'] = ctl
         else:
             harness = 'javaapp-test'
-            cmd = [JAVA, d, str(a.secs)]
+            cmd = [JAVA, d, str(a.secs + 10)]
+            # the screenshot through the control file too: it also saves a web view's own picture (<pkg>.web.png), which the
+            # frames of the app's views do not show
+            ctl = os.path.join(a.out, pkg + '.ctl')
+            open(ctl, 'w').write('wait %d\nshot %s\nwait 3000\nquit\n' % (a.secs * 1000, shot))
+            env['TL_CTL'] = ctl
         try:
-            r = subprocess.run(cmd, env=env, capture_output=True, text=True, errors='replace', timeout=a.secs + 90, cwd='/Volumes/GTAV/husk2/java')
+            r = subprocess.run(cmd, env=env, capture_output=True, text=True, errors='replace', timeout=a.secs + 90, cwd='/')   # an app's working directory is / on a phone (Unity builds paths from it)
             text = r.stdout + r.stderr; rc = r.returncode
         except subprocess.TimeoutExpired as e:
             text = (e.stdout or b'').decode('utf-8', 'replace') if isinstance(e.stdout, bytes) else (e.stdout or ''); rc = 'timeout'
@@ -75,10 +86,10 @@ def main():
         fm = re.search(r'^frames: (\S+)', text, re.M)
         if fm:
             bmps = sorted(glob.glob(os.path.join(fm.group(1), '*.bmp')), key=os.path.getmtime)
-            if bmps: subprocess.run(['sips', '-s', 'format', 'png', bmps[-1], '--out', shot], capture_output=True)
+            if bmps and not os.path.exists(shot): subprocess.run(['sips', '-s', 'format', 'png', bmps[-1], '--out', shot], capture_output=True)
             subprocess.run(['rm', '-rf', fm.group(1)])
         dm = re.search(r'^data: (\S+)', text, re.M)
-        if dm and dm.group(1).startswith('/Volumes/GTAV/husk2/tmp/'): subprocess.run(['rm', '-rf', dm.group(1)])
+        if dm and dm.group(1).startswith('/Volumes/GTAV/husk2/tmp/'): subprocess.run(['chmod', '-R', 'u+w', dm.group(1)], capture_output=True); subprocess.run(['rm', '-rf', dm.group(1)])
         row = {'pkg': pkg, 'engine': engine or 'Java', 'harness': harness, 'rc': rc}
         row.update(summarise(text))
         rows.append(row)

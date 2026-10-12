@@ -85,7 +85,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         TypedArray ta = c.obtainStyledAttributes(attrs, husk.S.TextView, defStyleAttr, defStyleRes);
         int appearance = ta.getResourceId(husk.S.TextView_textAppearance, -1);
         if (appearance == -1) { TypedValue v = new TypedValue(); if (c.getTheme().resolveAttribute(android.R.attr.textAppearance, v, true) && v.resourceId != 0) appearance = v.resourceId; }
-        if (appearance != -1 && appearance != 0) setTextAppearance(appearance);
+        if (appearance != -1 && appearance != 0) applyTextAppearance(getContext(), appearance);   // not the overridable setter: a subclass is not constructed yet
         CharSequence text = "", hint = null;
         int inputType = EditorInfo.TYPE_NULL, ellipsize = -1, lines = -1, maxLines = -1, minLines = -1, ems = -1, maxEms = -1, minEms = -1, maxLength = -1;
         boolean singleLine = false, password = false, editable = false, phone = false, hasNumeric = false;
@@ -198,6 +198,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if ((mInputType & EditorInfo.TYPE_MASK_CLASS) != EditorInfo.TYPE_CLASS_TEXT || (mInputType & EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE) == 0) { if (lines < 0 && maxLines < 0 && (mInputType & EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE) == 0) singleLine = true; }
         } else if (mTextIsSelectable) { bt = BufferType.SPANNABLE; mMovement = ArrowKeyMovementMethod.getInstance(); }
         if (mAutoLinkMask != 0) bt = bt == BufferType.EDITABLE ? bt : BufferType.SPANNABLE;
+        // textAllCaps from the layout or style: as Android, an all-caps transformation unless one is set already (password)
+        if (mAllCaps && mTransformation == null) mTransformation = new AllCapsTransformation();
         if (singleLine) applySingleLine(true, mTransformation == null);
         if (lines >= 0) setLines(lines);
         else { if (maxLines >= 0) setMaxLines(maxLines); if (minLines >= 0) setMinLines(minLines); }
@@ -221,7 +223,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     // ---- appearance
     public void setTextAppearance(int resId) { setTextAppearance(getContext(), resId); }
-    @Deprecated public void setTextAppearance(Context c, int resId) {
+    @Deprecated public void setTextAppearance(Context c, int resId) { applyTextAppearance(c, resId); }
+    private void applyTextAppearance(Context c, int resId) {
         TypedArray a = c.obtainStyledAttributes(resId, husk.S.TextAppearance);
         ColorStateList col = a.getColorStateList(husk.S.TextAppearance_textColor);
         if (col != null) mTextColor = col;
@@ -604,7 +607,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public ColorStateList getCompoundDrawableTintList() { return mDrawableTint; }
     public void setCompoundDrawableTintMode(PorterDuff.Mode m) { mDrawableTintMode = m; for (Drawable d : mDrawables) if (d != null) d.setTintMode(m); }
     public PorterDuff.Mode getCompoundDrawableTintMode() { return mDrawableTintMode; }
-    @Override protected boolean verifyDrawable(Drawable who) { for (Drawable d : mDrawables) if (d == who) return true; return super.verifyDrawable(who); }
+    /* called from View's constructor too (a tinted background invalidates itself) before this class's fields are set */
+    @Override protected boolean verifyDrawable(Drawable who) { if (mDrawables != null) for (Drawable d : mDrawables) if (d == who) return true; return super.verifyDrawable(who); }
     private int dw(int i) { Drawable d = mDrawables[i]; return d == null ? 0 : d.getBounds().width(); }
     private int dh(int i) { Drawable d = mDrawables[i]; return d == null ? 0 : d.getBounds().height(); }
     public int getCompoundPaddingLeft() { return getPaddingLeft() + (mDrawables[0] != null ? dw(0) + mDrawablePadding : 0); }

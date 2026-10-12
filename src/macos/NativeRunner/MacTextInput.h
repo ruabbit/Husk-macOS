@@ -6,6 +6,8 @@
 @interface MacTextInput : NSView <NSTextInputClient>
 @property BOOL textInputActive;
 @property(copy) void (^textChanged)(NSString *, NSRange, NSRange);
+/// Java InputConnection accepts committed text; composition stays local until commit.
+@property(copy) void (^committedText)(NSString *);
 @property(copy) void (^textCommand)(unsigned);
 @property(readonly) NSString *inputText;
 @property NSPoint inputAnchor;

@@ -17,6 +17,7 @@
  */
 #import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
+#import <QuartzCore/CAMetalLayer.h>
 #include <TargetConditionals.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -39,6 +40,7 @@ void tl_log_line(const char *fmt, ...);
 
 #define NAT(fn) static bool fn(jobj *self, const jvalue *a, jvalue *ret)
 static jvalue L(jobj *o) { jvalue r; r.l = o; return r; }
+static jvalue Z(bool b) { jvalue r; r.j = 0; r.z = b; return r; }
 
 /* ---- events for Java */
 
@@ -105,7 +107,14 @@ static void set_screen_opaque(bool opaque)
     g_screen.layer.opaque = opaque;
     for (CALayer *l in g_screen.layer.sublayers) l.opaque = opaque;
 #else
-    (void)opaque;
+    if (!g_screen) return;
+    g_screen.layer.backgroundColor = (opaque ? NSColor.blackColor : NSColor.clearColor).CGColor;
+    g_screen.layer.opaque = opaque;
+    for (CALayer *layer in g_screen.layer.sublayers) {
+        if ([layer isKindOfClass:CAMetalLayer.class]) layer.opaque = opaque;
+        for (CALayer *child in layer.sublayers)
+            if ([child isKindOfClass:CAMetalLayer.class]) child.opaque = opaque;
+    }
 #endif
 }
 
@@ -117,6 +126,91 @@ static NSMutableDictionary<NSNumber *, id> *g_pending;      /* call id -> comple
 static int g_next_call = 1;
 static atomic_int g_visible_webs;
 
+/* ---- each Android app's own website data (cookies, storage), as Android keeps a WebView data directory per app: a data store of
+ * its own where the system has them (iOS 17, macOS 14), the shared one before that. CookieManager reads and writes its cookies. */
+static NSString *g_app;                                     /* the package, from husk.Web.app */
+static WKWebsiteDataStore *g_store;
+static NSArray<NSHTTPCookie *> *g_cookies;                  /* the store's cookies, kept current for CookieManager's synchronous reads */
+static pthread_mutex_t g_cookie_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static WKWebsiteDataStore *data_store(void)
+{
+    if (g_store) return g_store;
+    if (@available(iOS 17.0, macOS 14.0, *)) {
+        if (g_app.length) {
+            /* a fixed identifier per package: the first 16 bytes of its name's hash, shaped as a UUID */
+            uint8_t b[16] = { 0 };
+            const char *u = g_app.UTF8String;
+            uint64_t h1 = 1469598103934665603ull, h2 = 1099511628211ull ^ 0x9e3779b97f4a7c15ull;
+            for (const char *q = u; *q; q++) { h1 = (h1 ^ (uint8_t)*q) * 1099511628211ull; h2 = (h2 ^ (uint8_t)*q) * 0x100000001b3ull + 7; }
+            memcpy(b, &h1, 8); memcpy(b + 8, &h2, 8);
+            b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+            g_store = [WKWebsiteDataStore dataStoreForIdentifier:[[NSUUID alloc] initWithUUIDBytes:b]];
+        }
+    }
+    if (!g_store) g_store = [WKWebsiteDataStore defaultDataStore];
+    return g_store;
+}
+
+@interface HuskCookieWatch : NSObject <WKHTTPCookieStoreObserver>
+@end
+@implementation HuskCookieWatch
+- (void)cookiesDidChangeInCookieStore:(WKHTTPCookieStore *)store
+{
+    [store getAllCookies:^(NSArray<NSHTTPCookie *> *all) {
+        pthread_mutex_lock(&g_cookie_lock); g_cookies = [all copy]; pthread_mutex_unlock(&g_cookie_lock);
+    }];
+}
+@end
+static HuskCookieWatch *g_cookie_watch;
+/* on the main thread: watching the store, and a first reading of it */
+static void cookies_watch(void)
+{
+    if (g_cookie_watch) return;
+    g_cookie_watch = [HuskCookieWatch new];
+    WKHTTPCookieStore *cs = data_store().httpCookieStore;
+    [cs addObserver:g_cookie_watch];
+    [g_cookie_watch cookiesDidChangeInCookieStore:cs];
+}
+static bool cookie_matches(NSHTTPCookie *c, NSURL *url)
+{
+    NSString *host = url.host.lowercaseString ?: @"", *d = c.domain.lowercaseString ?: @"";
+    if ([d hasPrefix:@"."]) { NSString *bare = [d substringFromIndex:1]; if (![host isEqualToString:bare] && ![host hasSuffix:d]) return false; }
+    else if (![host isEqualToString:d]) return false;
+    NSString *path = url.path.length ? url.path : @"/", *cp = c.path.length ? c.path : @"/";
+    if (![path hasPrefix:cp]) return false;
+    if (c.isSecure && ![url.scheme.lowercaseString isEqualToString:@"https"]) return false;
+    if (c.expiresDate && c.expiresDate.timeIntervalSinceNow < 0) return false;
+    return true;
+}
+/* "a=1; b=2" for a URL, or nil */
+static NSString *cookie_header(NSURL *url)
+{
+    if (!url) return nil;
+    NSMutableArray *parts = [NSMutableArray array];
+    pthread_mutex_lock(&g_cookie_lock);
+    for (NSHTTPCookie *c in g_cookies) if (cookie_matches(c, url)) [parts addObject:[NSString stringWithFormat:@"%@=%@", c.name, c.value]];
+    pthread_mutex_unlock(&g_cookie_lock);
+    return parts.count ? [parts componentsJoinedByString:@"; "] : nil;
+}
+/* cookies into the store, and into the cache at once (a read right after a write sees it) */
+static void cookies_put(NSArray<NSHTTPCookie *> *cs)
+{
+    if (!cs.count) return;
+    pthread_mutex_lock(&g_cookie_lock);
+    NSMutableArray *all = [NSMutableArray arrayWithArray:g_cookies ?: @[]];
+    for (NSHTTPCookie *c in cs) {
+        for (NSInteger i = (NSInteger)all.count - 1; i >= 0; i--) {
+            NSHTTPCookie *o = all[(NSUInteger)i];
+            if ([o.name isEqualToString:c.name] && [o.domain isEqualToString:c.domain] && [o.path isEqualToString:c.path]) [all removeObjectAtIndex:(NSUInteger)i];
+        }
+        if (!c.expiresDate || c.expiresDate.timeIntervalSinceNow > 0) [all addObject:c];
+    }
+    g_cookies = all;
+    pthread_mutex_unlock(&g_cookie_lock);
+    dispatch_async(dispatch_get_main_queue(), ^{ for (NSHTTPCookie *c in cs) [data_store().httpCookieStore setCookie:c completionHandler:nil]; });
+}
+
 static NSString *bridge_js(void)
 {
     /* Android's addJavascriptInterface objects call through prompt(); the console reaches WebChromeClient.onConsoleMessage */
@@ -126,7 +220,7 @@ static NSString *bridge_js(void)
             "window.__husk={call:function(o,m,a){var r=prompt('husk:'+JSON.stringify({o:o,m:m,a:Array.prototype.slice.call(a)}));"
             "if(r===null||r===undefined)return undefined;var v=JSON.parse(r);if(v&&v.e)throw new Error(v.e);return v.v;}};"
             "var lv=['log','debug','info','warn','error'];lv.forEach(function(k,i){var o=console[k];console[k]=function(){try{var s=Array.prototype.map.call(arguments,function(x){"
-            "try{return typeof x==='object'?JSON.stringify(x):String(x)}catch(e){return String(x)}}).join(' ');"
+            "try{return x instanceof Error?(x.name+': '+x.message+(x.stack?' | '+String(x.stack).slice(0,600):'')):typeof x==='object'?JSON.stringify(x,function(k,v){return v instanceof Error?{name:v.name,message:v.message,stack:String(v.stack||'').slice(0,600)}:v}):String(x)}catch(e){return String(x)}}).join(' ');"
             "window.webkit.messageHandlers.huskConsole.postMessage({l:i,m:s,s:(document.currentScript&&document.currentScript.src)||location.href});}catch(e){}"
             "if(o)o.apply(console,arguments);};});"
             "window.addEventListener('error',function(e){try{window.webkit.messageHandlers.huskConsole.postMessage({l:4,m:'Uncaught '+e.message+(e.error&&e.error.stack?' | '+String(e.error.stack).slice(0,600):''),s:e.filename||'',n:e.lineno||0});}catch(x){}});})();";
@@ -147,6 +241,8 @@ static NSString *bridge_js(void)
     _wid = wid;
     _scripts = [NSMutableArray array];
     WKWebViewConfiguration *c = [[WKWebViewConfiguration alloc] init];
+    c.websiteDataStore = data_store();
+    cookies_watch();
     [c setURLSchemeHandler:self forURLScheme:@"huskapp"];
     c.userContentController = [[WKUserContentController alloc] init];
     [c.userContentController addScriptMessageHandler:self name:@"huskConsole"];
@@ -160,7 +256,7 @@ static NSString *bridge_js(void)
     _web = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, 10, 10) configuration:c];
     _web.navigationDelegate = self;
     _web.UIDelegate = self;
-    _web.customUserAgent = @"Mozilla/5.0 (Linux; Android 14; Husk; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.0.0 Mobile Safari/537.36";
+    _web.customUserAgent = @"Mozilla/5.0 (Linux; Android 14; Husk; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/140.0.0.0 Mobile Safari/537.36";
     if (@available(iOS 16.4, macOS 13.3, *)) _web.inspectable = YES;
 #if !TARGET_OS_IPHONE
     /* the harness's window is nearly all off screen: without this WebKit calls the page hidden and pages that wait to be seen
@@ -303,6 +399,7 @@ static NSArray<NSString *> *nstrs(jobj *arr)
     return out;
 }
 static void on_main(dispatch_block_t b) { dispatch_async(dispatch_get_main_queue(), b); }
+static void dispatch_sync_main_safe(dispatch_block_t b) { if ([NSThread isMainThread]) b(); else dispatch_async(dispatch_get_main_queue(), b); }
 static HuskWeb *view_of(int wid) { return g_views[@(wid)]; }
 
 static void update_hits(int wid, bool visible, bool touchable, CGRect r)
@@ -540,7 +637,13 @@ NAT(W_respond)
             if (!real) { [g_pending removeObjectForKey:@(call)]; [task didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorFileDoesNotExist userInfo:nil]]; return; }
             NSMutableURLRequest *r = [task.request mutableCopy];
             r.URL = real;
+            /* the page's cookies are the data store's, both ways */
+            r.HTTPShouldHandleCookies = NO;
+            NSString *ck = cookie_header(real);
+            if (ck) [r setValue:ck forHTTPHeaderField:@"Cookie"];
             [[NSURLSession.sharedSession dataTaskWithRequest:r completionHandler:^(NSData *d, NSURLResponse *resp, NSError *err) {
+                NSHTTPURLResponse *hr0 = [resp isKindOfClass:NSHTTPURLResponse.class] ? (NSHTTPURLResponse *)resp : nil;
+                if (hr0) cookies_put([NSHTTPCookie cookiesWithResponseHeaderFields:hr0.allHeaderFields forURL:hr0.URL ?: real]);
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (!g_pending[@(call)]) return;
                     [g_pending removeObjectForKey:@(call)];
@@ -586,6 +689,57 @@ NAT(W_poll)
     return true;
 }
 
+/* ---- CookieManager: the app's data store's cookies */
+NAT(W_app)
+{
+    (void)self; (void)ret;
+    NSString *pkg = nstr(a[0].l);
+    dispatch_sync_main_safe(^{ if (!g_app) g_app = pkg; cookies_watch(); });
+    return true;
+}
+NAT(W_cookieSet)
+{
+    (void)self; (void)ret;
+    NSString *u = nstr(a[0].l), *v = nstr(a[1].l);
+    NSURL *url = u ? [NSURL URLWithString:u] : nil;
+    if (!url || !v) { *ret = Z(false); return true; }
+    if (!url.host && url.scheme == nil) url = [NSURL URLWithString:[@"https://" stringByAppendingString:u]];     /* Android takes "example.com" too */
+    NSArray *cs = [NSHTTPCookie cookiesWithResponseHeaderFields:@{ @"Set-Cookie": v } forURL:url];
+    cookies_put(cs);
+    *ret = Z(cs.count > 0);
+    return true;
+}
+NAT(W_cookieGet)
+{
+    (void)self;
+    NSString *u = nstr(a[0].l);
+    NSURL *url = u ? [NSURL URLWithString:u] : nil;
+    if (url && !url.host) url = [NSURL URLWithString:[@"https://" stringByAppendingString:u]];
+    NSString *h = cookie_header(url);
+    *ret = L(h ? tl_jni_new_string(h.UTF8String) : NULL);
+    return true;
+}
+NAT(W_cookieClear)
+{
+    (void)self;
+    bool sessionOnly = a[0].z;
+    NSMutableArray *gone = [NSMutableArray array], *kept = [NSMutableArray array];
+    pthread_mutex_lock(&g_cookie_lock);
+    for (NSHTTPCookie *c in g_cookies) [(sessionOnly && !c.isSessionOnly ? kept : gone) addObject:c];
+    g_cookies = kept;
+    pthread_mutex_unlock(&g_cookie_lock);
+    dispatch_async(dispatch_get_main_queue(), ^{ for (NSHTTPCookie *c in gone) [data_store().httpCookieStore deleteCookie:c completionHandler:nil]; });
+    *ret = Z(gone.count > 0);
+    return true;
+}
+NAT(W_cookieAny)
+{
+    (void)self; (void)a;
+    pthread_mutex_lock(&g_cookie_lock); bool any = g_cookies.count > 0; pthread_mutex_unlock(&g_cookie_lock);
+    *ret = Z(any);
+    return true;
+}
+
 static const struct { const char *name, *sig; dvm_native_fn fn; } k_web[] = {
     { "create", "(I)V", W_create },
     { "destroy", "(I)V", W_destroy },
@@ -600,6 +754,11 @@ static const struct { const char *name, *sig; dvm_native_fn fn; } k_web[] = {
     { "reply", "(ILjava/lang/String;)V", W_reply },
     { "respond", "(IILjava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[B)V", W_respond },
     { "poll", "()[Ljava/lang/String;", W_poll },
+    { "app", "(Ljava/lang/String;)V", W_app },
+    { "cookieSet", "(Ljava/lang/String;Ljava/lang/String;)Z", W_cookieSet },
+    { "cookieGet", "(Ljava/lang/String;)Ljava/lang/String;", W_cookieGet },
+    { "cookieClear", "(Z)Z", W_cookieClear },
+    { "cookieAny", "()Z", W_cookieAny },
     { NULL, NULL, NULL },
 };
 dvm_native_fn tl_web_native(const char *name, const char *sig);
@@ -636,6 +795,21 @@ void tl_web_attach(void *screen_view, void *container, float scale, bool fresh)
         set_screen_opaque(atomic_load(&g_visible_webs) == 0);
     };
     if ([NSThread isMainThread]) b(); else dispatch_sync(dispatch_get_main_queue(), b);
+}
+
+/* macOS's explicit storage-close contract cannot treat removal of a WebView as
+   acknowledgement from WebKit's persistent data process. Until that protocol
+   is available, fail closed for a session which used a website data store. */
+bool tl_web_close_for_host(void)
+{
+    __block bool ok;
+    dispatch_block_t close = ^{
+        ok = g_store == nil;
+        tl_web_attach(NULL, NULL, 1, true);
+        if (!ok) tl_log_line("javaapp: WebKit persistent storage close is not acknowledged");
+    };
+    if ([NSThread isMainThread]) close(); else dispatch_sync(dispatch_get_main_queue(), close);
+    return ok;
 }
 
 bool tl_web_hit(float x, float y)

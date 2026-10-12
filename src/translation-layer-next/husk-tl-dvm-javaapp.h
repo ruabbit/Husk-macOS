@@ -37,6 +37,14 @@ typedef struct tl_javaapp_config {
 
 bool tl_javaapp_manifest(const char *apk, char *pkg, size_t pn, char *activity, size_t an, char *application, size_t apn);
 bool tl_javaapp_start(const tl_javaapp_config *cfg);
+typedef enum {
+    TL_JAVA_UNLOADED, TL_JAVA_STARTING, TL_JAVA_RUNNING, TL_JAVA_PAUSED,
+    TL_JAVA_STOPPING, TL_JAVA_DESTROYED, TL_JAVA_FAILED
+} tl_javaapp_state;
+tl_javaapp_state tl_javaapp_get_state(void);
+/* Called from a host lifecycle worker, never the app or render thread. Success
+ * requires AppRunner's completed teardown and joined host-owned threads. */
+bool tl_javaapp_stop(void);
 void tl_javaapp_touch(int phase, int id, float x, float y);    /* surface pixels; phase 0 down, 1 move, 2 up, 3 cancel */
 void tl_javaapp_key(int android_keycode, bool down);
 void tl_javaapp_back(void);

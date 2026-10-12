@@ -21,6 +21,15 @@ endif()
 set(CLASSIC "${CMAKE_SOURCE_DIR}/src/translation-layer")
 set(NEXT "${CMAKE_SOURCE_DIR}/src/translation-layer-next")
 set(MAC "${CMAKE_SOURCE_DIR}/src/macos")
+set(HUSK_JAVA_RUNTIME "${CMAKE_BINARY_DIR}/JavaRuntime" CACHE PATH "Pinned Android Java resources")
+if(NOT EXISTS "${HUSK_JAVA_RUNTIME}/runtime-manifest.json")
+    message(FATAL_ERROR "Prepare Java resources: scripts/build_java_runtime.sh --image <pinned-vda-v12.qcow2> --output ${HUSK_JAVA_RUNTIME}")
+endif()
+file(GLOB_RECURSE HUSK_JAVA_SOURCES CONFIGURE_DEPENDS src/java-framework/*.java src/java-framework/gen/*.py)
+add_custom_command(OUTPUT "${HUSK_JAVA_RUNTIME}/husk-framework.dex" "${HUSK_JAVA_RUNTIME}/runtime-manifest.json"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --refresh-framework --output ${HUSK_JAVA_RUNTIME}
+    DEPENDS ${HUSK_JAVA_SOURCES} scripts/build_java_framework.py scripts/build_java_runtime.py dependencies/java-runtime.lock.json VERBATIM)
+add_custom_target(JavaRuntimeResources DEPENDS "${HUSK_JAVA_RUNTIME}/husk-framework.dex" "${HUSK_JAVA_RUNTIME}/runtime-manifest.json")
 set(HUSK_ICON_SOURCE "${CMAKE_SOURCE_DIR}/src/app/Husk/Assets.xcassets/AppIcon.appiconset/Icon-Default.png")
 set(HUSK_ICON "${CMAKE_BINARY_DIR}/Resources/Husk.icns")
 add_custom_command(OUTPUT "${HUSK_ICON}"
@@ -52,8 +61,8 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-jni-input.c ${NEXT}/husk-tl-jni-assetstream.c ${NEXT}/husk-tl-jni-tls.c
     ${NEXT}/husk-tl-jni-http.c ${NEXT}/husk-tl-jni-security.c ${NEXT}/husk-tl-jni-fmod.c ${NEXT}/husk-tl-jni-gms.c
     ${NEXT}/husk-tl-jni-minecraft.c ${NEXT}/husk-tl-jni-text.c ${NEXT}/husk-tl-jni-audiotrack.c ${NEXT}/husk-tl-dexindex.c
-    ${NEXT}/husk-tl-dvm.c ${NEXT}/husk-tl-dvm-natives.c ${NEXT}/husk-tl-dvm-jvm.c
-    ${NEXT}/husk-tl-dvm-annotations.c ${NEXT}/husk-tl-dvm-proxy.c ${NEXT}/husk-tl-dvm-android.c
+    ${NEXT}/husk-tl-dvm.c ${NEXT}/husk-tl-dvm-boot.c ${NEXT}/husk-tl-dvm-natives.c ${NEXT}/husk-tl-dvm-jvm.c
+    ${NEXT}/husk-tl-manifest.c ${NEXT}/husk-tl-dvm-annotations.c ${NEXT}/husk-tl-dvm-proxy.c ${NEXT}/husk-tl-dvm-android.c
     ${NEXT}/husk-tl-dvm-graphics.c ${NEXT}/husk-tl-dvm-audio.c ${NEXT}/husk-tl-dvm-sqlite.c
     ${NEXT}/husk-tl-dvm-media.c ${NEXT}/husk-tl-dvm-sensors.m ${NEXT}/husk-tl-dvm-web.m
     ${NEXT}/husk-tl-dvm-gles10.c ${NEXT}/husk-tl-dvm-gles10ext.c
@@ -79,7 +88,7 @@ target_compile_options(NativeActivityProbe PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-
 target_link_libraries(NativeActivityProbe PRIVATE NativeRuntime "-framework Foundation")
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
-    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c
+    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m "${HUSK_ICON}")
 add_dependencies(NativeRunner MacIcon)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
@@ -134,10 +143,49 @@ endif()
 add_custom_target(PackageMac ALL
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/package_macos.py
         --app "$<TARGET_BUNDLE_DIR:HuskMac>" --runner "$<TARGET_BUNDLE_DIR:NativeRunner>"
-        --deps ${HUSK_DEPS} --fixtures ${FIXTURES} --destination ${HUSK_PRODUCT} ${VM_PACKAGE_ARGUMENTS}
-    DEPENDS HuskMac NativeRunner Fixtures ${VM_PACKAGE_DEPENDS} VERBATIM)
+        --deps ${HUSK_DEPS} --fixtures ${FIXTURES} --destination ${HUSK_PRODUCT}
+        --java-runtime ${HUSK_JAVA_RUNTIME} ${VM_PACKAGE_ARGUMENTS}
+    DEPENDS HuskMac NativeRunner Fixtures JavaRuntimeResources ${VM_PACKAGE_DEPENDS} VERBATIM)
 
 enable_testing()
+add_executable(ManifestGLESTests tests/macos/ManifestGLES.c ${NEXT}/husk-tl-manifest.c)
+target_link_libraries(ManifestGLESTests PRIVATE SharedCore)
+add_test(NAME java-manifest-gles COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/ManifestGLES.py "$<TARGET_FILE:ManifestGLESTests>")
+add_executable(GuestThreadTests tests/macos/GuestThreads.c)
+target_link_libraries(GuestThreadTests PRIVATE NativeRuntime)
+add_test(NAME java-native-thread-close COMMAND GuestThreadTests)
+add_test(NAME java-native-thread-live COMMAND GuestThreadTests live)
+set_tests_properties(java-native-thread-close java-native-thread-live PROPERTIES TIMEOUT 10)
+add_executable(JavaBootTests tests/macos/JavaBoot.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(JavaBootTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(JavaBootTests PRIVATE NativeRuntime)
+add_dependencies(JavaBootTests JavaRuntimeResources)
+add_custom_command(TARGET JavaBootTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaBootTests>" VERBATIM)
+add_test(NAME java-runtime-boot COMMAND JavaBootTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/TestResults/JavaBoot")
+set_tests_properties(java-runtime-boot PROPERTIES TIMEOUT 60 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
+add_test(NAME java-runtime-resources COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --verify --output ${HUSK_JAVA_RUNTIME})
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java scripts/build_java_framework.py VERBATIM)
+add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
+add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(JavaLifecycleTests PRIVATE NativeRuntime)
+add_dependencies(JavaLifecycleTests JavaRuntimeResources JavaLifecycleFixture)
+add_custom_command(TARGET JavaLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaLifecycleTests>" VERBATIM)
+foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted)
+    add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
+        "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
+    set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
+endforeach()
+add_executable(MacJavaSessionTests tests/macos/JavaSession.swift)
+target_compile_options(MacJavaSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacJavaSessionTests PRIVATE SharedLibrary)
+add_dependencies(MacJavaSessionTests PackageMac JavaLifecycleFixture)
+add_test(NAME macos-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(macos-java-session PROPERTIES TIMEOUT 95)
 add_test(NAME macos-package-guard COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/PackageGuard.py)
 add_executable(VMExitFixture tests/macos/VMExitFixture.m)
 target_compile_options(VMExitFixture PRIVATE -fobjc-arc)
@@ -198,7 +246,7 @@ add_test(NAME macos-render-surface COMMAND MacRenderSurfaceTests "${HUSK_DEPS}/l
 set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
 add_executable(MacNativeMouseTests tests/macos/NativeMouse.m ${MAC}/NativeRunner/MacRenderView.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m ${MAC}/NativeRunner/MacAudio.m
-    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c)
+    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m)
 target_include_directories(MacNativeMouseTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(MacNativeMouseTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(MacNativeMouseTests PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"

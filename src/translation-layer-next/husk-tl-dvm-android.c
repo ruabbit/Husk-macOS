@@ -35,9 +35,15 @@ static struct {
     int32_t q[4096]; int qn;                    /* packed input events: phase, id, x bits, y bits */
     atomic_ulong frames;
     atomic_bool ended, paused, render_requested;
+    atomic_int state;
+    atomic_bool destroy_ack;
+    bool stop_requested, stop_delivered;
+    int pending_pause;
     jobj *gl_view, *gl_renderer;
     int gl_version;
     pthread_t gl_thread;
+    pthread_t app_thread, app_owner;
+    bool gl_created, app_created;
     bool gl_started;
     jobj *content;
     char fwres[1024];
@@ -45,7 +51,7 @@ static struct {
     pthread_mutex_t t_lock;
     char **text; int ntext, ctext;              /* typed text waiting for Native.pollText: "t<text>", "d", "e", "h" */
     int insets[5];                              /* left, top, right, bottom, keyboard */
-} A = { .q_lock = PTHREAD_MUTEX_INITIALIZER, .t_lock = PTHREAD_MUTEX_INITIALIZER };
+} A = { .q_lock = PTHREAD_MUTEX_INITIALIZER, .t_lock = PTHREAD_MUTEX_INITIALIZER, .pending_pause = -1 };
 
 static jvalue L(void *p) { jvalue v; v.j = 0; v.l = p; return v; }
 static jvalue I(int32_t i) { jvalue v; v.j = (uint32_t)i; return v; }
@@ -192,7 +198,8 @@ NAT(N_log)
 /* Assets: the app's APK first, then its splits and asset packs (a Play install keeps a game's data in an install-time asset pack). */
 static const tl_zip_entry *asset_find(const char *n, const tl_zip **zout)
 {
-    char path[1024]; snprintf(path, sizeof(path), "assets/%s", n ? n : "");
+    /* "/lib/x.so": a file from the APK's root (openNonAssetFd), which asset names never start with */
+    char path[1024]; if (n && n[0] == '/') snprintf(path, sizeof(path), "%s", n + 1); else snprintf(path, sizeof(path), "assets/%s", n ? n : "");
     for (int i = 0; i < 16; i++) {
         const tl_zip *z = tl_ld_apk_at(i);
         if (!z) { if (i == 0) continue; break; }
@@ -271,12 +278,43 @@ NAT(N_requestRender) { (void)self; (void)a; (void)ret; atomic_store(&A.render_re
 NAT(N_setContentView) { (void)self; (void)ret; A.content = a[0].l; return true; }
 NAT(N_vibrate) { (void)self; (void)a; (void)ret; if (A.cfg.vibrate) A.cfg.vibrate((int)a[0].j); return true; }
 NAT(N_openUrl) { (void)self; (void)ret; const char *u = tl_jni_string(a[0].l); tl_log_line("javaapp: open %s", u ? u : "?"); if (A.cfg.open_url && u) A.cfg.open_url(u); return true; }
-NAT(N_exit) { (void)self; (void)a; (void)ret; tl_log_line("javaapp: the app finished"); atomic_store(&A.ended, true); return true; }
+NAT(N_exit) {
+    (void)self; (void)a; (void)ret;
+    /* Process.killProcess and other process-level exits did not complete an
+       Activity lifecycle. The host must never report storage closed for these. */
+    tl_log_line("javaapp: process exit without lifecycle acknowledgement");
+    atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true); return true;
+}
+NAT(N_lifecycle) {
+    (void)self; (void)ret;
+    if (!pthread_equal(pthread_self(), A.app_owner)) return false;
+    int state = a[0].i;
+    if (atomic_load(&A.state) == TL_JAVA_FAILED) return false;
+    if (state == TL_JAVA_DESTROYED) {
+        atomic_store(&A.destroy_ack, true);
+        atomic_store(&A.state, TL_JAVA_STOPPING);
+    } else if (state == TL_JAVA_RUNNING || state == TL_JAVA_PAUSED) {
+        atomic_store(&A.paused, state == TL_JAVA_PAUSED);
+        int old = atomic_load(&A.state);
+        while ((old == TL_JAVA_STARTING || old == TL_JAVA_RUNNING || old == TL_JAVA_PAUSED) &&
+               !atomic_compare_exchange_weak(&A.state, &old, state)) {}
+    } else return false;
+    return true;
+}
 NAT(N_uptimeNanos) { (void)self; (void)a; struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); *ret = J((int64_t)t.tv_sec * 1000000000ll + t.tv_nsec); return true; }
 NAT(N_pollInput)
 {
     (void)self; (void)a;
     pthread_mutex_lock(&A.q_lock);
+    /* Lifecycle requests have reserved space, even when input fills the queue. */
+    if (A.stop_requested && !A.stop_delivered) {
+        A.qn = 0; A.pending_pause = -1; A.stop_delivered = true;
+        A.q[A.qn++] = 10; A.q[A.qn++] = 0; A.q[A.qn++] = 0; A.q[A.qn++] = 0;
+    } else if (A.pending_pause >= 0) {
+        if (A.qn > 4092) A.qn = 4092;
+        A.q[A.qn++] = 6; A.q[A.qn++] = A.pending_pause; A.q[A.qn++] = 0; A.q[A.qn++] = 0;
+        A.pending_pause = -1;
+    }
     int n = A.qn / 4;
     if (!n) { pthread_mutex_unlock(&A.q_lock); *ret = L(NULL); return true; }
     jobj *arr = tl_jni_new_prim_array('I', (uint32_t)(1 + A.qn));
@@ -436,11 +474,13 @@ NAT(N_insets)
 static void *gl_main(void *arg);
 NAT(N_startGL)
 {
+    void tl_thread_altstack(void); tl_thread_altstack();
     (void)self; (void)ret;
     if (A.gl_started) return true;
     A.gl_version = a[2].i; A.gl_view = a[0].l;
     A.gl_started = true;
-    A.gl_renderer = a[1].l;                 /* the render thread picks it up */
+    /* the render thread picks it up; released after the version and view, so it never sees the renderer without them */
+    __atomic_store_n(&A.gl_renderer, a[1].l, __ATOMIC_RELEASE);
     return true;
 }
 
@@ -463,6 +503,7 @@ static const struct { const char *name, *sig; dvm_native_fn fn; } k_native[] = {
     { "vibrate", "(J)V", N_vibrate },
     { "openUrl", "(Ljava/lang/String;)V", N_openUrl },
     { "exit", "()V", N_exit },
+    { "lifecycle", "(I)V", N_lifecycle },
     { "uptimeNanos", "()J", N_uptimeNanos },
     { "readApkFile", "(ILjava/lang/String;)[B", N_readApkFile },
     { "splitPaths", "()[Ljava/lang/String;", N_splitPaths },
@@ -839,6 +880,20 @@ static void app_frame_draw(overlay *o, overlay *up, int vw, int vh)
     draw(0x0005, 0, 4);
     viewport(0, 0, vw, vh);
 }
+/* For EGL: whether this runtime's compositor holds the screen, and an app's own EGL window's frame for it (NULL: no longer shown) */
+bool tl_javaapp_compositing(void) { pthread_mutex_lock(&E2.lk); bool r = E2.ready; pthread_mutex_unlock(&E2.lk); return r; }
+void tl_javaapp_app_pixels(const void *px, int w, int h)
+{
+    pthread_mutex_lock(&E2.lk);
+    if (!px) { E2.on = false; E2.seq++; pthread_mutex_unlock(&E2.lk); return; }
+    size_t n = (size_t)w * h * 4;
+    if (E2.pw != w || E2.ph != h || !E2.px) E2.px = realloc(E2.px, n);
+    if (E2.px) memcpy(E2.px, px, n);
+    E2.pw = w; E2.ph = h; E2.tex = 0;
+    E2.x = 0; E2.y = 0; E2.w = A.cfg.width; E2.h = A.cfg.height;
+    E2.on = true; E2.seq++;
+    pthread_mutex_unlock(&E2.lk);
+}
 static uint64_t app_frame_seq(void) { pthread_mutex_lock(&E2.lk); uint64_t q = E2.seq; pthread_mutex_unlock(&E2.lk); return q; }
 static bool app_frame_on(void) { pthread_mutex_lock(&E2.lk); bool q = E2.on; pthread_mutex_unlock(&E2.lk); return q; }
 
@@ -895,7 +950,7 @@ static void *gl_main(void *arg)
         if (atomic_load(&A.paused)) { usleep(20000); next = now_ns(); continue; }
         bool drew = false;
         /* the app's renderer, once its GLSurfaceView is on screen */
-        if (A.gl_renderer && !app) {
+        if (__atomic_load_n(&A.gl_renderer, __ATOMIC_ACQUIRE) && !app) {
             /* GLSurfaceView's default is OpenGL ES 1 (fixed function, through ANGLE's ES1 front end); 2 and 3 as asked */
             int es = A.gl_version >= 3 && es3 ? 3 : A.gl_version <= 1 ? 1 : 2;
             const EGLint attr[] = { 0x3098, es, EGL_NONE };
@@ -958,6 +1013,21 @@ static void *gl_main(void *arg)
         if (late > 100000000ll) next = now_ns();
         else if (late < 0) { struct timespec ts = { 0, (long)(-late) }; nanosleep(&ts, NULL); }
     }
+    /* Release contexts on their owning thread before the host closes the layer. */
+    makeCurrent(dpy, NULL, NULL, NULL);
+    unsigned (*destroyContext)(EGLDisplay, EGLContext) = tl_egl_resolve("eglDestroyContext");
+    unsigned (*destroySurface)(EGLDisplay, EGLSurface) = tl_egl_resolve("eglDestroySurface");
+    if (app && destroyContext) destroyContext(dpy, app);
+    if (destroyContext) destroyContext(dpy, ui);
+    if (destroySurface) destroySurface(dpy, surf);
+    pthread_mutex_lock(&E2.lk); E2.ready = false; pthread_cond_broadcast(&E2.cv); pthread_mutex_unlock(&E2.lk);
+    return NULL;
+}
+
+static void *render_main(void *arg)
+{
+    gl_main(arg);
+    if (!atomic_load(&A.ended)) { atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true); }
     return NULL;
 }
 
@@ -997,10 +1067,12 @@ bool tl_javaapp_manifest(const char *apk, char *pkg, size_t pn, char *activity, 
     if (application && apn) application[0] = 0;
     if (e && tl_zip_data(&z, e, 8u << 20, &d, &len, &owned, err, sizeof(err)) && len > 8 && rd16le(d) == 0x0003) {
         const uint8_t *pool = NULL; size_t psz = 0;
+        const uint8_t *resmap = NULL; uint32_t nres = 0;              /* string index -> attribute resource id */
         for (size_t off = rd16le(d + 2); off + 8 <= len; ) {
             uint16_t type = rd16le(d + off); uint32_t size = rd32le(d + off + 4);
             if (size < 8 || off + size > len) break;
             if (type == 0x0001) { pool = d + off; psz = size; }
+            else if (type == 0x0180) { resmap = d + off + rd16le(d + off + 2); nres = (size - rd16le(d + off + 2)) / 4; }
             else if (type == 0x0102 && pool && size >= 36) {
                 const uint8_t *el = d + off;
                 char name[64] = "";
@@ -1009,7 +1081,13 @@ bool tl_javaapp_manifest(const char *apk, char *pkg, size_t pn, char *activity, 
                 for (unsigned i = 0; i < acount; i++) {
                     const uint8_t *at = el + 16 + astart + (size_t)i * asize;
                     char an2[64] = "", av[260] = "";
-                    if (!pool_str(pool, psz, rd32le(at + 4), an2, sizeof(an2))) continue;
+                    uint32_t ni = rd32le(at + 4);
+                    if (!pool_str(pool, psz, ni, an2, sizeof(an2))) continue;
+                    /* a shrunk manifest keeps only the attribute's resource id (PayPal's): name and targetActivity by id */
+                    if (!an2[0] && resmap && ni < nres) {
+                        uint32_t id = rd32le(resmap + 4 * ni);
+                        if (id == 0x01010003) snprintf(an2, sizeof(an2), "name"); else if (id == 0x01010202) snprintf(an2, sizeof(an2), "targetActivity");
+                    }
                     if (rd32le(at + 8) != 0xFFFFFFFFu) pool_str(pool, psz, rd32le(at + 8), av, sizeof(av));
                     if (!strcmp(name, "manifest") && !strcmp(an2, "package")) snprintf(pkg, pn, "%s", av);
                     if (!strcmp(name, "application") && !strcmp(an2, "name")) snprintf(app, sizeof(app), "%s", av);
@@ -1057,16 +1135,20 @@ static void log_pending_stack(void)
 
 static void *app_main(void *arg)
 {
+    void tl_thread_altstack(void); tl_thread_altstack();
     (void)arg;
     pthread_setname_np("main");
+    A.app_owner = pthread_self();
     jvalue a[2] = { L(dvm_new_string_utf8(A.activity)), L(A.application[0] ? dvm_new_string_utf8(A.application) : NULL) };
     jvalue r;
     if (!tl_dvm_call_static("husk/AppRunner", "run", "(Ljava/lang/String;Ljava/lang/String;)V", a, &r)) {
         char buf[800];
         tl_log_line("javaapp: the app's main thread ended with %s", tl_dvm_describe_pending(buf, sizeof(buf)) ? buf : "?");
         log_pending_stack();
-        atomic_store(&A.ended, true);
+        atomic_store(&A.state, TL_JAVA_FAILED);
     }
+    if (!atomic_load(&A.destroy_ack)) atomic_store(&A.state, TL_JAVA_FAILED);
+    if (atomic_load(&A.state) == TL_JAVA_FAILED) atomic_store(&A.ended, true);
     return NULL;
 }
 
@@ -1080,12 +1162,16 @@ static void stub_lib(const char *name, uint64_t size, void *dir)
     if (stat(p, &st) != 0) { int fd = open(p, O_CREAT | O_WRONLY, 0755); if (fd >= 0) close(fd); }
 }
 
-bool tl_javaapp_start(const tl_javaapp_config *cfg)
+static bool start_app(const tl_javaapp_config *cfg)
 {
     /* stores into a library's executable view (data sharing a page with its code, as Unity's does) go through the writable one */
     { void tl_codewrite_enable(void); tl_codewrite_enable(); }
     A.cfg = *cfg;
     snprintf(A.apk, sizeof(A.apk), "%s", cfg->apk_path);
+    /* an app whose manifest needs OpenGL ES 3.1 or 3.2 is told the driver has it (ANGLE over Metal stops at 3.0; the shim writes
+       its 310/320 es shaders down), as it would otherwise refuse to start */
+    { int tl_manifest_gles(const char *); void tl_egl_es3_claim(int); int gv = tl_manifest_gles(cfg->apk_path);
+      if (gv >= 0x30001) { tl_egl_es3_claim(gv & 0xffff); tl_log_line("egl: the manifest asks for OpenGL ES 3.%d: the driver is described so", gv & 0xffff); } }
     snprintf(A.data, sizeof(A.data), "%s", cfg->data_dir);
     snprintf(A.ext, sizeof(A.ext), "%s/sdcard", cfg->data_dir);
     snprintf(A.fwres, sizeof(A.fwres), "%s", cfg->framework_res ? cfg->framework_res : "");
@@ -1106,16 +1192,36 @@ bool tl_javaapp_start(const tl_javaapp_config *cfg)
     if (!tl_ld_add_apk(cfg->apk_path)) return false;
     if (!tl_dvm_add_apk(cfg->apk_path)) return false;
     { char lib[1100]; snprintf(lib, sizeof(lib), "%s/lib", A.data); mkdir(lib, 0755); tl_ld_apk_libs(stub_lib, lib); }
-    { pthread_attr_t rt; pthread_attr_init(&rt); pthread_attr_setstacksize(&rt, 64u << 20); pthread_create(&A.gl_thread, &rt, gl_main, NULL); }
-    pthread_attr_t at; pthread_attr_init(&at); pthread_attr_setstacksize(&at, 256u << 20);
-    pthread_t t;
-    return pthread_create(&t, &at, app_main, NULL) == 0;
+    pthread_attr_t at; pthread_attr_init(&at); pthread_attr_setstacksize(&at, 64u << 20);
+    int rc = pthread_create(&A.gl_thread, &at, render_main, NULL);
+    A.gl_created = rc == 0;
+    if (!rc) {
+        pthread_attr_setstacksize(&at, 256u << 20);
+        rc = pthread_create(&A.app_thread, &at, app_main, NULL);
+        A.app_created = rc == 0;
+    }
+    pthread_attr_destroy(&at);
+    if (rc) {
+        atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true);
+        if (A.gl_created) { pthread_join(A.gl_thread, NULL); A.gl_created = false; }
+    }
+    return rc == 0;
+}
+
+bool tl_javaapp_start(const tl_javaapp_config *cfg)
+{
+    int expected = TL_JAVA_UNLOADED;
+    if (!cfg || !cfg->apk_path || !cfg->data_dir || cfg->width <= 0 || cfg->height <= 0 ||
+        !atomic_compare_exchange_strong(&A.state, &expected, TL_JAVA_STARTING)) return false;
+    if (start_app(cfg)) return true;
+    atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true); return false;
 }
 
 void tl_javaapp_touch(int phase, int id, float x, float y)
 {
     union { float f; int32_t i; } fx, fy; fx.f = x; fy.f = y;
     pthread_mutex_lock(&A.q_lock);
+    if (A.stop_requested || atomic_load(&A.ended)) { pthread_mutex_unlock(&A.q_lock); return; }
     if (A.qn + 4 <= 4096) { A.q[A.qn++] = phase; A.q[A.qn++] = id; A.q[A.qn++] = fx.i; A.q[A.qn++] = fy.i; }
     pthread_mutex_unlock(&A.q_lock);
 }
@@ -1123,7 +1229,34 @@ void tl_javaapp_key(int code, bool down) { tl_javaapp_touch(4, code, down ? 1e-4
 void tl_javaapp_back(void) { tl_javaapp_touch(5, 0, 0, 0); }
 void tl_javaapp_set_paused(bool p)
 {
-    if (atomic_exchange(&A.paused, p) != p) tl_javaapp_touch(6, p ? 1 : 0, 0, 0);     /* the activity pauses and resumes with the host */
+    pthread_mutex_lock(&A.q_lock);
+    if (!A.stop_requested && !atomic_load(&A.ended)) {
+        /* onResume may synchronously wait for a GL job. Rendering must resume
+           before the callback, but state acknowledgement waits for its return. */
+        if (!p) atomic_store(&A.paused, false);
+        A.pending_pause = p ? 1 : 0;
+    }
+    pthread_mutex_unlock(&A.q_lock);
+}
+tl_javaapp_state tl_javaapp_get_state(void) { return atomic_load(&A.state); }
+bool tl_javaapp_stop(void)
+{
+    if (!A.app_created) return false;
+    pthread_mutex_lock(&A.q_lock);
+    A.stop_requested = true;
+    if (atomic_load(&A.state) != TL_JAVA_FAILED) atomic_store(&A.state, TL_JAVA_STOPPING);
+    atomic_store(&A.paused, false); // teardown callbacks may wait for a GL job
+    pthread_mutex_unlock(&A.q_lock);
+    pthread_join(A.app_thread, NULL); A.app_created = false;
+    atomic_store(&A.ended, true);
+    if (A.gl_created) { pthread_join(A.gl_thread, NULL); A.gl_created = false; }
+    void tl_dvm_audio_shutdown(void); tl_dvm_audio_shutdown();
+    bool tl_guest_threads_quiescent(void);
+    bool quiescent = tl_guest_threads_quiescent();
+    bool tl_dvm_sqlite_shutdown(void);
+    bool ok = quiescent && atomic_load(&A.destroy_ack) && atomic_load(&A.state) != TL_JAVA_FAILED && tl_dvm_sqlite_shutdown();
+    atomic_store(&A.state, ok ? TL_JAVA_DESTROYED : TL_JAVA_FAILED);
+    return ok;
 }
 unsigned long tl_javaapp_frames(void) { return atomic_load(&A.frames); }
 bool tl_javaapp_ended(void) { return atomic_load(&A.ended); }

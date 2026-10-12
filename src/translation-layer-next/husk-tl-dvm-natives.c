@@ -182,6 +182,9 @@ NAT(String_intern)
     pthread_mutex_unlock(&g_intern_lock);
     return true;
 }
+/* The canonical copy of a string (String.intern): every string literal goes through here, so equal literals are one object across
+ * classes and dex files, as Java promises -- code compares them with == (p4a's AssetExtract: method == "private"). */
+jobj *dvm_intern(jobj *s) { jvalue r; if (!s || !String_intern(s, NULL, &r) || !r.l) return s; return r.l; }
 NAT(String_toCharArray)
 {
     (void)a;
@@ -613,11 +616,93 @@ NAT(Thread_status)
     *ret = I(alive ? 1 : a[0].z ? 5 : 0);
     return true;
 }
-NAT(Thread_holdsLock) { UNUSED; *ret = Z(true); return true; }
+/* UNIXProcess.forkAndExec(prog, argBlock, argc, envBlock, envc, dir, fds, redirectErrorStream): an app starting a program as a
+ * process of its own. An iOS app can not start processes: the few system commands SDKs run for device facts (getprop, id, uname,
+ * echo, true) are answered here, their output in a pipe as a process's would be; any other program is named in the log (the
+ * diagnosis reads it) and the app hears what Android says of a program it can not run. */
+static int g_fake_pid = 30000;
+static int g_fake_exit[64];
+static bool fake_command(char **argv, int argc, char *out, size_t n, int *code)
+{
+    *code = 0; out[0] = 0;
+    if (argc <= 0) return false;
+    const char *prog = strrchr(argv[0], '/') ? strrchr(argv[0], '/') + 1 : argv[0];
+    if ((!strcmp(prog, "sh") || !strcmp(prog, "bash")) && argc >= 3 && !strcmp(argv[1], "-c")) {
+        /* sh -c "<one simple command>": split it and answer that */
+        static char line[512]; snprintf(line, sizeof(line), "%s", argv[2]);
+        char *av[16]; int ac = 0;
+        for (char *t = strtok(line, " \t"); t && ac < 15; t = strtok(NULL, " \t")) av[ac++] = t;
+        return ac > 0 && strpbrk(argv[2], "|;&><`$") == NULL && fake_command(av, ac, out, n, code);
+    }
+    if (!strcmp(prog, "getprop")) {
+        size_t tl_property_list(char *buf, size_t n); int tl_property_get(const char *name, char *value);
+        if (argc >= 2) { char v[92]; tl_property_get(argv[1], v); if (!v[0] && argc >= 3) snprintf(v, sizeof(v), "%s", argv[2]); snprintf(out, n, "%s\n", v); }
+        else tl_property_list(out, n);
+        return true;
+    }
+    if (!strcmp(prog, "id")) { snprintf(out, n, "uid=10001(u0_a1) gid=10001(u0_a1) groups=10001(u0_a1),3003(inet),9997(everybody),20001(u0_a1_cache),50001(all_a1)\n"); return true; }
+    if (!strcmp(prog, "uname")) {
+        bool all = argc >= 2 && strchr(argv[1], 'a'), rel = argc >= 2 && strchr(argv[1], 'r'), mach = argc >= 2 && strchr(argv[1], 'm');
+        if (all) snprintf(out, n, "Linux localhost 6.1.75-android14-11 #1 SMP PREEMPT aarch64 Toybox\n");
+        else if (rel) snprintf(out, n, "6.1.75-android14-11\n");
+        else if (mach) snprintf(out, n, "aarch64\n");
+        else snprintf(out, n, "Linux\n");
+        return true;
+    }
+    if (!strcmp(prog, "echo")) { size_t o = 0; for (int i = 1; i < argc && o < n; i++) o += (size_t)snprintf(out + o, n - o, "%s%s", i > 1 ? " " : "", argv[i]); if (o < n - 1) { out[o] = '\n'; out[o + 1] = 0; } return true; }
+    if (!strcmp(prog, "true")) return true;
+    if (!strcmp(prog, "false")) { *code = 1; return true; }
+    if (!strcmp(prog, "which") || !strcmp(prog, "su")) { *code = 1; return true; }        /* nothing found; not rooted */
+    return false;
+}
+NAT(UNIXProcess_forkAndExec)
+{
+    (void)self;
+    char prog[600] = "?", argbuf[2048] = "";
+    jobj *pb = a[0].l, *ab = a[1].l, *fdsa = a[6].l;
+    int argc = a[2].i;
+    if (pb && pb->kind == TL_K_PRIM_ARRAY) snprintf(prog, sizeof(prog), "%.*s", (int)(pb->arr.len < 599 ? pb->arr.len : 599), (const char *)pb->arr.data);
+    size_t alen = 0;
+    if (ab && ab->kind == TL_K_PRIM_ARRAY) { alen = ab->arr.len < sizeof(argbuf) - 1 ? ab->arr.len : sizeof(argbuf) - 1; memcpy(argbuf, ab->arr.data, alen); argbuf[alen] = 0; }
+    /* argv: the program, then the NUL-separated arguments */
+    char *argv[32]; int ac = 0; argv[ac++] = prog;
+    for (size_t i = 0; i < alen && ac < 31 && ac <= argc; ) { argv[ac++] = argbuf + i; i += strlen(argbuf + i) + 1; }
+    static char out[65536]; int code;
+    if (fake_command(argv, ac, out, sizeof(out), &code) && fdsa && fdsa->kind == TL_K_PRIM_ARRAY && fdsa->arr.len >= 3) {
+        int32_t *fds = (int32_t *)fdsa->arr.data;
+        int in[2], o[2], e[2];
+        if (pipe(in) || pipe(o) || pipe(e)) return dvm_throw("java/io/IOException", "error=24, Too many open files");
+        size_t len = strlen(out);
+        if (len) (void)!write(o[1], out, len < 16384 ? len : 16384);
+        close(o[1]); close(e[1]); close(in[0]);
+        if (fds[0] == -1) fds[0] = in[1]; else close(in[1]);
+        if (fds[1] == -1) fds[1] = o[0]; else close(o[0]);
+        if (fds[2] == -1) fds[2] = e[0]; else close(e[0]);
+        int pid = __atomic_add_fetch(&g_fake_pid, 1, __ATOMIC_RELAXED);
+        g_fake_exit[pid & 63] = code;
+        *ret = I(pid);
+        return true;
+    }
+    for (char *q = argbuf; q < argbuf + alen; q++) if (!*q) *q = ' ';
+    tl_log_line("dvm: the app started a process: %s %s -- an iOS app can not start processes", prog, argbuf);
+    return dvm_throw("java/io/IOException", "error=38, Function not implemented");
+}
+NAT(UNIXProcess_waitForProcessExit) { (void)self; *ret = I(a[0].i > 30000 ? g_fake_exit[a[0].i & 63] : -1); return true; }
+NAT(UNIXProcess_destroyProcess) { (void)self; (void)a; (void)ret; return true; }
 
+NAT(Thread_holdsLock)
+{
+    UNUSED;
+    bool dvm_holds_lock(jobj *o);
+    if (!a[0].l) return dvm_throw("java/lang/NullPointerException", "holdsLock(null)");
+    *ret = Z(dvm_holds_lock(a[0].l)); return true;
+}
+
+#include "husk-tl-threads.h"
 typedef struct { jobj *thread; } start_arg;
 static void *thread_main(void *p)
 {
+    void tl_thread_altstack(void); tl_thread_altstack();
     start_arg *s = p;
     t_thread = s->thread;
     free(s);
@@ -674,7 +759,12 @@ NAT(Thread_nativeCreate)
     pthread_attr_setstacksize(&at, 32u << 20);
     pthread_attr_setdetachstate(&at, PTHREAD_CREATE_DETACHED);
     pthread_t th;
-    if (pthread_create(&th, &at, thread_main, s) != 0) { free(s); return dvm_throw("java/lang/OutOfMemoryError", "pthread_create"); }
+    int error = tl_guest_thread_create(&th, &at, thread_main, s);
+    pthread_attr_destroy(&at);
+    if (error) {
+        if (pf) dvm_slots(s->thread)[pf->slot].j = 0;
+        free(s); return dvm_throw("java/lang/OutOfMemoryError", "pthread_create");
+    }
     return true;
 }
 
@@ -892,12 +982,21 @@ NAT(Class_getInterfacesInternal)
     *ret = L(n ? arr : NULL);
     return true;
 }
+/* ART's refusal to make an object of an abstract class or an interface (reflection and Unsafe alike): a library that tries, as JSON
+ * mappers do on their way to the right subclass, gets InstantiationException and goes on, rather than an object whose abstract
+ * methods throw AbstractMethodError later */
+static bool abstract_refused(dvm_class *c, const char *name)
+{
+    if (c && (c->flags & (0x400 | 0x200)) && !c->prim && !c->elem) { dvm_throw("java/lang/InstantiationException", "Can't instantiate %s %s", c->flags & 0x200 ? "interface" : "abstract class", name); return true; }
+    return false;
+}
 NAT(Class_newInstance)
 {
     (void)a;
     tl_jclass *jc = self->klass.jc;
     dvm_class *c = dvm_class_of(jc);
     if (!c) return dvm_throw("java/lang/InstantiationException", "%s", jc->name);
+    if (abstract_refused(c, jc->name)) return false;
     if (!dvm_ensure_init(c)) return false;
     dvm_method *init = dvm_find_method(c, "<init>", "()V", false);
     if (!init || init->cls != c) return dvm_throw("java/lang/InstantiationException", "%s has no zero-argument constructor", jc->name);
@@ -1002,9 +1101,8 @@ static jvalue *field_place(dvm_field *f, jobj *obj)
         dvm_throw("java/lang/IllegalArgumentException", "Expected receiver of type %s, but got %s", f->cls->name, dvm_object_class(obj)->name);
         return NULL;
     }
-    jvalue *sl = dvm_slots(obj);
-    if (f->slot >= obj->nfields) { jvalue *dvm_grow_slots(jobj *, uint32_t); sl = dvm_grow_slots(obj, f->slot + 1); }
-    return &sl[f->slot];
+    jvalue *dvm_slots_for(jobj *, uint32_t);
+    return &dvm_slots_for(obj, f->slot)[f->slot];
 }
 NAT(Field_getInt) { dvm_field *f = field_of(self); jvalue *p = field_place(f, a[0].l); if (!p) return tl_jni_pending() ? false : npe("object"); *ret = I(p->i); return true; }
 NAT(Field_getLong) { dvm_field *f = field_of(self); jvalue *p = field_place(f, a[0].l); if (!p) return tl_jni_pending() ? false : npe("object"); *ret = J(p->j); return true; }
@@ -1389,6 +1487,7 @@ NAT(Ctor_newInstance0)
     dvm_method *m = method_of(self);
     if (!m) return npe("constructor");
     jvalue args[64];
+    if (abstract_refused(m->cls, m->cls->name)) return false;
     if (!unbox_args(m, a[0].l, args)) return false;
     if (!dvm_ensure_init(m->cls)) return false;
     jobj *o = dvm_new_object(m->cls->jc); dvm_slots(o);
@@ -1398,6 +1497,24 @@ NAT(Ctor_newInstance0)
     return true;
 }
 
+/* Constructor.newInstanceFromSerialization(ctorClass, allocClass): what ObjectInputStream makes a Serializable with -- an object of
+ * allocClass, built by the no-argument constructor of ctorClass (its first non-serializable superclass) */
+NAT(Ctor_newInstanceFromSerialization)
+{
+    (void)self;
+    jobj *cc = a[0].l, *ac = a[1].l;
+    if (!cc || !ac || cc->kind != TL_K_CLASS || ac->kind != TL_K_CLASS) return npe("class");
+    dvm_class *ctorc = dvm_class_of(cc->klass.jc), *allocc = dvm_class_of(ac->klass.jc);
+    if (!ctorc || !allocc) return dvm_throw("java/lang/InstantiationException", "%s", ac->klass.jc->name);
+    dvm_method *m = dvm_find_method(ctorc, "<init>", "()V", false);
+    if (!m) return dvm_throw("java/lang/NoSuchMethodException", "%s.<init>()", cc->klass.jc->name);
+    if (!dvm_ensure_init(allocc)) return false;
+    jobj *o = dvm_new_object(ac->klass.jc); dvm_slots(o);
+    jvalue r;
+    if (!dvm_call(m, o, NULL, &r)) return wrap_target_exception();
+    *ret = L(o);
+    return true;
+}
 
 NAT(Field_getName) { (void)a; dvm_field *f = field_of(self); *ret = L(f ? interned(f->name) : NULL); return true; }
 NAT(Field_getArtField) { (void)a; *ret = J((int64_t)(uintptr_t)field_of(self)); return true; }
@@ -1441,27 +1558,25 @@ static jvalue *unsafe_place(jobj *o, int64_t off, int size)
         /* a static field of the class it stands for */
         if (off >= STATIC_OFFSET) return &o->klass.jc->statics[(off - STATIC_OFFSET - 16) / 8];
         /* else a field of the Class object itself; fields and methods are ART's member tables, kept current */
-        jvalue *slots = dvm_slots(o);
         static dvm_field *fields, *methods;
         dvm_class *cc = dvm_class_of(tl_jni_class("java/lang/Class"));
         if (!fields && cc) { fields = dvm_find_field(cc, "fields", false); methods = dvm_find_field(cc, "methods", false); }
         int slot = (int)((off - 16) / 8);
-        if (slot < 0 || (uint32_t)slot >= o->nfields) { jvalue *dvm_grow_slots(jobj *, uint32_t); tl_log_line("dvm: Unsafe offset %lld past a Class object's %u fields", (long long)off, o->nfields); slots = dvm_grow_slots(o, (uint32_t)(slot < 0 ? 0 : slot) + 1); }
+        jvalue *dvm_slots_for(jobj *, uint32_t);
+        jvalue *slots = dvm_slots_for(o, (uint32_t)(slot < 0 ? 0 : slot));
         dvm_class *c = dvm_class_of(o->klass.jc);
         if (c && c->art_tables && fields && slot == (int)fields->slot) slots[slot].j = (int64_t)(uintptr_t)((uint8_t *)c->inf - DVM_MEMBERS_HDR);
         if (c && c->art_tables && methods && slot == (int)methods->slot) slots[slot].j = (int64_t)(uintptr_t)((uint8_t *)c->dm - DVM_MEMBERS_HDR);
         return &slots[slot];
     }
     (void)size;
-    jvalue *sl = dvm_slots(o);
     int64_t slot = (off - 16) / 8;
-    if (slot < 0 || (uint64_t)slot >= o->nfields) {
-        jvalue *dvm_grow_slots(jobj *, uint32_t);
+    if (slot < 0 || slot > 4096) {
         tl_log_line("dvm: Unsafe offset %lld past a %s's %u fields", (long long)off, o->cls ? o->cls->name : "?", o->nfields);
-        if (slot < 0 || slot > 4096) { static jvalue junk; junk.j = 0; return &junk; }
-        sl = dvm_grow_slots(o, (uint32_t)slot + 1);
+        static jvalue junk; junk.j = 0; return &junk;
     }
-    return &sl[slot];
+    jvalue *dvm_slots_for(jobj *, uint32_t);
+    return &dvm_slots_for(o, (uint32_t)slot)[slot];
 }
 NAT(U_objectFieldOffset)
 {
@@ -1548,6 +1663,7 @@ NAT(U_allocateInstance)
     (void)self;
     jobj *cls = a[0].l;
     if (!cls) return npe("class");
+    if (abstract_refused(dvm_class_of(cls->klass.jc), cls->klass.jc->name)) return false;
     jobj *o = dvm_new_object(cls->klass.jc); dvm_slots(o);
     *ret = L(o);
     return true;
@@ -1812,6 +1928,9 @@ static const entry k_natives[] = {
     { "java/lang/Thread", "isInterrupted", "()Z", Thread_false },
     { "java/lang/Thread", "interrupt0", "()V", Thread_noop },
     { "java/lang/Thread", "holdsLock", "(Ljava/lang/Object;)Z", Thread_holdsLock },
+    { "java/lang/UNIXProcess", "forkAndExec", "([B[BI[BI[B[IZ)I", UNIXProcess_forkAndExec },
+    { "java/lang/UNIXProcess", "waitForProcessExit", "(I)I", UNIXProcess_waitForProcessExit },
+    { "java/lang/UNIXProcess", "destroyProcess", "(I)V", UNIXProcess_destroyProcess },
     { "java/lang/Thread", "nativeCreate", "(Ljava/lang/Thread;JZ)V", Thread_nativeCreate },
     { "java/lang/Thread", "nativeGetStatus", "(Z)I", Thread_status },
     { "java/lang/Thread", "nicenessForPriority", "(I)I", Thread_nice },
@@ -1899,6 +2018,7 @@ static const entry k_natives[] = {
     { "java/lang/reflect/Method", "invoke", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", Method_invoke },
     { "java/lang/reflect/Method", "getDefaultValue", "()Ljava/lang/Object;", An_Method_getDefaultValue },
     { "java/lang/reflect/Constructor", "newInstance0", "([Ljava/lang/Object;)Ljava/lang/Object;", Ctor_newInstance0 },
+    { "java/lang/reflect/Constructor", "newInstanceFromSerialization", "(Ljava/lang/Class;Ljava/lang/Class;)Ljava/lang/Object;", Ctor_newInstanceFromSerialization },
     { "java/lang/reflect/Field", "getDeclaredAnnotations", "()[Ljava/lang/annotation/Annotation;", An_Field_getDeclaredAnnotations },
     { "java/lang/reflect/Field", "getAnnotationNative", "(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;", An_Field_getAnnotation },
     { "java/lang/reflect/Field", "isAnnotationPresentNative", "(Ljava/lang/Class;)Z", An_Field_isAnnotationPresent },

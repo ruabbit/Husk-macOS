@@ -1,14 +1,14 @@
 # 原生 macOS 开发版
 
-当前原生运行入口包含 **Orbit Garden / Dusk、Minecraft、Unity 和 NativeActivity arm64 APK 集合**。它们使用 Android ELF、bionic/JNI 适配、ANGLE/Metal 和 AudioQueue，在独立 NativeRunner 中执行。资料库统一显示“开始游戏”，测试覆盖记录在开发文档中。旧 Play/本地导入按当前运行组件重新判定，无需重下，保留原有设置和存档。各游戏的实际验证范围及候选交付状态见 [开发记录](development/macos/progress.md)。
+当前原生运行入口包含 **Orbit Garden / Dusk、Minecraft、Unity、NativeActivity 和 Java 运行链路**。它们使用 Android ELF、bionic/JNI 适配、ANGLE/Metal 和 AudioQueue，在独立 NativeRunner 中执行。资料库统一显示“开始游戏”，测试覆盖记录在开发文档中。旧 Play/本地导入按当前运行组件重新判定，无需重下，保留原有设置和存档。各游戏的实际验证范围及候选交付状态见 [开发记录](development/macos/progress.md)。
 
-上游 main 的源码已合并到 `8a9dc1b`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
+上游 main 的源码已合并到 `f0bd526`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
 
-本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md)、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 和 [上游接入现况](development/macos/upstream-parity.md)。Java / Unity 6、Unreal、Cocos、SDL、Godot、Rockstar 等仍有原生启动链路缺口。
+本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md)、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 和 [上游接入现况](development/macos/upstream-parity.md)。Java / Unity 6 及上游交给 Java 的 Cocos、SDL、Flutter、Python 等已接通共同运行链路；真实应用兼容、Java 手柄和 WebKit 关闭仍待验证或实现。Unreal、Godot、Rockstar 等独立 native profiles 尚未接入。
 
 ## 构建与运行
 
-需要 Apple Silicon Mac、完整 Xcode、CMake 3.28+、Ninja、Python 3，以及可交叉编译 Android arm64 ELF 的 LLVM clang / ld.lld。当前验证环境为 macOS 27、Xcode 27、Apple clang 21、LLVM clang 23.1.2 和 NDK 26.3 的 lld 17。
+需要 Apple Silicon Mac、完整 Xcode、CMake 3.28+、Ninja、Python 3.11+，以及可交叉编译 Android arm64 ELF 的 LLVM clang / ld.lld。Java 资源准备另需 JDK 21、Android SDK build-tools 36.0.0、一个 Android SDK platform（回归 fixture 使用）、qemu-img 和 e2fsprogs/debugfs。当前验证环境为 macOS 27、Xcode 27、Apple clang 21、LLVM clang 23.1.2 和 NDK 26.3 的 lld 17。
 
 | 组件 | 最低系统声明 | 验收状态 |
 | --- | --- | --- |
@@ -22,6 +22,8 @@
 ```
 
 当前候选统一构建到 `build/macos`，后续构建直接覆盖这个目录。交付入口为 `build/macos/Product/HuskMac.app`。Git 提交负责版本回退，`build/logs` 保存构建日志和验收结果；按日期、阶段生成的旧编译目录及源码导出副本已清理。`build/macos-deps` 和 `build/macos-vm-deps` 各保留一套固定依赖缓存。
+
+首次构建还会下载约 2 GB 的固定 Lineage 来源镜像，只读提取约 96 MB 的 Java 资源，临时 raw/system/APEX 文件自动清理。已有原始来源缓存或 `HUSK_JAVA_IMAGE` 可直接复用；不能指定日常 VM 磁盘。Java 缓存为 `build/macos/JavaRuntime`，只保留一套，资源或源码修改会重新校验/构建 DEX。`HUSK_JDK`、`HUSK_D8`、`ANDROID_SDK_ROOT` 可指定工具；D8 的 SHA-256 必须匹配来源锁。构建会拒绝替换正在运行的候选，请先正常退出空闲 Husk。
 
 首次构建下载并编译固定提交的 ANGLE 和 MoltenVK，后续校验缓存的提交记录及二进制 SHA-256。构建依赖在 `third_party/build/macos`；缓存产物在 `build/macos-deps`；不会改动 iOS 的构建目录。LLVM/NDK 只用于构建，产物不会链接 Homebrew 库。可通过 `ELF_CC`、`ELF_LD` 指定交叉工具，通过 `HUSK_BUILD_JOBS` 调整并行数。
 
@@ -42,13 +44,13 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 | `library.json` | 版本化索引、游戏设置及上次游玩时间 |
 | `Games/<id>` | APK 副本、图标、扫描报告和导入元数据 |
 | `Saves/<id>/checkpoint.json` | 与游戏文件分开的存档 |
-| `Saves/<id>/data` | Minecraft / Unity / NativeActivity 管理的游戏数据和设置；其 checkpoint 只记录正常关闭回执 |
+| `Saves/<id>/data` | Minecraft / Unity / NativeActivity / Java 管理的游戏数据和设置；其 checkpoint 只记录正常关闭回执 |
 | `Logs/<session UUID>` | Runner 状态事件及独立 stderr |
 | `Staging`、`Trash` | 导入/移除事务暂存；不包含原始用户文件 |
 
 “移除游戏”保留存档；同一包重新导入后恢复使用。“清除存档”是详情页中的独立操作，并有确认。运行中的游戏禁止删除和清除存档。损坏索引或存档保留原文件并报告错误。同包、同签名且版本号更高的更新会原子替换游戏文件，保留应用身份、设置、上次游玩时间和存档。降级、签名不一致、损坏下载以及运行中的应用更新会被拒绝。安装事务日志用于恢复在文件替换和索引提交之间中断的更新。旧版单 APK 导入仍可读取；不能验证旧签名的安装不会被自动覆盖。
 
-普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft、Unity 或 NativeActivity 的 arm64 APK 集合。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft、Unity 和 NativeActivity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
+普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft、Unity 或 NativeActivity 的 arm64 APK 集合，或上游 Java profile 接受的 DEX / arm64 应用。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft、Unity 和 NativeActivity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
 
 ## Unity 运行
 
@@ -63,6 +65,14 @@ build/macos/MacUnitySession build/macos/Product/HuskMac.app \
   "$HOME/Library/Application Support/org.husk.HuskMac" GAME_ID \
   build/macos/TestResults/UnityReal --seconds 20
 ```
+
+## Java / Unity 6 运行
+
+资料库和 Runner 复用上游引擎分发规则：Unity 6、无 FMOD 的 Cocos、无 DXVK 的 SDL、Python、Flutter、libGDX 和普通 Java 等进入独立 Java Runner。旧 Unity 导入会只读复扫，避免新版本继续走旧 JNI driver；列出资料库不重写索引、设置或存档。纯 Java 不要求带有 arm64 原生库；只带其他 CPU 原生库的 APK 仍不支持。
+
+已接入固定画布、鼠标触摸、键盘和 IME 提交桥接，失焦默认继续；暂停等 Activity 回调完成，退出等 AppMain/GL/混合器及 guest workers 回收、preferences 写入和 SQLite 正常关闭，再发 storage-closed。未提交事务、异常销毁、残留线程及未确认的 WebKit 持久化会报告关闭失败，保留现有数据。Java 手柄和前台 IME 尚未完整验收。WebView 容器已接，但 WebKit 持久化关闭协议与独立 Web profile 仍未完成。
+
+默认回归使用真实编译 DEX 的独立 Activity，经正式资料库/SessionController/打包 Runner 验证首帧、实际触摸/键盘回调、失焦、暂停/恢复、最终 preferences 和回收；这不是 Unity 6、Flutter 或其他真实应用的兼容结论。本轮没有再次启动已知失败的 Egg / Hole.io。
 
 ## NativeActivity 运行
 

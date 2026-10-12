@@ -1,6 +1,6 @@
 # Licensing and distribution
 
-## macOS distribution status (2026-10-08)
+## macOS distribution status (updated 2026-10-12)
 
 **The macOS artifacts are local development candidates. P6 distribution clearance is incomplete.** The earlier iOS decision below does not clear a macOS `.app`, `.zip` or `.dmg` for release. This section describes the current CMake targets, packaging scripts, pinned source licenses and actual packaged dependency closure.
 
@@ -36,6 +36,12 @@ The review candidate's `VMRunner.app/Contents/Resources/dependencies.json` recor
 The observed chain is `VMRunner → libqemu-aarch64-softmmu → libssh → libcrypto.3`. It shares one address space. Separating QEMU from NativeRunner does not remove this issue. The checked QEMU top-level license supplies no blanket OpenSSL linking exception; no exception covering this exact combination has been established. Before distributing the VM, disable the unused SSH block backend and rebuild/recheck its closure, or establish an applicable license grant for the exact linked work. Merely omitting `libcrypto` from the bundle would create a broken application.
 
 The graphics package currently copies ANGLE/MoltenVK notices and MoltenVK dependency revisions. The VM builder copies only QEMU, virgl and libepoxy notices. It does **not** yet gather all GLib/PCRE2/libintl/libssh/OpenSSL/slirp/pixman notices and source obligations. Host package versions are partly locked, but the entire transitive dependency source set is not. These are explicit release blockers, not evidence of completed compliance. Keeping both helpers in one `.app` does not remove notice obligations for either.
+
+### Java runtime resources
+
+The macOS candidate now embeds Android userspace components under `Contents/Resources/JavaRuntime`: DEX boot jars, selected ART/libcore/ICU/Conscrypt native libraries and data, tzdata, platform resources and the framework DEX built from this repository. The exact source image, D8 compiler and file hashes are recorded in [java-runtime.lock.json](../dependencies/java-runtime.lock.json) and the packaged `runtime-manifest.json`. It does not embed the source Android disk, kernel, GApps or user APKs.
+
+The build copies the original ART, ICU, Conscrypt and tzdata `NOTICE.html.gz` files and system `NOTICE.xml.gz` into `JavaRuntime/Notices`; it also packages framework/compiler provenance and the source image's build properties. These notices preserve the source material but do not establish complete redistribution compliance. Before P6, map the selected binary and resource subset to its exact corresponding sources and licenses, audit generated framework code and third-party components, and satisfy applicable source/notice requirements. A pinned upstream image and a successful resource hash check prove identity, not release clearance.
 
 ### Before distributing a macOS binary
 

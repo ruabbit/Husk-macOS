@@ -19,11 +19,12 @@
     [_text setString:text?:@""];_selection=[self bounded:selection];
     _marked=marked.location==NSNotFound?marked:[self bounded:marked];
 }
-- (void)notifyText { if(self.textChanged)self.textChanged(_text,_selection,_marked); }
+- (void)notifyText { if(!self.committedText&&self.textChanged)self.textChanged(_text,_selection,_marked); }
 - (BOOL)handleTextKey:(NSEvent *)event {
     if(!self.textInputActive)return NO;
     if(event.modifierFlags & NSEventModifierFlagCommand) {
         NSString *key=event.charactersIgnoringModifiers.lowercaseString;
+        if(self.committedText && ![key isEqual:@"v"])return NO;
         if([key isEqual:@"a"])[self selectAll:nil];
         else if([key isEqual:@"c"])[self copy:nil];
         else if([key isEqual:@"x"])[self cut:nil];
@@ -39,16 +40,21 @@
 - (void)insertText:(id)value replacementRange:(NSRange)range {
     NSString *text=[self plain:value];range=[self replacement:range];
     [_text replaceCharactersInRange:range withString:text];
-    _selection=NSMakeRange(range.location+text.length,0);_marked=NSMakeRange(NSNotFound,0);[self notifyText];
+    _selection=NSMakeRange(range.location+text.length,0);_marked=NSMakeRange(NSNotFound,0);
+    if(self.committedText){self.committedText(text);[_text setString:@""];_selection=NSMakeRange(0,0);}
+    else [self notifyText];
 }
 - (void)insertText:(id)value { [self insertText:value replacementRange:NSMakeRange(NSNotFound,0)]; }
 - (void)setMarkedText:(id)value selectedRange:(NSRange)selection replacementRange:(NSRange)range {
     NSString *text=[self plain:value];range=[self replacement:range];
     [_text replaceCharactersInRange:range withString:text];_marked=NSMakeRange(range.location,text.length);
     NSUInteger start=MIN(selection.location,text.length);
-    _selection=NSMakeRange(range.location+start,MIN(selection.length,text.length-start));[self notifyText];
+    _selection=NSMakeRange(range.location+start,MIN(selection.length,text.length-start));if(!self.committedText)[self notifyText];
 }
-- (void)unmarkText { _marked=NSMakeRange(NSNotFound,0);[self notifyText]; }
+- (void)unmarkText {
+    if(self.committedText){if(self.hasMarkedText)self.committedText([_text substringWithRange:_marked]);[_text setString:@""];_selection=NSMakeRange(0,0);}
+    _marked=NSMakeRange(NSNotFound,0);if(!self.committedText)[self notifyText];
+}
 - (BOOL)hasMarkedText { return _marked.location!=NSNotFound&&_marked.length>0; }
 - (NSRange)markedRange { return _marked; }
 - (NSRange)selectedRange { return _selection; }
@@ -68,21 +74,37 @@
         ((void (*)(id,SEL,id))[self methodForSelector:selector])(self,selector,nil);
 }
 - (void)deleteBackward:(id)sender {
+    if(self.committedText&&!self.hasMarkedText){if(self.textCommand)self.textCommand(51);return;}
+    if(self.committedText){[self deleteMarkedBackward:YES];return;}
     (void)sender;NSRange r=[self replacement:NSMakeRange(NSNotFound,0)];
     if(!r.length&&r.location)r=[_text rangeOfComposedCharacterSequenceAtIndex:r.location-1];
     [self insertText:@"" replacementRange:r];
 }
 - (void)deleteForward:(id)sender {
+    if(self.committedText&&!self.hasMarkedText){if(self.textCommand)self.textCommand(117);return;}
+    if(self.committedText){[self deleteMarkedBackward:NO];return;}
     (void)sender;NSRange r=[self replacement:NSMakeRange(NSNotFound,0)];
     if(!r.length&&r.location<_text.length)r=[_text rangeOfComposedCharacterSequenceAtIndex:r.location];
     [self insertText:@"" replacementRange:r];
 }
+- (void)deleteMarkedBackward:(BOOL)backward {
+    NSRange r=_selection;
+    if(!r.length) {
+        if(backward&&r.location>_marked.location)r=[_text rangeOfComposedCharacterSequenceAtIndex:r.location-1];
+        else if(!backward&&r.location<NSMaxRange(_marked))r=[_text rangeOfComposedCharacterSequenceAtIndex:r.location];
+    }
+    r=NSIntersectionRange(r,_marked);
+    if(!r.length)return;
+    [_text deleteCharactersInRange:r];_selection=NSMakeRange(r.location,0);_marked.length-=r.length;
+}
 - (void)moveLeft:(id)sender {
+    if(self.committedText&&!self.hasMarkedText){if(self.textCommand)self.textCommand(123);return;}
     (void)sender;NSUInteger p=_selection.location;
     if(!_selection.length&&p)p=[_text rangeOfComposedCharacterSequenceAtIndex:p-1].location;
     _selection=NSMakeRange(p,0);[self notifyText];
 }
 - (void)moveRight:(id)sender {
+    if(self.committedText&&!self.hasMarkedText){if(self.textCommand)self.textCommand(124);return;}
     (void)sender;NSUInteger p=NSMaxRange(_selection);
     if(!_selection.length&&p<_text.length)p=NSMaxRange([_text rangeOfComposedCharacterSequenceAtIndex:p]);
     _selection=NSMakeRange(p,0);[self notifyText];

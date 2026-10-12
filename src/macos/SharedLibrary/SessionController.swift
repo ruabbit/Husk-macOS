@@ -70,7 +70,7 @@ final class PipeReader: @unchecked Sendable {
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
-        guestManagedStorage = runtime == "minecraft" || runtime == "unity" || runtime == "nativeactivity"
+        guestManagedStorage = runtime == "minecraft" || runtime == "unity" || runtime == "nativeactivity" || runtime == "java"
         self.runtime = runtime
         let id = UUID().uuidString
         let sessionLog = logs.appendingPathComponent(id)
@@ -88,7 +88,7 @@ final class PipeReader: @unchecked Sendable {
         child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
-        if runtime == "unity" || runtime == "nativeactivity" {
+        if runtime == "unity" || runtime == "nativeactivity" || runtime == "java" {
             child.arguments! += NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity")
         }
         for name in game.apkNames.dropFirst() {

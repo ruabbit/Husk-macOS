@@ -10,8 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <pthread.h>
 
 #include "husk-tl-dvm-internal.h"
+void tl_log_line(const char *, ...);
 
 #define NAT(fn) static bool fn(jobj *self, const jvalue *a, jvalue *ret)
 static jvalue I(int32_t v) { jvalue r; r.j = (uint32_t)v; return r; }
@@ -20,6 +22,42 @@ static jvalue D(double d) { jvalue r; r.d = d; return r; }
 static jvalue L(void *p) { jvalue r; r.j = 0; r.l = p; return r; }
 #define DB ((sqlite3 *)(uintptr_t)a[0].j)
 #define ST ((sqlite3_stmt *)(uintptr_t)a[0].j)
+
+typedef struct database_record { sqlite3 *db; bool close_requested; struct database_record *next; } database_record;
+static database_record *g_databases;
+static pthread_mutex_t g_databases_lock = PTHREAD_MUTEX_INITIALIZER;
+static bool g_databases_closed;
+static database_record **database_link(sqlite3 *db) {
+    database_record **link = &g_databases;
+    while (*link && (*link)->db != db) link = &(*link)->next;
+    return link;
+}
+static void close_if_unused(sqlite3 *db) {
+    database_record **link = database_link(db), *record = *link;
+    if (record && record->close_requested && !sqlite3_next_stmt(db, NULL) && sqlite3_close(db) == SQLITE_OK) {
+        *link = record->next; free(record);
+    }
+}
+/* Call only after the app, render, mixer and guest worker threads have ended.
+   Do not invent a commit for an app that left a transaction unfinished. */
+bool tl_dvm_sqlite_shutdown(void) {
+    bool ok = true;
+    pthread_mutex_lock(&g_databases_lock); g_databases_closed = true;
+    database_record **link = &g_databases;
+    while (*link) {
+        database_record *record = *link; sqlite3 *db = record->db;
+        if (!sqlite3_get_autocommit(db) || sqlite3_db_cacheflush(db) != SQLITE_OK) {
+            ok = false; link = &record->next; continue;
+        }
+        sqlite3_stmt *statement;
+        while ((statement = sqlite3_next_stmt(db, NULL))) if (sqlite3_finalize(statement) != SQLITE_OK) ok = false;
+        if (sqlite3_close(db) != SQLITE_OK) { ok = false; link = &record->next; }
+        else { *link = record->next; free(record); }
+    }
+    pthread_mutex_unlock(&g_databases_lock);
+    if (!ok) tl_log_line("javaapp: SQLite transaction or close remains incomplete");
+    return ok;
+}
 
 static int coll_nocase(void *u, int la, const void *a, int lb, const void *b)
 {
@@ -59,10 +97,23 @@ NAT(S_open)
     sqlite3_busy_timeout(db, 2500);
     sqlite3_create_collation(db, "LOCALIZED", SQLITE_UTF8, NULL, coll_nocase);
     sqlite3_create_collation(db, "UNICODE", SQLITE_UTF8, NULL, coll_binary);
+    database_record *record = calloc(1, sizeof(*record));
+    pthread_mutex_lock(&g_databases_lock);
+    if (!record || g_databases_closed) {
+        pthread_mutex_unlock(&g_databases_lock); free(record); sqlite3_close(db); *ret = J(0); return true;
+    }
+    record->db = db; record->next = g_databases; g_databases = record;
+    pthread_mutex_unlock(&g_databases_lock);
     *ret = J((int64_t)(uintptr_t)db);
     return true;
 }
-NAT(S_close) { (void)self; (void)ret; if (DB) sqlite3_close_v2(DB); return true; }
+NAT(S_close) {
+    (void)self; (void)ret;
+    pthread_mutex_lock(&g_databases_lock);
+    database_record *record = *database_link(DB);
+    if (record) { record->close_requested = true; close_if_unused(DB); }
+    pthread_mutex_unlock(&g_databases_lock); return true;
+}
 NAT(S_errmsg) { (void)self; *ret = L(dvm_new_string_utf8(DB ? sqlite3_errmsg(DB) : g_open_error)); return true; }
 NAT(S_errcode) { (void)self; *ret = I(DB ? sqlite3_extended_errcode(DB) : SQLITE_CANTOPEN); return true; }
 NAT(S_exec)
@@ -85,7 +136,15 @@ NAT(S_prepare)
     *ret = J((int64_t)(uintptr_t)st);
     return true;
 }
-NAT(S_finalize) { (void)self; (void)ret; if (ST) sqlite3_finalize(ST); return true; }
+NAT(S_finalize) {
+    (void)self; (void)ret;
+    if (ST) {
+        pthread_mutex_lock(&g_databases_lock);
+        sqlite3 *db = sqlite3_db_handle(ST); sqlite3_finalize(ST); close_if_unused(db);
+        pthread_mutex_unlock(&g_databases_lock);
+    }
+    return true;
+}
 NAT(S_reset) { (void)self; *ret = I(sqlite3_reset(ST)); return true; }
 NAT(S_clearBindings) { (void)self; (void)ret; sqlite3_clear_bindings(ST); return true; }
 NAT(S_paramCount) { (void)self; *ret = I(sqlite3_bind_parameter_count(ST)); return true; }

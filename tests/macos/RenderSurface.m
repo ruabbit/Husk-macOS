@@ -20,6 +20,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
         NSSize initial = pixels.width == 1280 ? NSMakeSize(960,540) : NSMakeSize(800,500);
         [window setContentSize:initial];
         MacRenderView *view = [[MacRenderView alloc] initWithFrame:(NSRect){NSZeroPoint, initial} renderSize:pixels];
+        NSView *web = view.webContainer;
         window.contentView = view;
         [view layoutSubtreeIfNeeded];
         NSError *error = nil;
@@ -49,6 +50,9 @@ int main(int argc, const char **argv) { @autoreleasepool {
             CHECK(!window.visible);
             CHECK(NSEqualSizes(view.bounds.size, size.sizeValue));
             NSRect rect = view.contentRect;
+            CHECK(near(web.frame.origin.x,rect.origin.x)&&near(web.frame.origin.y,rect.origin.y)&&
+                  near(web.frame.size.width,rect.size.width)&&near(web.frame.size.height,rect.size.height)&&
+                  near(web.bounds.size.width,pixels.width)&&near(web.bounds.size.height,pixels.height)&&web.isFlipped);
             CHECK(near(NSMidX(rect), NSMidX(view.bounds)) && near(NSMidY(rect), NSMidY(view.bounds)));
             CHECK(near(rect.size.width / rect.size.height, pixels.width / pixels.height));
             CHECK(rect.origin.x >= -0.001 && rect.origin.y >= -0.001);

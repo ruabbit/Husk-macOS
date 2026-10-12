@@ -41,5 +41,7 @@ public final class Native {
     public static native void vibrate(long ms);
     public static native void openUrl(String url);
     public static native void exit();
+    /** AppRunner only: callback completion on the owning app thread. */
+    public static native void lifecycle(int state);
     public static native long uptimeNanos();
 }

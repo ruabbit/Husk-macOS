@@ -16,6 +16,8 @@
 #define _DARWIN_C_SOURCE
 #include "husk-tl-bionic.h"
 #include "husk-tl-ld.h"
+#include "husk-tl-threads.h"
+#include <mach/mach.h>
 
 #include <errno.h>
 #include <pthread.h>
@@ -137,6 +139,9 @@ static int b_mutexattr_settype(long *a, int type)
     return 0;
 }
 static int b_mutexattr_gettype(const long *a, int *type) { *type = (int)(*a & 0xf); return 0; }
+/* process-shared: this is one process, so remembered and nothing more */
+static int b_mutexattr_setpshared(long *a, int ps) { if (ps != 0 && ps != 1) return 22; *a = (*a & ~0x10L) | (ps ? 0x10L : 0); return 0; }
+static int b_mutexattr_getpshared(const long *a, int *ps) { *ps = (*a & 0x10L) ? 1 : 0; return 0; }
 
 /* ------------------------------------------------------ condition variables */
 
@@ -207,6 +212,8 @@ static int b_cond_timedwait_monotonic(void *g, void *m, const struct timespec *a
 
 static int b_condattr_init(long *a)    { *a = 0; return 0; }
 static int b_condattr_destroy(long *a) { (void)a; return 0; }
+static int b_condattr_setpshared(long *a, int ps) { if (ps != 0 && ps != 1) return 22; *a = (*a & ~1L) | (ps ? 1L : 0); return 0; }
+static int b_condattr_getpshared(const long *a, int *ps) { *ps = (int)(*a & 1L); return 0; }
 static int b_condattr_setclock(long *a, int clock)
 {
     if (clock == 0) *a &= ~2L;
@@ -387,8 +394,14 @@ static int b_attr_getstacksize(const guest_attr *a, size_t *n) { *n = a->stack_s
 /* Scheduling attributes: a thread on this host runs at the system's own priority; the guest is told the default (SCHED_OTHER, priority 0) and its requests are accepted. */
 static int b_attr_getschedparam(const guest_attr *a, int *prio) { (void)a; *prio = 0; return 0; }
 static int b_attr_getschedpolicy(const guest_attr *a, int *policy) { (void)a; *policy = 0; return 0; }
+/* the inherit-scheduling choice: kept, as nothing here schedules threads differently */
+static int b_attr_setinheritsched(void *a, int v) { (void)a; return v == 0 || v == 1 ? 0 : 22; }
+static int b_attr_getinheritsched(const void *a, int *v) { (void)a; if (v) *v = 0; return 0; }
 static int b_attr_setschedpolicy(guest_attr *a, int policy) { (void)a; (void)policy; return 0; }
 static int b_attr_getguardsize(const guest_attr *a, size_t *n) { *n = a->guard_size; return 0; }
+static int b_attr_setguardsize(guest_attr *a, size_t n) { a->guard_size = n; return 0; }
+static int b_attr_setscope(guest_attr *a, int scope) { (void)a; return scope == 0 ? 0 : 95; }    /* only PTHREAD_SCOPE_SYSTEM, as bionic */
+static int b_attr_getscope(const guest_attr *a, int *scope) { (void)a; *scope = 0; return 0; }
 static int b_attr_getstack(const guest_attr *a, void **base, size_t *size) { *base = a->stack_base; *size = a->stack_size; return 0; }
 
 static int b_getattr_np(pthread_t t, guest_attr *a)
@@ -404,13 +417,92 @@ static int b_getattr_np(pthread_t t, guest_attr *a)
 
 typedef struct { void *(*fn)(void *); void *arg; } start_ctx;
 
+typedef struct guest_thread {
+    struct guest_thread *next;
+    mach_port_t port;
+    void *(*fn)(void *);
+    void *arg;
+} guest_thread;
+static pthread_mutex_t g_guest_lock = PTHREAD_MUTEX_INITIALIZER;
+static guest_thread *g_guest_threads;
+static bool g_guest_closing;
+
+/* A retained send right becomes a dead name only after TLS destructors finish.
+   A counter in the start routine would acknowledge closure too early. */
+static unsigned reap_guest_threads(void)
+{
+    unsigned live = 0;
+    guest_thread **link = &g_guest_threads;
+    while (*link) {
+        guest_thread *t = *link;
+        mach_port_type_t type = 0;
+        if (t->port != MACH_PORT_NULL && mach_port_type(mach_task_self(), t->port, &type) == KERN_SUCCESS &&
+            (type & MACH_PORT_TYPE_DEAD_NAME)) {
+            mach_port_deallocate(mach_task_self(), t->port);
+            *link = t->next; free(t);
+        } else { ++live; link = &t->next; }
+    }
+    return live;
+}
+static void *guest_thread_main(void *p)
+{
+    guest_thread *t = p;
+    void *(*fn)(void *) = t->fn; void *arg = t->arg;
+    pthread_mutex_lock(&g_guest_lock);
+    t->port = mach_thread_self();
+    pthread_mutex_unlock(&g_guest_lock);
+    return fn(arg);
+}
+int tl_guest_thread_create(pthread_t *out, const pthread_attr_t *attr, void *(*fn)(void *), void *arg)
+{
+    guest_thread *t = calloc(1, sizeof(*t));
+    if (!t) return ENOMEM;
+    t->fn = fn; t->arg = arg;
+    pthread_mutex_lock(&g_guest_lock);
+    if (g_guest_closing) { pthread_mutex_unlock(&g_guest_lock); free(t); return EAGAIN; }
+    reap_guest_threads(); t->next = g_guest_threads; g_guest_threads = t;
+    pthread_mutex_unlock(&g_guest_lock);
+    int error = pthread_create(out, attr, guest_thread_main, t);
+    if (error) {
+        pthread_mutex_lock(&g_guest_lock);
+        guest_thread **link = &g_guest_threads;
+        while (*link && *link != t) link = &(*link)->next;
+        if (*link) *link = t->next;
+        pthread_mutex_unlock(&g_guest_lock); free(t);
+    }
+    return error;
+}
+bool tl_guest_threads_quiescent(void)
+{
+    pthread_mutex_lock(&g_guest_lock); g_guest_closing = true; pthread_mutex_unlock(&g_guest_lock);
+    for (int i = 0; i < 100; ++i) {
+        pthread_mutex_lock(&g_guest_lock); unsigned live = reap_guest_threads(); pthread_mutex_unlock(&g_guest_lock);
+        if (!live) return true;
+        usleep(10000);
+    }
+    tl_log_line("javaapp: guest workers remain after Activity destruction");
+    return false;
+}
+
 const char *tl_ld_symbol_at(const void *addr, const char **lib_name, const void **sym_addr);
 
 static int g_thread_trace = -1;
+/* A stack of its own for fault handlers, for the calling thread: a crash that leaves the thread's stack unusable (a guest's runaway
+ * recursion) is then still reported -- macOS kills a thread it can not deliver a signal to with SIGILL, and nothing is said. */
+void tl_thread_altstack(void)
+{
+    stack_t old;
+    if (sigaltstack(NULL, &old) == 0 && !(old.ss_flags & SS_DISABLE)) return;
+    stack_t ss = { .ss_sp = malloc(64 << 10), .ss_size = 64 << 10, .ss_flags = 0 };
+    if (ss.ss_sp) sigaltstack(&ss, NULL);
+}
 static void *start_thunk(void *p)
 {
     start_ctx c = *(start_ctx *)p;
     free(p);
+    /* a stack of its own for fault handlers: a crash that leaves the thread's stack unusable is then still reported (macOS kills a
+       thread it can not deliver a signal to with SIGILL, and nothing is said) */
+    tl_thread_altstack();
     if (g_thread_trace < 0) g_thread_trace = getenv("TL_THREAD_TRACE") ? 1 : 0;
     if (g_thread_trace) {
         const char *ln = NULL; const void *sa = NULL;
@@ -436,7 +528,7 @@ static int b_create(pthread_t *out, const guest_attr *attr, void *(*fn)(void *),
     start_ctx *c = malloc(sizeof(*c));
     c->fn = fn; c->arg = arg;
     pthread_t t;
-    int r = pthread_create(&t, &a, start_thunk, c);
+    int r = tl_guest_thread_create(&t, &a, start_thunk, c);
     pthread_attr_destroy(&a);
     if (r) { free(c); return rc(r); }
     *out = t;
@@ -488,13 +580,13 @@ const tl_bionic_entry tl_tab_pthread[] = {
     TL_WRAP("pthread_mutex_lock", b_mutex_lock), TL_WRAP("pthread_mutex_trylock", b_mutex_trylock),
     TL_WRAP("pthread_mutex_unlock", b_mutex_unlock),
     TL_WRAP("pthread_mutexattr_init", b_mutexattr_init), TL_WRAP("pthread_mutexattr_destroy", b_mutexattr_destroy),
-    TL_WRAP("pthread_mutexattr_settype", b_mutexattr_settype), TL_WRAP("pthread_mutexattr_gettype", b_mutexattr_gettype),
+    TL_WRAP("pthread_mutexattr_settype", b_mutexattr_settype), TL_WRAP("pthread_mutexattr_setpshared", b_mutexattr_setpshared), TL_WRAP("pthread_mutexattr_getpshared", b_mutexattr_getpshared), TL_WRAP("pthread_mutexattr_gettype", b_mutexattr_gettype),
     TL_WRAP("pthread_cond_init", b_cond_init), TL_WRAP("pthread_cond_destroy", b_cond_destroy),
     TL_WRAP("pthread_cond_signal", b_cond_signal), TL_WRAP("pthread_cond_broadcast", b_cond_broadcast),
     TL_WRAP("pthread_cond_wait", b_cond_wait), TL_WRAP("pthread_cond_timedwait", b_cond_timedwait), TL_WRAP("pthread_cond_clockwait", b_cond_clockwait),
     TL_WRAP("pthread_cond_timedwait_monotonic_np", b_cond_timedwait_monotonic), TL_WRAP("pthread_cond_timedwait_monotonic", b_cond_timedwait_monotonic),
     TL_WRAP("pthread_condattr_init", b_condattr_init), TL_WRAP("pthread_condattr_destroy", b_condattr_destroy),
-    TL_WRAP("pthread_condattr_setclock", b_condattr_setclock),
+    TL_WRAP("pthread_condattr_setclock", b_condattr_setclock), TL_WRAP("pthread_condattr_setpshared", b_condattr_setpshared), TL_WRAP("pthread_condattr_getpshared", b_condattr_getpshared),
     TL_WRAP("pthread_rwlock_init", b_rwlock_init), TL_WRAP("pthread_rwlock_destroy", b_rwlock_destroy),
     TL_WRAP("pthread_rwlock_rdlock", b_rwlock_rdlock), TL_WRAP("pthread_rwlock_wrlock", b_rwlock_wrlock),
     TL_WRAP("pthread_rwlock_tryrdlock", b_rwlock_tryrdlock), TL_WRAP("pthread_rwlock_trywrlock", b_rwlock_trywrlock),
@@ -508,9 +600,9 @@ const tl_bionic_entry tl_tab_pthread[] = {
     TL_WRAP("pthread_getspecific", b_getspecific), TL_WRAP("pthread_setspecific", b_setspecific),
     TL_WRAP("pthread_attr_init", b_attr_init), TL_WRAP("pthread_attr_destroy", b_attr_destroy),
     TL_WRAP("pthread_attr_setdetachstate", b_attr_setdetachstate), TL_WRAP("pthread_attr_setstacksize", b_attr_setstacksize),
-    TL_WRAP("pthread_attr_getstacksize", b_attr_getstacksize), TL_WRAP("pthread_attr_getguardsize", b_attr_getguardsize), TL_WRAP("pthread_attr_getstack", b_attr_getstack),
+    TL_WRAP("pthread_attr_getstacksize", b_attr_getstacksize), TL_WRAP("pthread_attr_getguardsize", b_attr_getguardsize), TL_WRAP("pthread_attr_setguardsize", b_attr_setguardsize), TL_WRAP("pthread_attr_setscope", b_attr_setscope), TL_WRAP("pthread_attr_getscope", b_attr_getscope), TL_WRAP("pthread_attr_getstack", b_attr_getstack),
     TL_WRAP("pthread_attr_getschedparam", b_attr_getschedparam),
-    TL_WRAP("pthread_attr_getschedpolicy", b_attr_getschedpolicy), TL_WRAP("pthread_attr_setschedpolicy", b_attr_setschedpolicy),
+    TL_WRAP("pthread_attr_getschedpolicy", b_attr_getschedpolicy), TL_WRAP("pthread_attr_setinheritsched", b_attr_setinheritsched), TL_WRAP("pthread_attr_getinheritsched", b_attr_getinheritsched), TL_WRAP("pthread_attr_setschedpolicy", b_attr_setschedpolicy),
     TL_WRAP("pthread_getattr_np", b_getattr_np),
     TL_WRAP("pthread_create", b_create), TL_WRAP("pthread_join", b_join), TL_WRAP("pthread_detach", b_detach),
     TL_DIRECT(pthread_exit), TL_DIRECT(pthread_self), TL_DIRECT(pthread_equal),

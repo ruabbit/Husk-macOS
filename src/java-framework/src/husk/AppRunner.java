@@ -25,6 +25,7 @@ public final class AppRunner {
     private static int down;
     private static long downTime;
     private static boolean sPausedByHost;
+    private static boolean sEnding;
 
     private static ClassLoader sLoader;
     /** The app's class loader, as Android gives every app: a PathClassLoader over its APK and splits. Its classes say they come from
@@ -47,6 +48,9 @@ public final class AppRunner {
         KeyStoreProvider.install();
         Looper.prepareMainLooper();
         sHandler = new Handler(Looper.getMainLooper());
+        /* as RuntimeInit: there is always a default handler (apps wrap it and call through). Android's kills the app; this one
+           reports the exception and lets the thread end, as Husk did before. */
+        if (Thread.getDefaultUncaughtExceptionHandler() == null) Thread.setDefaultUncaughtExceptionHandler(new UncaughtLogger());
         Manifest.read();
         installClassLoader();
         ContextImpl base = ContextImpl.app();
@@ -64,12 +68,23 @@ public final class AppRunner {
         app.onCreate();
         Manifest.Component launcher = Manifest.activity(activityClass);
         Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        main.setComponent(new ComponentName(Native.packageName(), activityClass));
+        // started through the launcher's alias, the activity's component is the alias (Android compares that, not the class, when
+        // the app later starts the target by name: LinkedIn's MainActivity starts a new one of itself and finishes)
+        Manifest.Component entry = Manifest.launcher();
+        String startedAs = entry != null && "activity-alias".equals(entry.kind) && activityClass.equals(entry.parentActivity) ? entry.name : activityClass;
+        main.setComponent(new ComponentName(Native.packageName(), startedAs));
         main.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         launch(activityClass, main, null, -1, launcher);
+        Native.lifecycle(2); // RUNNING: launch/onResume returned
         Looper.loop();
     }
     public static Application application() { return sApp; }
+    static final class UncaughtLogger implements Thread.UncaughtExceptionHandler {
+        public void uncaughtException(Thread t, Throwable e) {
+            android.util.Log.e("AndroidRuntime", "FATAL EXCEPTION: " + t.getName(), e);
+            if (t == Looper.getMainLooper().getThread()) { if (e instanceof RuntimeException) throw (RuntimeException) e; if (e instanceof Error) throw (Error) e; throw new RuntimeException(e); }
+        }
+    }
 
     private static void installProviders(Application app) {
         /* as ActivityThread: providers with a higher initOrder first (Reddit builds its object graph in one that the startup
@@ -115,6 +130,11 @@ public final class AppRunner {
         }
         return a;
     }
+    /** The component an activity was started as: its class, or the alias it was reached through. */
+    private static String startedAs(Activity a) {
+        Intent i = a.getIntent();
+        return i != null && i.getComponent() != null ? i.getComponent().getClassName() : a.getClass().getName();
+    }
     /** Context.startActivity: an activity of the app's own, or something the host can open (a web page, mail, the store). */
     public static void startActivity(Context from, Intent i, int request, Bundle opts) {
         Manifest.Component c = Manifest.resolve(i);
@@ -126,7 +146,7 @@ public final class AppRunner {
             sHandler.post(() -> {
                 try {
                     if ((intent.getFlags() & Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0) {
-                        for (int k = sStack.size() - 1; k >= 0; k--) if (sStack.get(k).getClass().getName().equals(c.name)) {
+                        for (int k = sStack.size() - 1; k >= 0; k--) if (startedAs(sStack.get(k)).equals(intent.getComponent().getClassName())) {
                             Activity existing = sStack.get(k);
                             while (top() != existing) finishNow(top(), false);
                             existing.setIntent(intent);
@@ -137,9 +157,10 @@ public final class AppRunner {
                     }
                     if ((intent.getFlags() & 0x20000000 /* SINGLE_TOP */) != 0 || c.launchMode == 1) {
                         Activity t = top();
-                        if (t != null && t.getClass().getName().equals(c.name)) { t.setIntent(intent); return; }
+                        if (t != null && !t.isFinishing() && startedAs(t).equals(intent.getComponent().getClassName())) { t.huskNewIntent(intent); return; }
                     }
-                    launch(c.name, intent, caller, request, c);
+                    // an <activity-alias> starts the activity it names; the intent keeps the alias as its component, as on Android
+                    launch("activity-alias".equals(c.kind) && c.parentActivity != null ? c.parentActivity : c.name, intent, caller, request, c);
                 } catch (Throwable t) {
                     android.util.Log.e("Husk", "starting " + c.name + " failed", t);
                     if (t instanceof RuntimeException) throw (RuntimeException) t;
@@ -162,6 +183,16 @@ public final class AppRunner {
             return;
         }
         if ("android.intent.action.CHOOSER".equals(action)) { Intent inner = i.getParcelableExtra("android.intent.extra.INTENT"); if (inner != null) startActivity(from, inner, request, opts); return; }
+        /* a screen of the system's (the account chooser, Settings pages, the permission dialog): Husk has none of them -- asked for a
+           result, the caller hears the user backed out, as it would on a phone; otherwise nothing opens */
+        String pkg = i.getComponent() != null ? i.getComponent().getPackageName() : i.getPackage();
+        boolean system = "android".equals(pkg) || "com.android.settings".equals(pkg) || "com.android.permissioncontroller".equals(pkg)
+            || (action != null && (action.startsWith("android.settings.") || action.startsWith("android.provider.Settings")));
+        if (system) {
+            final Activity caller = from instanceof Activity ? (Activity) from : top();
+            if (request >= 0 && caller != null) sHandler.post(() -> caller.huskActivityResult(request, Activity.RESULT_CANCELED, null));
+            return;
+        }
         throw new ActivityNotFoundException("No Activity found to handle " + i);
     }
     /** Activity.finish: the one below comes back (with the result when it asked for one). */
@@ -185,9 +216,20 @@ public final class AppRunner {
         a.huskStop();
         a.huskDestroy();
         // the app ends with its last activity, unless one it started just before (finish(); startActivity(...)) is still to come
-        if (sStack.isEmpty()) sHandler.post(() -> { if (sStack.isEmpty()) Native.exit(); });
+        if (sStack.isEmpty()) sHandler.post(() -> { if (sStack.isEmpty()) finishHost(); });
     }
     public static void finishAll() { sHandler.post(() -> { while (!sStack.isEmpty()) finishNow(top(), false); }); }
+    /** On the app main thread. No receipt if any callback or pending write fails. */
+    private static void finishHost() {
+        if (sEnding) return;
+        sEnding = true;
+        while (!sStack.isEmpty()) finishNow(top(), false);
+        Services.finishForHost();
+        android.content.HuskSharedPreferences.finishForHost();
+        Looper.setInputSink(null);
+        Native.lifecycle(5); // destruction acknowledged; the host still joins threads
+        Looper.getMainLooper().quit();
+    }
     /** Activity.finishAffinity(): the activity and those under it in the task go; activities it started, above it, stay. */
     public static void finishAffinity(Activity a) {
         sHandler.post(() -> {
@@ -218,6 +260,7 @@ public final class AppRunner {
             int phase = ev[1 + 4 * k], id = ev[2 + 4 * k];
             float x = Float.intBitsToFloat(ev[3 + 4 * k]), y = Float.intBitsToFloat(ev[4 + 4 * k]);
             try {
+                if (phase == 10) { finishHost(); return; }
                 if (phase == 5) { back(); continue; }
                 if (phase == 6) { hostPause(id != 0); continue; }
                 if (phase == 7) { InputMethods.deliverPending(); continue; }
@@ -253,12 +296,14 @@ public final class AppRunner {
         if (!h && a != null) a.huskBack();
     }
     private static void hostPause(boolean pause) {
-        if (pause == sPausedByHost) return;
+        if (pause == sPausedByHost) { Native.lifecycle(pause ? 3 : 2); return; }
         sPausedByHost = pause;
         Activity a = top();
-        if (a == null) return;
-        if (pause) { if (a.isResumedHusk()) a.huskPause(); }
-        else if (!a.isResumedHusk()) a.huskResume();
+        if (a != null) {
+            if (pause) { if (a.isResumedHusk()) a.huskPause(); }
+            else if (!a.isResumedHusk()) a.huskResume();
+        }
+        Native.lifecycle(pause ? 3 : 2);
     }
     private static void touch(int phase, int id, float x, float y) {
         long now = SystemClock.uptimeMillis();

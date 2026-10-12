@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "image": {
+    "url": "https://github.com/Leviidev/Husk/releases/download/lineage-v2/vda-v12.qcow2",
+    "sha256": "a8dbaecc8fdcd682991b078d6bbb7df6972e459208634fa8dcbad24f17208d6a",
+    "size": 2057568256,
+    "partition": "system"
+  },
+  "d8": {
+    "sdkBuildTools": "36.0.0",
+    "version": "8.10.9-dev",
+    "sha256": "4097ff9c46c185c6e7214da7fe9b1befb5adeea5cc9ca349270e0249904f9240",
+    "source": "https://developer.android.com/tools/releases/build-tools"
+  },
+  "jdkMajor": 21,
+  "javaRelease": 8,
+  "minAPI": 26,
+  "bootClassPath": [
+    "com.android.art/javalib/core-oj.jar",
+    "com.android.art/javalib/core-libart.jar",
+    "com.android.art/javalib/okhttp.jar",
+    "com.android.art/javalib/bouncycastle.jar",
+    "com.android.art/javalib/apache-xml.jar",
+    "com.android.i18n/javalib/core-icu4j.jar",
+    "com.android.conscrypt/javalib/conscrypt.jar",
+    "husk-framework.dex",
+    "org.apache.http.legacy.jar"
+  ],
+  "modules": {
+    "art": {
+      "archive": "com.android.art.capex",
+      "files": ["javalib/core-oj.jar", "javalib/core-libart.jar", "javalib/okhttp.jar", "javalib/bouncycastle.jar", "javalib/apache-xml.jar", "lib64/libandroidio.so", "lib64/libbase.so", "lib64/libc++.so", "lib64/libexpat.so", "lib64/libjavacore.so", "lib64/libnativehelper.so", "lib64/libopenjdk.so"],
+      "directories": []
+    },
+    "i18n": {
+      "archive": "com.android.i18n.apex",
+      "files": ["javalib/core-icu4j.jar", "lib64/libicu.so", "lib64/libicui18n.so", "lib64/libicuuc.so", "lib64/libicu_jni.so", "lib64/libandroidicu.so"],
+      "directories": ["etc/icu"]
+    },
+    "conscrypt": {
+      "archive": "com.android.conscrypt.capex",
+      "files": ["javalib/conscrypt.jar", "lib64/libjavacrypto.so", "lib64/libcrypto.so", "lib64/libssl.so"],
+      "directories": ["cacerts"]
+    },
+    "tzdata": {
+      "archive": "com.android.tzdata.apex",
+      "files": [],
+      "directories": ["etc"]
+    }
+  }
+}

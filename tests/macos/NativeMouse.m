@@ -9,6 +9,8 @@
 #define tl_unity_key recordUnityKey
 #define tl_na_touch recordUnityTouch
 #define tl_na_key recordNativeKey
+#define tl_javaapp_touch recordUnityTouch
+#define tl_javaapp_key recordNativeKey
 #import "../../src/macos/NativeRunner/main.m"
 #undef main
 #undef tl_ga_mouse
@@ -17,6 +19,8 @@
 #undef tl_unity_key
 #undef tl_na_touch
 #undef tl_na_key
+#undef tl_javaapp_touch
+#undef tl_javaapp_key
 
 static struct { int action, buttons; float x,y,scroll; BOOL relative; } received[64];
 static int count;
@@ -158,8 +162,8 @@ int main(void) { @autoreleasepool {
     CHECK(received[1].relative && received[2].relative && received[2].buttons==1);
     CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));
     CHECK(received[3].buttons==0);
-    for(int profile=0;profile<2;profile++){
-    minecraft=NO;unity=profile==0;nativeactivity=profile==1;unityKeyEvents=0;runner.loaded=YES;runner.heldKeys=[NSMutableSet new];count=0;
+    for(int profile=0;profile<3;profile++){
+    minecraft=NO;unity=profile==0;nativeactivity=profile==1;javaapp=profile==2;unityKeyEvents=0;runner.loaded=YES;runner.heldKeys=[NSMutableSet new];count=0;
     CHECK(mouse(view,NSEventTypeLeftMouseDown,bar));
     CHECK(mouse(view,NSEventTypeLeftMouseDragged,inside));
     CHECK(mouse(view,NSEventTypeLeftMouseUp,inside));

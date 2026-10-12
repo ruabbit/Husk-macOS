@@ -9,6 +9,7 @@ if [ ! -f "$HUSK_DEPS/lib/libANGLE-shared.dylib" ] || [ ! -d "$HUSK_DEPS/lib/Mol
 fi
 cmp "$HUSK_ROOT/dependencies/macos.lock.json" "$HUSK_DEPS/lock.json"
 python3 "$HUSK_ROOT/scripts/build_macos_graphics.py" --verify "$HUSK_DEPS"
+python3 "$HUSK_ROOT/scripts/build_java_runtime.py" --ensure --output "$HUSK_BUILD/JavaRuntime"
 cmake -S "$HUSK_ROOT" -B "$HUSK_BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_SYSROOT="$(xcrun --sdk macosx --show-sdk-path)" -DHUSK_DEPS="$HUSK_DEPS" "$@"
 cmake --build "$HUSK_BUILD" --parallel "${HUSK_BUILD_JOBS:-4}"

@@ -21,7 +21,24 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build tools
-        run: brew install cmake ninja llvm
+        run: |
+          brew install cmake ninja llvm qemu e2fsprogs openjdk@21
+          brew install --cask android-commandlinetools
+      - name: Android compiler and fixture SDK
+        run: |
+          JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
+          export JAVA_HOME
+          export ANDROID_SDK_ROOT="$RUNNER_TEMP/husk-android-sdk"
+          # sdkmanager prompts for the SDK packages' licenses on a fresh runner.
+          set +o pipefail
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" 'build-tools;36.0.0' 'platforms;android-36'
+          echo "HUSK_JDK=$JAVA_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+      - name: Cache pinned Java resources
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/macos/JavaRuntime
+          key: java-arm64-${{ hashFiles('dependencies/java-runtime.lock.json', 'scripts/build_java_runtime.py') }}
       - name: Cache pinned graphics
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -41,7 +58,7 @@ jobs:
         env:
           ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
         run: |
-          ctest --test-dir build/macos -R '^(core-|macos-vm-controller$)' --output-on-failure
+          ctest --test-dir build/macos -R '^(core-|macos-vm-controller$|java-runtime-|java-native-thread-|macos-native-launch$|macos-text-input$|macos-play-support$)' --output-on-failure
           ./scripts/test_macos_p0.sh --suite memory
           ./scripts/test_macos_p0.sh --suite core
       - name: Build evidence

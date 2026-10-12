@@ -4,9 +4,11 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT/'scripts'))
 spec = importlib.util.spec_from_file_location('package_macos', ROOT / 'scripts/package_macos.py')
 packager = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(packager)

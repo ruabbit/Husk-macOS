@@ -1,8 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #import "MacRenderView.h"
+@interface MacWebContainer : NSView
+@end
+@implementation MacWebContainer
+- (BOOL)isFlipped { return YES; }
+@end
 
 @implementation MacRenderView {
     CALayer *_canvas;
+    NSView *_webContainer;
 }
 - (instancetype)initWithFrame:(NSRect)frame renderSize:(NSSize)size
 {
@@ -28,6 +34,14 @@
     return self;
 }
 - (BOOL)isFlipped { return YES; }
+- (NSView *)webContainer {
+    if(!_webContainer){
+        _webContainer=[[MacWebContainer alloc] initWithFrame:self.contentRect];
+        _webContainer.bounds=(NSRect){NSZeroPoint,_renderSize};_webContainer.wantsLayer=YES;
+        [self addSubview:_webContainer];_canvas.zPosition=1;
+    }
+    return _webContainer;
+}
 - (void)setFrameSize:(NSSize)size
 {
     [super setFrameSize:size];
@@ -49,6 +63,7 @@
     _canvas.affineTransform = CGAffineTransformMakeScale(scale, scale);
     _canvas.hidden = scale <= 0;
     [CATransaction commit];
+    if(_webContainer){_webContainer.frame=self.contentRect;_webContainer.bounds=(NSRect){NSZeroPoint,_renderSize};}
 }
 - (NSRect)contentRect
 {

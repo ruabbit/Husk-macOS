@@ -1,5 +1,23 @@
 # 审计进度
 
+## 2026-10-12 上游同步与 Java 运行链路
+
+开始于干净的 `12f3cc0`，origin 两分支无新增，无 Husk/Runner/本项目 VM 或竞争构建。上游 `8a9dc1b..f0bd526` 共 70 个提交、139 路径；本地 main 快进，再合入 macOS，没有文本冲突。上游本轮 Java/Dalvik、bionic、WebView、preferences、GLES 等更新实际进入当前构建；Store/PlayAPI 与固定图形依赖无增量。原 macOS 输入、固定画布、默认失焦继续、分包和生命周期适配保留。首次链接发现上游 Java 的 `tl_manifest_gles` 被放在未编入的 SDL driver，已拆为共享模块并补 UTF-8/UTF-16、stripped resource ID 和损坏边界测试。
+
+Java 依赖从固定的原始 Lineage vda-v12 缓存只读提取，校验镜像 SHA-256、大小和无 backing file；没有使用或写入用户 Android 磁盘。新增 JDK 21 / D8 hash 固定、生成源码一致性检查、framework DEX 构建、资源清单校验与打包。最终包含 194 个文件，约 96 MB；原始 ART/ICU/Conscrypt/tzdata/system NOTICE 同包保存，完整对应源码与发行许可仍未完成。临时 raw/system/APEX 提取文件清理；保留一套 JavaRuntime 缓存和唯一 Product。`build_macos.sh` 现在复用或准备依赖，CI 增加工具/SDK/资源缓存，`actionlint` 通过；远程新 CI 未验证。
+
+独立 NativeRunner 新增 Java profile，使用真实 Dalvik boot、manifest 元数据、32 分包、AppKit 固定画布、触摸/键盘/IME 提交桥接，以及隔离数据路径。资料库与 Runner 对齐上游 Unity 6、普通 Java、Cocos（无 FMOD）、SDL（无 DXVK）、Python、Flutter 等分发。旧 Unity 导入只读复扫并缓存结果，避免 Hole.io 等旧记录继续走过时 driver；不在列表读取时重写索引或存档。
+
+暂停回执在 Activity 回调返回后发出；正常关闭需 Activity/Service 销毁、SharedPreferences 写入、AppMain/GL/混合器 join，以及 Java/原生 worker 完成（含 pthread_exit 后 TLS 析构）。关闭后禁止新建 guest worker。SQLite 连接和语句显式关闭，未完成事务不会被擅自 commit，也不会获得正常回执。Java 异常、失败写入、残留线程、SQLite 未完成或进程提前退出均按失败处理。WebView 已绑定 AppKit 容器，后台不创建上游 harness 的可见窗；WebKit 数据进程持久化确认仍缺，因此使用过 website data store 的会话不会被伪报 storage-closed。
+
+最终默认 **CTest 40/40**，包验证通过 **17 个 Mach-O** 和 **194 个 Java 资源**。新增真实 DEX 的 boot、生命周期正常/销毁异常/写失败/残留线程/未提交 SQLite、原生 worker/TLS、生产资料库—SessionController—打包 Runner 会话；后者验证首帧、实际触摸/键盘回调、失焦继续、暂停/恢复、最终 preferences 持久化、单一关闭回执和进程回收。扩充 AppKit NSEvent、输入法组合文字和旧索引升级。容器缩放新增测试最初因精确比较浮点数误报，改为与其他画布检查相同的误差界限后通过。没有可见游戏窗口、音频、用户 APK 运行或主动 native crash。
+
+当前候选已在唯一 `build/macos` 原地构建，保留 `HUSK_BUILD_VM=ON`。通过 CUA 按 Product 完整路径只打开一次，实际进程 PID 98251 指向当前包；首次 AX 返回主窗口，随后 AX/截图均再次报 `native pipe closed`。首次树是异步加载中的 0 款游戏状态，磁盘资料库仍为原来的 7 条记录，**没有完成加载后的资料列表、详情页或交互的可见验收**，没有重复重开。没有 NativeRunner/VMRunner 会话。App SHA-256 `b34bb10eb6fc569e361d99fb1640d0944663fc04d7a3790f86a3a59989eac85d`，Runner SHA-256 `17a17a96273a46fbf388479a9b630c96114db9ed6091d3eb4608180d418159ff`。
+
+未完成：真实 Unity 6/Flutter/SDL 等各应用兼容；Java 手柄；WebKit 持久化关闭；前台 IME/画布交互；其余独立 native profiles；Egg 的未重定位 PLT 初始化；个人 Play/passkey 登录。PR #82 在本轮只读复查仍 open / 未合并，已采用的 JNI 修复保留。没有重跑 Egg、Hole.io 或 VM。各项具体下一步见 [upstream-parity.md](upstream-parity.md)，不得用共同 fixture 通过关闭真实应用待办。
+
+证据：`build/logs/current-upstream-build.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-candidate.json` 和 `build/macos/bundle-verification.json`。代码与合并已具备提交条件；提交推送与远端 SHA 读回作为最后交付步骤。
+
 ## 2026-10-11 NativeActivity / Egg, Inc. 接入
 
 从干净的 `3de61f0` 开始补入上游已有的 NativeActivity 驱动。macOS 已编译共享驱动及其 UE4 JNI 链接依赖，资料库、SessionController 和 NativeRunner 增加 `nativeactivity` 分发、32 APK 集合复核、manifest 包名/库名/launcher alias/横竖屏、固定画布及触摸/键盘/手柄。旧导入动态获得入口，不要求重新下载；Unreal profile 尚未开放。启动元数据按 binary XML 的真实层级读取，其他 Activity 或 application 的元数据不会选成游戏入口。

@@ -1,5 +1,19 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-12 上游与 Java 运行链路
+
+- [x] 核对干净工作树、远端、Git 操作与进程；origin 两分支无新增提交，Husk/Runner 已退出。
+- [x] fetch 上游 `8a9dc1b..f0bd526`，70 个提交、139 个路径；main 快进，macOS 无文本冲突合并，尚未提交。
+- [x] 复核自动合并保留的 macOS 修复，编译当前共享运行时代码。
+- [x] 固定 Java 资源和工具来源，构建本仓库 framework DEX，接入唯一候选与包校验。
+- [x] 实现并验证 Java 启动、触摸/键盘、暂停/销毁和存储回执；实际 DEX 与生产会话通过后接入分发。
+- [x] 默认 CTest 40/40、17 Mach-O / 194 Java 资源校验，更新来源锁和功能对齐。
+- [ ] 正常提交与推送两分支，并读回远端 SHA。
+- [x] 通过 CUA 单次启动 Product，确认 PID 98251 和首次主窗口；未重复运行已知失败游戏。
+- [ ] CUA 在初次主窗口后再次断开；加载后的资料列表/详情页可见验收仍待补。
+
+新增上游把 SDL（DXVK 除外）、Python、Flutter 交给 Java；与 Unity 6 共用的资源与生命周期是本轮重点。Egg 仍未到 onCreate，不复跑。Play 个人账号拒绝仍是开放问题。
+
 ## 当前执行：NativeActivity / Egg, Inc.（2026-10-11）
 
 用户授权接入上游 NativeActivity，要求后续同步同时完成对应 macOS 适配。复用现有驱动、AppKit 固定画布和独立 Runner；保留正常关闭存储协议。
