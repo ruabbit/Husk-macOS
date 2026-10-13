@@ -5,29 +5,55 @@ public final class InputDevice {
         SOURCE_JOYSTICK = 0x1000010, SOURCE_ANY = 0xffffff00, KEYBOARD_TYPE_NONE = 0, KEYBOARD_TYPE_ALPHABETIC = 2;
     private final int id;
     private InputDevice(int id) { this.id = id; }
-    public static InputDevice getDevice(int id) { return id == 1 ? new InputDevice(1) : null; }
-    public static int[] getDeviceIds() { return new int[] { 1 }; }
+    private static final int PAD_SOURCES = SOURCE_GAMEPAD | SOURCE_JOYSTICK | SOURCE_DPAD;
+    private static final int[] PAD_AXES = {0, 1, 11, 14, 15, 16, 17, 18, 22, 23};
+    private boolean pad() { return id >= 41 && id <= 44; }
+    public static InputDevice getDevice(int id) {
+        return id == 1 || (id >= 41 && id <= 44 && (husk.Native.controllerMask() & (1 << (id - 41))) != 0) ? new InputDevice(id) : null;
+    }
+    public static int[] getDeviceIds() {
+        int mask = husk.Native.controllerMask(), count = 1;
+        for (int i = 0; i < 4; i++) if ((mask & (1 << i)) != 0) count++;
+        int[] ids = new int[count]; ids[0] = 1; count = 1;
+        for (int i = 0; i < 4; i++) if ((mask & (1 << i)) != 0) ids[count++] = 41 + i;
+        return ids;
+    }
     public int getId() { return id; }
-    public String getName() { return "touchscreen"; }
-    public String getDescriptor() { return "husk-touch"; }
-    public int getSources() { return SOURCE_TOUCHSCREEN; }
+    public String getName() { return pad() ? "Xbox Wireless Controller" : "touchscreen"; }
+    public String getDescriptor() { return pad() ? "husk-controller-" + (id - 41) : "husk-touch"; }
+    public int getSources() { return pad() ? PAD_SOURCES : SOURCE_TOUCHSCREEN; }
     public int getKeyboardType() { return KEYBOARD_TYPE_NONE; }
     public boolean isVirtual() { return false; }
-    public boolean isExternal() { return false; }
-    public int getVendorId() { return 0; }
-    public int getProductId() { return 0; }
+    public boolean isExternal() { return pad(); }
+    public int getVendorId() { return pad() ? 0x045e : 0; }
+    public int getProductId() { return pad() ? 0x02e0 : 0; }
     /** The touch screen's ranges (the screen's pixels), as a phone's touch screen reports them. */
-    public java.util.List<MotionRange> getMotionRanges() { java.util.ArrayList<MotionRange> l = new java.util.ArrayList<>(); MotionRange x = getMotionRange(MotionEvent.AXIS_X), y = getMotionRange(MotionEvent.AXIS_Y); if (x != null) l.add(x); if (y != null) l.add(y); return l; }
-    public MotionRange getMotionRange(int axis) { return getMotionRange(axis, SOURCE_TOUCHSCREEN); }
+    public java.util.List<MotionRange> getMotionRanges() {
+        java.util.ArrayList<MotionRange> l = new java.util.ArrayList<>();
+        for (int axis : pad() ? PAD_AXES : new int[] {MotionEvent.AXIS_X, MotionEvent.AXIS_Y}) {
+            MotionRange r = getMotionRange(axis); if (r != null) l.add(r);
+        }
+        return l;
+    }
+    public MotionRange getMotionRange(int axis) { return getMotionRange(axis, pad() ? SOURCE_JOYSTICK : SOURCE_TOUCHSCREEN); }
     public MotionRange getMotionRange(int axis, int source) {
+        if (pad()) {
+            if (!supportsSource(source) || (source & SOURCE_JOYSTICK) != SOURCE_JOYSTICK) return null;
+            for (int a : PAD_AXES) if (a == axis) return new MotionRange(axis, source, axis >= 17 ? 0 : -1, 1);
+            return null;
+        }
         if ((getSources() & source) != source || (source & SOURCE_TOUCHSCREEN) != SOURCE_TOUCHSCREEN) return null;
         if (axis == MotionEvent.AXIS_X) return new MotionRange(axis, source, 0, husk.Native.screenWidth() - 1);
         if (axis == MotionEvent.AXIS_Y) return new MotionRange(axis, source, 0, husk.Native.screenHeight() - 1);
         if (axis == MotionEvent.AXIS_PRESSURE || axis == MotionEvent.AXIS_SIZE) return new MotionRange(axis, source, 0, 1);
         return null;
     }
-    public boolean supportsSource(int s) { return (s & SOURCE_TOUCHSCREEN) == s; }
-    public boolean[] hasKeys(int... keys) { return new boolean[keys.length]; }
+    public boolean supportsSource(int s) { return (getSources() & s) == s; }
+    public boolean[] hasKeys(int... keys) {
+        boolean[] result = new boolean[keys.length];
+        for (int i = 0; i < keys.length; i++) result[i] = pad() && ((keys[i] >= 96 && keys[i] <= 110) || (keys[i] >= 19 && keys[i] <= 22));
+        return result;
+    }
     public android.os.Vibrator getVibrator() { return new android.os.Vibrator(); }
     // ---- platform API stubs (tools/compat/genstubs.py)
     public static final class MotionRange {
@@ -39,11 +65,11 @@ public final class InputDevice {
         public float getMin() { return mMin; }
         public float getMax() { return mMax; }
         public float getRange() { return mMax - mMin; }
-        public float getFlat() { return 0f; }
+        public float getFlat() { return (mSource & SOURCE_JOYSTICK) == SOURCE_JOYSTICK && mAxis != 15 && mAxis != 16 ? 0.08f : 0f; }
         public float getFuzz() { return 0f; }
         public float getResolution() { return 0f; }
     }
-    public int getControllerNumber() { return 0; }
+    public int getControllerNumber() { return pad() ? id - 40 : 0; }
     // ---- generated by tools/compat/fillmembers.py: the platform's members this class does not write (signatures only)
     public static android.os.Parcelable.Creator CREATOR;
     public static final int KEYBOARD_TYPE_NON_ALPHABETIC = 1;
@@ -88,9 +114,9 @@ public final class InputDevice {
     public boolean hasBattery() { return false; }
     public boolean hasMicrophone() { return false; }
     public boolean hasSensor() { return false; }
-    public boolean isEnabled() { return false; }
+    public boolean isEnabled() { return getDevice(id) != null; }
     public boolean isFullKeyboard() { return false; }
-    public boolean isPhysicalDevice() { return false; }
+    public boolean isPhysicalDevice() { return true; }
     public void writeToParcel(android.os.Parcel p0, int p1) {}
     // ---- end of generated members
     // ---- generated by tools/compat/genstubs.py: the platform's nested classes this class does not write

@@ -344,7 +344,7 @@ public final class ViewRoot implements ViewParent {
             ViewRoot r = sRoots.get(i);
             if (r.mView.getVisibility() != View.VISIBLE) continue;
             MotionEvent l = MotionEvent.obtain(e);
-            l.offsetLocation(-r.mX, -r.mY);
+            if (e.isFromSource(android.view.InputDevice.SOURCE_CLASS_POINTER)) l.offsetLocation(-r.mX, -r.mY);
             return r.mView.dispatchGenericMotionEvent(l);
         }
         return false;

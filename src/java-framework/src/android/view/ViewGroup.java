@@ -561,6 +561,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
     @Override public boolean dispatchKeyEventPreIme(KeyEvent e) { return mFocused != null ? mFocused.dispatchKeyEventPreIme(e) : super.dispatchKeyEventPreIme(e); }
     @Override public boolean dispatchGenericMotionEvent(MotionEvent e) {
+        if (e.isFromSource(InputDevice.SOURCE_CLASS_JOYSTICK)) {
+            if (mFocused != null && mFocused.dispatchGenericMotionEvent(e)) return true;
+            return super.dispatchGenericMotionEvent(e);
+        }
         float x = e.getX(), y = e.getY();
         for (int i = mChildrenCount - 1; i >= 0; i--) {
             View c = mChildren[i];

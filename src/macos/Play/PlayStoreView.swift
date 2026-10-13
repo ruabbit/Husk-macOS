@@ -11,6 +11,7 @@ struct MacPlayStoreView: View {
     @State private var details: PlayAPI.PlayApp?
     @State private var detailError: String?
     @State private var login = false
+    @State private var reporting: CompatSubject?
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -66,6 +67,7 @@ struct MacPlayStoreView: View {
                                     if app.rating > 0 { Label(String(format: "%.1f", app.rating), systemImage: "star.fill") }
                                 }.font(.caption).foregroundStyle(.secondary)
                                 downloadControls(app)
+                                MacCompatibilitySection(subject: CompatSubject(package: app.id, name: app.title, isGame: false), reporting: $reporting)
                                 Text(app.summary.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
                                     .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                                 ScrollView(.horizontal) {
@@ -94,6 +96,7 @@ struct MacPlayStoreView: View {
         .frame(minWidth: 900, minHeight: 600)
         .navigationTitle("Google Play")
         .sheet(isPresented: $login) { GoogleLoginView(store: store, browser: store.browserLogin) }
+        .sheet(item: $reporting) { MacCompatReportSheet(subject: $0) }
         .task { await store.restore() }
         .task(id: query + (store.session?.email ?? "")) {
             if !query.isEmpty { try? await Task.sleep(for: .milliseconds(350)) }

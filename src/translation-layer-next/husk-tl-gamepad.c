@@ -35,7 +35,12 @@ static int64_t now_ms(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC,
 /* A controller is usually connected (and updated) before the game starts, so TL_PAD_DPAD, which the engine's driver sets just before it installs its sink, is read again here. */
 void tl_pad_set_sink(const tl_pad_sink *sink) { pthread_mutex_lock(&P.lock); if (sink) P.sink = *sink; else memset(&P.sink, 0, sizeof(P.sink)); P.dpad_mode = -1; pthread_mutex_unlock(&P.lock); }
 
-bool tl_pad_connected(int slot) { return slot >= 0 && slot < TL_PADS && P.connected[slot]; }
+bool tl_pad_connected(int slot) {
+    pthread_mutex_lock(&P.lock);
+    bool connected = slot >= 0 && slot < TL_PADS && P.connected[slot];
+    pthread_mutex_unlock(&P.lock);
+    return connected;
+}
 
 void tl_pad_connect(int slot, const char *name)
 {
@@ -53,6 +58,8 @@ void tl_pad_connect(int slot, const char *name)
 void tl_pad_disconnect(int slot)
 {
     if (slot < 0 || slot >= TL_PADS) return;
+    tl_pad_state released = {0};
+    tl_pad_update(slot, &released);
     pthread_mutex_lock(&P.lock);
     P.connected[slot] = false;
     pthread_mutex_unlock(&P.lock);

@@ -24,6 +24,7 @@
 #include "husk-tl-egl.h"
 #include "husk-tl-internal.h"
 #include "husk-tl-ld.h"
+#include "husk-tl-gamepad.h"
 
 void tl_nwindow_configure(int w, int h, void *layer);
 void *tl_nwindow_get(void);
@@ -32,7 +33,7 @@ static struct {
     tl_javaapp_config cfg;
     char apk[1024], data[512], ext[512], pkg[200], activity[260], application[260], frame_dir[512], angle_egl[600], angle_gles[600];
     pthread_mutex_t q_lock;
-    int32_t q[4096]; int qn;                    /* packed input events: phase, id, x bits, y bits */
+    int32_t q[4096]; int qn;                    /* 4-word records; controller key/motion span 2/14 records */
     atomic_ulong frames;
     atomic_bool ended, paused, render_requested;
     atomic_int state;
@@ -308,10 +309,9 @@ NAT(N_pollInput)
     pthread_mutex_lock(&A.q_lock);
     /* Lifecycle requests have reserved space, even when input fills the queue. */
     if (A.stop_requested && !A.stop_delivered) {
-        A.qn = 0; A.pending_pause = -1; A.stop_delivered = true;
+        A.pending_pause = -1; A.stop_delivered = true;
         A.q[A.qn++] = 10; A.q[A.qn++] = 0; A.q[A.qn++] = 0; A.q[A.qn++] = 0;
     } else if (A.pending_pause >= 0) {
-        if (A.qn > 4092) A.qn = 4092;
         A.q[A.qn++] = 6; A.q[A.qn++] = A.pending_pause; A.q[A.qn++] = 0; A.q[A.qn++] = 0;
         A.pending_pause = -1;
     }
@@ -326,6 +326,42 @@ NAT(N_pollInput)
     pthread_mutex_unlock(&A.q_lock);
     *ret = L(arr);
     return true;
+}
+
+NAT(N_controllerMask)
+{
+    (void)self; (void)a;
+    int mask = 0;
+    for (int i = 0; i < TL_PADS; i++) if (tl_pad_connected(i)) mask |= 1 << i;
+    *ret = I(mask); return true;
+}
+
+static void queue_controller(const int32_t *words, int count)
+{
+    pthread_mutex_lock(&A.q_lock);
+    if (!A.stop_requested && A.pending_pause < 0 && atomic_load(&A.state) == TL_JAVA_RUNNING) {
+        if (A.qn + count <= 4092) {
+            memcpy(A.q + A.qn, words, (size_t)count * sizeof(*words)); A.qn += count;
+        } else {
+            // Never lose a key-up silently. The isolated Runner reports failure
+            // instead of allowing a game to keep acting on a stuck controller.
+            atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true);
+            tl_log_line("javaapp: controller input queue overflow");
+        }
+    }
+    pthread_mutex_unlock(&A.q_lock);
+}
+static void java_pad_key(jobj *event, int device, int action, int code, int64_t down, int64_t time)
+{
+    int32_t words[8] = {11, device, action, code, (int32_t)down, (int32_t)(down >> 32), (int32_t)time, (int32_t)(time >> 32)};
+    queue_controller(words, 8); tl_jni_unref(event);
+}
+static void java_pad_motion(jobj *event, int device, int source, int64_t down, int64_t time)
+{
+    int32_t words[56] = {12, device, source, 0, (int32_t)down, (int32_t)(down >> 32), (int32_t)time, (int32_t)(time >> 32)};
+    float axes[48];
+    if (tl_input_event_axes(event, axes)) { memcpy(words + 8, axes, sizeof(axes)); queue_controller(words, 56); }
+    tl_jni_unref(event);
 }
 
 /* ---- files in the APKs: 0 the app's, 1 the platform's resources, 2.. the app's splits */
@@ -500,6 +536,7 @@ static const struct { const char *name, *sig; dvm_native_fn fn; } k_native[] = {
     { "requestRender", "()V", N_requestRender },
     { "setContentView", "(Ljava/lang/Object;)V", N_setContentView },
     { "pollInput", "()[I", N_pollInput },
+    { "controllerMask", "()I", N_controllerMask },
     { "vibrate", "(J)V", N_vibrate },
     { "openUrl", "(Ljava/lang/String;)V", N_openUrl },
     { "exit", "()V", N_exit },
@@ -1213,7 +1250,10 @@ bool tl_javaapp_start(const tl_javaapp_config *cfg)
     int expected = TL_JAVA_UNLOADED;
     if (!cfg || !cfg->apk_path || !cfg->data_dir || cfg->width <= 0 || cfg->height <= 0 ||
         !atomic_compare_exchange_strong(&A.state, &expected, TL_JAVA_STARTING)) return false;
+    static const tl_pad_sink sink = { java_pad_key, java_pad_motion };
+    tl_pad_set_sink(&sink);
     if (start_app(cfg)) return true;
+    tl_pad_set_sink(NULL);
     atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true); return false;
 }
 
@@ -1222,13 +1262,15 @@ void tl_javaapp_touch(int phase, int id, float x, float y)
     union { float f; int32_t i; } fx, fy; fx.f = x; fy.f = y;
     pthread_mutex_lock(&A.q_lock);
     if (A.stop_requested || atomic_load(&A.ended)) { pthread_mutex_unlock(&A.q_lock); return; }
-    if (A.qn + 4 <= 4096) { A.q[A.qn++] = phase; A.q[A.qn++] = id; A.q[A.qn++] = fx.i; A.q[A.qn++] = fy.i; }
+    if (A.qn + 4 <= 4092) { A.q[A.qn++] = phase; A.q[A.qn++] = id; A.q[A.qn++] = fx.i; A.q[A.qn++] = fy.i; }
     pthread_mutex_unlock(&A.q_lock);
 }
 void tl_javaapp_key(int code, bool down) { tl_javaapp_touch(4, code, down ? 1e-45f : 0.0f, 0); }
 void tl_javaapp_back(void) { tl_javaapp_touch(5, 0, 0, 0); }
 void tl_javaapp_set_paused(bool p)
 {
+    tl_pad_state released = {0};
+    for (int i = 0; i < TL_PADS; i++) if (tl_pad_connected(i)) tl_pad_update(i, &released);
     pthread_mutex_lock(&A.q_lock);
     if (!A.stop_requested && !atomic_load(&A.ended)) {
         /* onResume may synchronously wait for a GL job. Rendering must resume
@@ -1242,6 +1284,9 @@ tl_javaapp_state tl_javaapp_get_state(void) { return atomic_load(&A.state); }
 bool tl_javaapp_stop(void)
 {
     if (!A.app_created) return false;
+    tl_pad_state released = {0};
+    for (int i = 0; i < TL_PADS; i++) if (tl_pad_connected(i)) tl_pad_update(i, &released);
+    tl_pad_set_sink(NULL);
     pthread_mutex_lock(&A.q_lock);
     A.stop_requested = true;
     if (atomic_load(&A.state) != TL_JAVA_FAILED) atomic_store(&A.state, TL_JAVA_STOPPING);

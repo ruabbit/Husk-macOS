@@ -18,8 +18,14 @@ public final class MotionEvent extends InputEvent {
     private float[] rxs, rys;           /* on the screen */
     private long downTime, eventTime;
     private float[] axisScroll;
+    private float[] joystickAxes;
+    private int deviceId = 1;
 
     private MotionEvent() {}
+    public static MotionEvent huskJoystick(long down, long time, int device, int source, float[] axes) {
+        MotionEvent e = huskObtain(down, time, ACTION_MOVE, 1, new int[] {0}, new float[] {axes[AXIS_X]}, new float[] {axes[AXIS_Y]});
+        e.deviceId = device; e.source = source; e.joystickAxes = axes.clone(); return e;
+    }
     /** Husk's driver: a whole event at once, in screen coordinates. */
     public static MotionEvent huskObtain(long downTime, long eventTime, int action, int count, int[] ids, float[] xs, float[] ys) {
         MotionEvent e = new MotionEvent();
@@ -39,13 +45,19 @@ public final class MotionEvent extends InputEvent {
         int[] ids = new int[pointerCount]; float[] x = new float[pointerCount], y = new float[pointerCount];
         for (int i = 0; i < pointerCount; i++) { ids[i] = props[i].id; x[i] = coords[i].x; y[i] = coords[i].y; }
         MotionEvent e = huskObtain(downTime, eventTime, action, pointerCount, ids, x, y);
-        e.source = source; e.buttonState = buttonState; e.metaState = metaState; e.flags = flags;
+        e.source = source; e.buttonState = buttonState; e.metaState = metaState; e.flags = flags; e.deviceId = deviceId;
+        if ((source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK && pointerCount > 0) {
+            e.joystickAxes = new float[48];
+            for (int axis = 0; axis < 48; axis++) e.joystickAxes[axis] = coords[0].getAxisValue(axis);
+        }
         return e;
     }
     public static MotionEvent obtain(MotionEvent o) {
         MotionEvent e = new MotionEvent();
         e.downTime = o.downTime; e.eventTime = o.eventTime; e.action = o.action; e.count = o.count; e.ids = o.ids.clone(); e.xs = o.xs.clone(); e.ys = o.ys.clone();
         e.rxs = o.rxs.clone(); e.rys = o.rys.clone(); e.source = o.source; e.buttonState = o.buttonState; e.flags = o.flags; e.metaState = o.metaState;
+        e.deviceId = o.deviceId; e.joystickAxes = o.joystickAxes == null ? null : o.joystickAxes.clone();
+        e.axisScroll = o.axisScroll == null ? null : o.axisScroll.clone();
         return e;
     }
     public static MotionEvent obtainNoHistory(MotionEvent o) { return obtain(o); }
@@ -82,13 +94,17 @@ public final class MotionEvent extends InputEvent {
     public final float getYPrecision() { return 1f; }
     public final float getAxisValue(int axis) { return getAxisValue(axis, 0); }
     public final float getAxisValue(int axis, int i) {
+        if (joystickAxes != null) return axis >= 0 && axis < joystickAxes.length ? joystickAxes[axis] : 0;
         if (axis == AXIS_X) return getX(i);
         if (axis == AXIS_Y) return getY(i);
         if (axis == AXIS_PRESSURE) return getPressure();
         if (axisScroll != null && (axis == AXIS_VSCROLL || axis == AXIS_HSCROLL)) return axisScroll[axis == AXIS_VSCROLL ? 0 : 1];
         return 0f;
     }
-    public final void getPointerCoords(int i, PointerCoords out) { out.x = xs[i]; out.y = ys[i]; out.pressure = getPressure(); out.size = 0.1f; }
+    public final void getPointerCoords(int i, PointerCoords out) {
+        out.clear(); out.x = xs[i]; out.y = ys[i]; out.pressure = getPressure(); out.size = 0.1f;
+        if (joystickAxes != null) for (int axis = 0; axis < joystickAxes.length; axis++) out.setAxisValue(axis, joystickAxes[axis]);
+    }
     public final void getPointerProperties(int i, PointerProperties out) { out.id = ids[i]; out.toolType = TOOL_TYPE_FINGER; }
     public final int getToolType(int i) { return TOOL_TYPE_FINGER; }
     public final int getButtonState() { return buttonState; }
@@ -115,8 +131,8 @@ public final class MotionEvent extends InputEvent {
     public final int getFlags() { return flags; }
     public final int getEdgeFlags() { return edgeFlags; }
     public final void setEdgeFlags(int f) { edgeFlags = f; }
-    public final int getDeviceId() { return 1; }
-    public final InputDevice getDevice() { return InputDevice.getDevice(1); }
+    public final int getDeviceId() { return deviceId; }
+    public final InputDevice getDevice() { return InputDevice.getDevice(deviceId); }
     public final int getDisplayId() { return 0; }
     public final void offsetLocation(float dx, float dy) { if (dx != 0 || dy != 0) for (int i = 0; i < count; i++) { xs[i] += dx; ys[i] += dy; } }
     public final void setLocation(float x, float y) { offsetLocation(x - xs[0], y - ys[0]); }
@@ -158,12 +174,16 @@ public final class MotionEvent extends InputEvent {
     @Override public String toString() { return "MotionEvent { action=" + actionToString(action) + ", x=" + xs[0] + ", y=" + ys[0] + ", pointers=" + count + " }"; }
     public static final class PointerCoords {
         public float x, y, pressure, size, touchMajor, touchMinor, toolMajor, toolMinor, orientation;
+        private float[] axes;
         public PointerCoords() {}
         public PointerCoords(PointerCoords o) { copyFrom(o); }
-        public void copyFrom(PointerCoords o) { x = o.x; y = o.y; pressure = o.pressure; size = o.size; }
-        public void clear() { x = y = pressure = size = 0; }
-        public float getAxisValue(int a) { return a == AXIS_X ? x : a == AXIS_Y ? y : a == AXIS_PRESSURE ? pressure : 0; }
-        public void setAxisValue(int a, float v) { if (a == AXIS_X) x = v; else if (a == AXIS_Y) y = v; else if (a == AXIS_PRESSURE) pressure = v; }
+        public void copyFrom(PointerCoords o) { x = o.x; y = o.y; pressure = o.pressure; size = o.size; axes = o.axes == null ? null : o.axes.clone(); }
+        public void clear() { x = y = pressure = size = 0; axes = null; }
+        public float getAxisValue(int a) { return a == AXIS_X ? x : a == AXIS_Y ? y : a == AXIS_PRESSURE ? pressure : axes != null && a >= 0 && a < axes.length ? axes[a] : 0; }
+        public void setAxisValue(int a, float v) {
+            if (a == AXIS_X) x = v; else if (a == AXIS_Y) y = v; else if (a == AXIS_PRESSURE) pressure = v;
+            else if (a >= 0 && a < 48) { if (axes == null) axes = new float[48]; axes[a] = v; }
+        }
         // ---- generated by tools/compat/fillmembers.py (PointerCoords): the platform's members this class does not write (signatures only)
         public boolean isResampled;
         public float relativeX;

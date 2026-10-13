@@ -64,6 +64,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property dispatch_queue_t lifecycleQueue;
 @property NSArray<NSString *> *runtimePaths;
 @property NSMutableSet<NSNumber *> *heldKeys;
+@property NSMapTable<GCController *,NSNumber *> *controllerSlots;
 @property MacTextInput *textInput;
 @property BOOL captureRequested, cursorCaptured;
 - (void)updateCursorCapture;
@@ -344,7 +345,7 @@ static int androidKey(unsigned code)
         for(NSNumber *key in self.heldKeys){if(javaapp)tl_javaapp_key(key.intValue,false);else if(nativeactivity)tl_na_key(key.intValue,false);else if(unity)tl_unity_key(key.intValue,false,0);else tl_ga_key(key.intValue,false,0);}
         [self.heldKeys removeAllObjects];
         if(javaapp)tl_javaapp_touch(3,0,0,0);else if(nativeactivity)tl_na_touch(3,0,0,0);else if(unity)tl_unity_touch(3,0,0,0);else {tl_ga_touch(3,0,0,0);tl_ga_mouse_cancel();}
-        tl_pad_state empty={0};if(tl_pad_connected(0))tl_pad_update(0,&empty);
+        tl_pad_state empty={0};for(int slot=0;slot<TL_PADS;slot++)if(tl_pad_connected(slot))tl_pad_update(slot,&empty);
     }
 }
 - (void)releaseCursor {
@@ -479,10 +480,12 @@ static int androidKey(unsigned code)
             [self.textInput insertText:message[@"text"] replacementRange:NSMakeRange(NSNotFound,0)];
         }
         else if(guestRuntime()&&[source isEqual:@"controller"]) {
-            if(!tl_pad_connected(0))tl_pad_connect(0,"Husk Test Controller");
+            int slot=[message[@"slot"] intValue];if(slot<0||slot>=TL_PADS)return;
+            if(!tl_pad_connected(slot))tl_pad_connect(slot,"Husk Test Controller");
             tl_pad_state pad={.buttons=[message[@"buttons"] unsignedIntValue],.lx=[message[@"x"] floatValue],.ly=[message[@"y"] floatValue],.rx=[message[@"rx"] floatValue],.ry=[message[@"ry"] floatValue],.lt=[message[@"lt"] floatValue],.rt=[message[@"rt"] floatValue]};
-            tl_pad_update(0,&pad);self.controllerEvents++;
+            tl_pad_update(slot,&pad);self.controllerEvents++;
         }
+        else if(guestRuntime()&&[source isEqual:@"controller-disconnect"]) {tl_pad_disconnect([message[@"slot"] intValue]);}
         else if([source isEqual:@"pointer"]) {mac_input_pointer(&input,[message[@"x"] floatValue],[message[@"y"] floatValue],640,400,[message[@"down"] boolValue]);self.pointerEvents++;}
         else if([source isEqual:@"controller"]) {mac_input_controller(&input,[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"restart"] boolValue]);self.controllerEvents++;}
         else if([source isEqual:@"focus-lost"]) [self windowDidResignKey:[NSNotification notificationWithName:NSWindowDidResignKeyNotification object:self.window]];
@@ -546,17 +549,26 @@ static int androidKey(unsigned code)
 }
 - (void)setupController:(GCController *)controller
 {
+    if(!controller.extendedGamepad)return;
+    if(!self.controllerSlots)self.controllerSlots=[NSMapTable strongToStrongObjectsMapTable];
+    if([self.controllerSlots objectForKey:controller])return;
+    int slot=-1;
+    NSArray<NSNumber *> *used=self.controllerSlots.objectEnumerator.allObjects;
+    for(int i=0;i<TL_PADS;i++)if(![used containsObject:@(i)]){slot=i;break;}
+    if(slot<0)return;
+    [self.controllerSlots setObject:@(slot) forKey:controller];
     controller.handlerQueue=dispatch_get_main_queue();
     __weak Runner *weak=self;
     NSString *controllerName=controller.vendorName?:@"Game Controller";
+    if(guestRuntime())tl_pad_connect(slot,controllerName.UTF8String);
     controller.extendedGamepad.valueChangedHandler=^(GCExtendedGamepad *pad,GCControllerElement *element){
-        Runner *self=weak;if(!self.window.keyWindow||![self.state isEqual:@"running"])return;
+        Runner *self=weak;if(!self.window.keyWindow||![self.state isEqual:@"running"]||self.changingPause)return;
         if(guestRuntime()){
-            if(!tl_pad_connected(0))tl_pad_connect(0,controllerName.UTF8String);
+            if(!tl_pad_connected(slot))return;
             tl_pad_state state={.lx=pad.leftThumbstick.xAxis.value,.ly=-pad.leftThumbstick.yAxis.value,.rx=pad.rightThumbstick.xAxis.value,.ry=-pad.rightThumbstick.yAxis.value,.lt=pad.leftTrigger.value,.rt=pad.rightTrigger.value};
             GCControllerButtonInput *buttons[]={pad.buttonA,pad.buttonB,pad.buttonX,pad.buttonY,pad.leftShoulder,pad.rightShoulder,pad.leftThumbstickButton,pad.rightThumbstickButton,pad.buttonMenu,pad.buttonOptions,nil,pad.dpad.up,pad.dpad.down,pad.dpad.left,pad.dpad.right};
             for(int i=0;i<TL_PAD_BUTTONS;i++)if(buttons[i].pressed)state.buttons|=1u<<i;
-            tl_pad_update(0,&state);self.controllerEvents++;return;
+            tl_pad_update(slot,&state);self.controllerEvents++;return;
         }
         float x=pad.leftThumbstick.xAxis.value+pad.dpad.xAxis.value,y=pad.leftThumbstick.yAxis.value+pad.dpad.yAxis.value;
         mac_input_controller(&self->input,x,y,element==pad.buttonA&&pad.buttonA.pressed);self.controllerEvents++;
@@ -686,7 +698,13 @@ static int androidKey(unsigned code)
         if(!guestRuntime()&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
         for(GCController *controller in GCController.controllers)[self setupController:controller];
         [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){[self setupController:note.object];}];
-        [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){(void)note;[self clearInput];if(guestRuntime())tl_pad_disconnect(0);}];
+        [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){
+            GCController *controller=note.object;NSNumber *slot=[self.controllerSlots objectForKey:controller];
+            if(slot&&guestRuntime())tl_pad_disconnect(slot.intValue);
+            controller.extendedGamepad.valueChangedHandler=nil;controller.extendedGamepad.buttonMenu.pressedChangedHandler=nil;
+            [self.controllerSlots removeObjectForKey:controller];
+            if(!guestRuntime())mac_input_clear(&self->input);
+        }];
         [NSWorkspace.sharedWorkspace.notificationCenter addObserverForName:NSWorkspaceWillSleepNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){(void)note;if([self.state isEqual:@"running"])[self togglePause:nil];}];
     }
     __block NSUInteger heartbeat=0;

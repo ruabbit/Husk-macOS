@@ -143,6 +143,7 @@ import ImageIO
 struct LibraryView: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var model: LibraryModel
+    @State private var reporting: CompatSubject?
     var filtered: [LibraryGame] { model.games.filter { model.search.isEmpty || $0.title.localizedCaseInsensitiveContains(model.search) } }
     var body: some View {
         NavigationSplitView {
@@ -215,6 +216,16 @@ struct LibraryView: View {
             Button("好") { model.error = nil }
         } message: { Text(model.error ?? "") }
         .task { await model.reload() }
+        .sheet(item: $reporting) { MacCompatReportSheet(subject: $0) }
+        .onChange(of: model.session.state) { _, state in
+            guard ["exited", "failed"].contains(state),
+                  let game = model.games.first(where: { $0.id == model.session.gameID }),
+                  let package = game.packageName, CompatibilityStore.shared.shouldAsk(package) else { return }
+            CompatibilityStore.shared.markAsked(package)
+            reporting = CompatSubject(package: package, name: game.title, isGame: true,
+                iconPath: model.paths.game(game.id).appendingPathComponent("icon.data").path,
+                afterPlaying: true, runtime: game.runtime)
+        }
     }
 }
 
@@ -244,6 +255,7 @@ struct GameDetail: View {
     @ObservedObject var session: SessionController
     @State private var removeConfirmation = false
     @State private var saveConfirmation = false
+    @State private var reporting: CompatSubject?
     var running: Bool { session.active && session.gameID == game.id }
     var body: some View {
         ScrollView {
@@ -280,7 +292,7 @@ struct GameDetail: View {
                                 Label("WASD 移动，鼠标控制视角；其他按键可在游戏中设置", systemImage: "keyboard")
                                 Label("支持手柄与中文文字输入", systemImage: "gamecontroller")
                                 Label("Esc 打开游戏菜单；结束游戏时等待世界保存完成", systemImage: "pause.circle")
-                            } else if game.runtime == "unity" || game.runtime == "nativeactivity" {
+                            } else if game.runtime == "unity" || game.runtime == "nativeactivity" || game.runtime == "java" {
                                 Label("鼠标点击和拖动对应屏幕触摸", systemImage: "cursorarrow")
                                 Label("键盘和手柄操作取决于游戏本身", systemImage: "gamecontroller")
                                 Label("⌘P 暂停或继续；⌘Q 结束游戏", systemImage: "pause.circle")
@@ -291,6 +303,11 @@ struct GameDetail: View {
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
                     }
+                }
+                if let package = game.packageName, game.fixture == nil {
+                    MacCompatibilitySection(subject: CompatSubject(package: package, name: game.title, isGame: true,
+                        iconPath: model.paths.game(game.id).appendingPathComponent("icon.data").path,
+                        runtime: game.runtime), reporting: $reporting)
                 }
                 GroupBox("游戏设置") {
                     VStack(alignment: .leading, spacing: 12) {
@@ -319,16 +336,20 @@ struct GameDetail: View {
         .confirmationDialog("永久清除“\(game.title)”的存档？", isPresented: $saveConfirmation) {
             Button("清除存档", role: .destructive) { model.deleteSave(game) }
         } message: { Text("此操作无法撤销，游戏文件会保留。") }
+        .sheet(item: $reporting) { MacCompatReportSheet(subject: $0) }
     }
 }
 
 struct SettingsView: View {
     @ObservedObject var model: LibraryModel
+    @AppStorage(CompatibilityStore.askKey) private var askCompatibility = false
     var body: some View {
         Form {
             LabeledContent("资料目录") { Text(model.paths.root.path).font(.caption).textSelection(.enabled) }
             Button("在访达中打开资料目录") { NSWorkspace.shared.open(model.paths.root) }
             Text("导入会复制游戏到资料库。移除游戏保留存档；清除存档需在游戏详情中单独操作。").foregroundStyle(.secondary)
+            Toggle("游戏结束后询问运行情况", isOn: $askCompatibility)
+            Link("上游社区兼容性列表", destination: CompatibilityStore.site)
         }.padding(24).frame(width: 520)
     }
 }

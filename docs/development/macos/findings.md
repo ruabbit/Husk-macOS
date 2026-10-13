@@ -1,5 +1,13 @@
 # 审计发现
 
+## 2026-10-13 同步与输入
+
+- 上游 3 个提交只改兼容性查询/报告 UI，TLReport.nativeEngine、TLUnityView、project.yml、共享 PlayAPI、图形依赖构建没有增量。复核后保留当前 Java 分发；PR #82 仍 OPEN，head e304785。
+- 新共享 CompatibilityStore 原为 UIKit / iOS 专用。当前条件编译复用客户端、缓存和回退，macOS 报告明确带系统/运行组件；不自动发送报告。官方结果注明 iPhone 来源，未改变本地 playable 规则。POST 失败不跨站重发，避免重复公开报告。
+- Java 手柄缺口不止 sink：InputDevice 只枚举触摸屏、MotionEvent 丢失 device/axes，ViewGroup 将摇杆坐标用于点击命中。现已接 AppRunner 所属线程、元数据/热插拔、焦点分发和复制轴值，并用真实 DEX 验证。Context7 两次常规 Android 查询无结果，reference 命中通用移动事件与轴值 API，按官方文档使用 SOURCE_JOYSTICK / ACTION_MOVE / onGenericMotionEvent。
+- 首轮 7 项针对性回归通过。第一次 Swift 测试构建因两个 Compatibility.swift 文件同名失败，测试改名 CommunityCompatibility.swift 后通过。线上只读 GET 返回 231 条；未发布任何报告。一次写开发记录的 Python stdin UTF-8 解码失败，改用 patch 更新。
+- CUA 选择当前应用及 reset 重连两次均 native pipe closed，旧 Product PID 98251 保持空闲。只构建不依赖 PackageMac 的目标，未绕过活动候选保护；已异步请求用户正常退出。
+
 ## 2026-10-12 Java / Unity 6
 
 - 上游将 Unity 6、SDL（DXVK 除外）、Python、Flutter 等交给 Java，缺口在 macOS 的受控 boot 资源、框架编译和 Runner 接线。当前已复用上游真实实现接入；未重写引擎或只加白名单。

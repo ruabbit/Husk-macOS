@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-10-13 源码适配与后台回归，候选更新待退出
+
+起始 HEAD 5c3612b，工作树干净，origin 两分支无新增，无进行中的 Git 操作或游戏/VM/构建。昨日代码 fcce001 的 [GitHub CI 38193490652](https://github.com/ruabbit/Husk-macOS/actions/runs/38193490652) 已成功，hardware 跳过。上游 f0bd526..8e79a47 共 3 提交、10 路径，新增社区兼容性查询/报告和服务地址回退；共享运行时、PlayAPI 和图形构建无增量。main 快进后 macOS 无文本冲突合并。当前阶段仅保存本地源码检查点，尚未推送。
+
+当前空闲 Husk PID 98251 从唯一 Product 运行。CUA 选择应用及 reset 后重连均 native pipe closed，无法正常退出；未替换活动候选，已异步请求用户退出。源码适配继续，打包与完整回归待进程退出。
+
+社区功能复用上游 CompatibilityStore，新增 AppKit 图标转换、应用独立缓存和 macOS 详情/Store 报告入口。社区结果说明 iPhone 来源，不参与启动能力判断；报告明确 Mac 系统和实际运行组件，代码/资源摘要区分开发 build。手动发送前显示公开字段，游戏后询问默认关闭，未自动发送或提交测试报告。GET 服务回退、4xx/坏数据保留缓存、POST 禁止跨站重发、报告图标和字段在隔离 URLProtocol 中通过；真实 Swift 客户端只读 GET 成功解码 231 条。
+
+Java 手柄已接同一个 AppRunner 输入队列，支持按钮、摇杆/帽轴/扳机、device/source/时间、InputDevice 元数据和 InputManager 热插拔。MotionEvent 复制/PointerCoords 保留轴，焦点视图接通通用移动事件；macOS 按设备分配独立槽。断连释放相应设备，失焦释放所有输入，暂停期间不接受新手柄事件；销毁先派发已排队释放，避免 stop 清队列丢失 key-up。原存储关闭和 guest worker 检查不变。顺手修正 Java 详情误显示 Orbit 操作说明。
+
+仅构建不依赖 PackageMac 的目标，主 App / NativeRunner 与当前 framework DEX 均编译完成。38/38 不依赖新包的 CTest 通过，新增真实 DEX 两手柄、轴/事件复制、热插拔/回调线程、断连、暂停拒绝输入、按住按钮正常关闭；已有 Java 异常销毁/写失败/线程未退/SQLite 未提交等回归保持通过。默认共 42 项，macos-java-session、macos-input-vulkan、macos-library-session、macos-library-upgrade 四项未按新候选执行；新增打包会话的手柄/失焦验证仍开放。最终 bundle 校验未执行，现有 bundle-verification.json 仍属于 10/12，不能拿它验收本轮。首次 Swift 测试因文件同名失败，改名后已解决。
+
+构建仍只用 build/macos，VM=ON，日志复用 current-upstream-build.log、current-upstream-runtime-final-build.log、current-upstream-ctest.log、current-upstream-community-tests.log 与 current-upstream-community-live.log。没有运行用户 APK、Android VM 或可见游戏，没有修改 APK、存档或 Android 磁盘。PR #82 仍 OPEN / e304785；Egg 未重跑，Play 个人登录仍失败，WebKit 持久化与其他 profiles 继续开放。
+
+收尾步骤：确认旧候选正常退出后，原位构建并跑完整 42 项和 verify_macos_bundle.py；通过后正常推送本地 main=8e79a47 与迁移分支，读回 SHA，最后 CUA 只重开一次 Product。保持 codex/macos-p0，不 force push。
+
 ## 2026-10-12 上游同步与 Java 运行链路
 
 开始于干净的 `12f3cc0`，origin 两分支无新增，无 Husk/Runner/本项目 VM 或竞争构建。上游 `8a9dc1b..f0bd526` 共 70 个提交、139 路径；本地 main 快进，再合入 macOS，没有文本冲突。上游本轮 Java/Dalvik、bionic、WebView、preferences、GLES 等更新实际进入当前构建；Store/PlayAPI 与固定图形依赖无增量。原 macOS 输入、固定画布、默认失焦继续、分包和生命周期适配保留。首次链接发现上游 Java 的 `tl_manifest_gles` 被放在未编入的 SDL driver，已拆为共享模块并补 UTF-8/UTF-16、stripped resource ID 和损坏边界测试。

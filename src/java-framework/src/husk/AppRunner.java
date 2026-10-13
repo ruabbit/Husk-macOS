@@ -266,6 +266,24 @@ public final class AppRunner {
                 if (phase == 7) { InputMethods.deliverPending(); continue; }
                 if (phase == 8) { applyInsets(); continue; }
                 if (phase == 9) { Web.deliver(); continue; }
+                if (phase == 11 || phase == 12) {
+                    int base = 1 + 4 * k;
+                    long down = (ev[base + 4] & 0xffffffffL) | ((long)ev[base + 5] << 32);
+                    long time = (ev[base + 6] & 0xffffffffL) | ((long)ev[base + 7] << 32);
+                    Activity activity = top();
+                    if (phase == 11) {
+                        KeyEvent key = new KeyEvent(down, time, ev[base + 2], ev[base + 3], 0, 0, id, 0, 0, android.view.InputDevice.SOURCE_GAMEPAD);
+                        if (activity != null) activity.dispatchKeyEvent(key); else ViewRoot.dispatchKey(key);
+                        k++;
+                    } else {
+                        float[] axes = new float[48];
+                        for (int axis = 0; axis < axes.length; axis++) axes[axis] = Float.intBitsToFloat(ev[base + 8 + axis]);
+                        MotionEvent motion = MotionEvent.huskJoystick(down, time, id, ev[base + 2], axes);
+                        if (activity != null) activity.dispatchGenericMotionEvent(motion); else ViewRoot.dispatchGeneric(motion);
+                        motion.recycle(); k += 13;
+                    }
+                    continue;
+                }
                 if (phase == 4) {
                     long t = SystemClock.uptimeMillis();
                     KeyEvent ke = new KeyEvent(t, t, ev[3 + 4 * k] != 0 ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP, id, 0);

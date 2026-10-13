@@ -1,11 +1,12 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "8a9dc1bffc63c2d7cc6c5c3642c8d2ac4ae8bcd0",
-  "integratedRevision": "f0bd526cdf15356cac1d272cfebe6a5ea11ef6fa",
-  "checkedOn": "2026-10-12",
-  "commitCount": 70,
-  "integration": "Merged through fork main with Git ancestry and no text conflicts. Java boot resources and source-built framework are pinned, verified and packaged; the independent Java Runner now covers startup, input, lifecycle, worker quiescence and storage closure. Default CTest 40/40 and 17 Mach-O bundle checks pass, including 194 Java resources. Real-engine, controller, WebKit storage and Play login gaps remain open in docs/development/macos/upstream-parity.md.",
+  "previousRevision": "f0bd526cdf15356cac1d272cfebe6a5ea11ef6fa",
+  "integratedRevision": "8e79a47b3f771eddd005bf338749e01a96443689",
+  "checkedOn": "2026-10-13",
+  "commitCount": 3,
+  "integration": "Merged locally through fork main without conflicts. Community compatibility is adapted to macOS; Java controller dispatch, devices and lifecycle release have real DEX coverage. 38 non-package CTests pass. Product replacement, the complete default suite, bundle verification and pushes remain pending because CUA cannot quit the idle active candidate. See docs/development/macos/upstream-parity.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
-  "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522"
+  "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
+  "deliveryStatus": "pending-package-validation"
 }

@@ -13,6 +13,7 @@ public final class Looper {
     static void deliverInput() {
         InputSink s = sInput;
         if (s == null) return;
+        android.hardware.input.InputManager.huskRefreshDevices();
         int[] ev = husk.Native.pollInput();
         if (ev != null) s.deliver(ev);
     }

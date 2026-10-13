@@ -101,7 +101,8 @@ set(MAC_PLAY_SOURCES
     src/app/Husk/Play/Protobuf.swift src/app/Husk/Play/PlayDevice.swift src/app/Husk/Play/PlayAPI.swift
     ${MAC}/Play/GoogleLoginPolicy.swift ${MAC}/Play/GoogleBrowserLogin.swift
     ${MAC}/Play/PlayCredentials.swift ${MAC}/Play/PlayDownload.swift ${MAC}/Play/MacPlayStore.swift)
-add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift ${MAC}/HuskMac/HuskMac.swift "${HUSK_ICON}")
+add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift
+    ${MAC}/HuskMac/HuskMac.swift ${MAC}/HuskMac/MacCompatibility.swift src/app/Husk/Compatibility.swift "${HUSK_ICON}")
 # Swift's whole-module link does not follow the object-level resource copy rule.
 add_custom_target(HuskMacResources DEPENDS "${CMAKE_BINARY_DIR}/HuskMac.app/Contents/Resources/Husk.icns")
 add_dependencies(HuskMac MacIcon HuskMacResources)
@@ -148,6 +149,11 @@ add_custom_target(PackageMac ALL
     DEPENDS HuskMac NativeRunner Fixtures JavaRuntimeResources ${VM_PACKAGE_DEPENDS} VERBATIM)
 
 enable_testing()
+add_executable(MacCompatibilityTests tests/macos/CommunityCompatibility.swift src/app/Husk/Compatibility.swift)
+target_compile_options(MacCompatibilityTests PRIVATE -parse-as-library)
+target_link_libraries(MacCompatibilityTests PRIVATE "-framework AppKit" "-framework SwiftUI")
+add_test(NAME macos-community-compatibility COMMAND MacCompatibilityTests)
+set_tests_properties(macos-community-compatibility PROPERTIES TIMEOUT 30)
 add_executable(ManifestGLESTests tests/macos/ManifestGLES.c ${NEXT}/husk-tl-manifest.c)
 target_link_libraries(ManifestGLESTests PRIVATE SharedCore)
 add_test(NAME java-manifest-gles COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/ManifestGLES.py "$<TARGET_FILE:ManifestGLESTests>")
@@ -175,7 +181,7 @@ target_link_libraries(JavaLifecycleTests PRIVATE NativeRuntime)
 add_dependencies(JavaLifecycleTests JavaRuntimeResources JavaLifecycleFixture)
 add_custom_command(TARGET JavaLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaLifecycleTests>" VERBATIM)
-foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted)
+foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted controller)
     add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")

@@ -30,6 +30,7 @@ public final class Native {
     public static native void requestRender();
     public static native void setContentView(Object view);
     public static native int[] pollInput();                  // packed touch events, or null
+    public static native int controllerMask();               // slots 0..3 have Android device ids 41..44
     public static native String[] pollText();                // typed text, deletes and actions from the keyboard
     public static native void showKeyboard(boolean show, int inputType, int imeOptions);
     public static native void setClipboard(String text);

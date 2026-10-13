@@ -1,0 +1,440 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+import CryptoKit
+#endif
+
+/// Husk's compatibility list (antiweb.lol): how each app runs for everyone, next to how it ran on this iPhone (GameStatus).
+///
+/// The list is fetched now and then and kept on disk, so it shows offline and costs nothing at launch. Reports go to the
+/// same site: how a game ran, sent from Husk with the device, iOS, build and JIT method filled in.
+@MainActor
+final class CompatibilityStore: ObservableObject {
+    static let shared = CompatibilityStore()
+
+    /// The site, then its Render address for when the domain does not answer. A different one can be put first for testing
+    /// (defaults write com.husk.app husk.compatURL http://…).
+    static var sites: [URL] {
+        let custom = UserDefaults.standard.string(forKey: "husk.compatURL").flatMap(URL.init(string:))
+        return [custom, URL(string: "https://antiweb.lol"), URL(string: "https://antiweb-website.onrender.com")].compactMap { $0 }
+    }
+    /// The one that answered last, for links.
+    static var site: URL { shared.workingSite ?? sites[0] }
+    @Published private(set) var workingSite: URL?
+    @Published private(set) var error: String?
+    private let session: URLSession
+    private let endpoints: [URL]
+    private let cache: URL
+    private let defaults: UserDefaults
+
+    private static func log(_ message: String) {
+#if canImport(UIKit)
+        HuskLog.log("compat", message)
+#else
+        NSLog("compat: %@", message)
+#endif
+    }
+
+    /// The request on each site in turn until one answers with a status below 500 (a 4xx is the site's answer, not an outage).
+    private func call(_ path: String, retry: Bool = true, _ prepare: (inout URLRequest) -> Void = { _ in }) async throws -> (Data, HTTPURLResponse) {
+        var last: Error = URLError(.cannotConnectToHost)
+        let candidates = retry ? endpoints : [workingSite ?? endpoints[0]]
+        for site in candidates {
+            var request = URLRequest(url: site.appendingPathComponent(path))
+            request.timeoutInterval = 15
+            prepare(&request)
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse, http.statusCode < 500 else { throw URLError(.badServerResponse) }
+                if workingSite != site { workingSite = site; Self.log("using \(site.host ?? "?")") }
+                return (data, http)
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                Self.log("\(site.host ?? "?") did not answer: \(error.localizedDescription)")
+                last = error
+            }
+        }
+        throw last
+    }
+    /// Whether Husk asks how a game ran after playing it (Settings).
+    static let askKey = "husk.compatAsk"
+
+    enum Status: String, Codable {
+        case works, opens, broken, protected
+        var label: String {
+            switch self {
+            case .works: return "Works"
+            case .opens: return "Opens"
+            case .broken: return "Doesn\u{2019}t Work"
+            case .protected: return "Protected"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .works: return "checkmark.circle.fill"
+            case .opens: return "circle.lefthalf.filled"
+            case .broken: return "xmark.circle.fill"
+            case .protected: return "lock.fill"
+            }
+        }
+        var color: Color {
+            switch self {
+            case .works: return .green
+            case .opens: return .orange
+            case .broken: return .red
+            case .protected: return .secondary
+            }
+        }
+        var explanation: String {
+            switch self {
+            case .works: return "Runs and plays or works normally."
+            case .opens: return "Starts and shows its screens, but has not been fully tested or has problems."
+            case .broken: return "Crashes or closes while starting."
+            case .protected: return "Refuses to run outside a real Android phone (anti-cheat, anti-tamper or DRM). Husk does not get around that."
+            }
+        }
+    }
+
+    struct Entry: Codable {
+        let package: String
+        let name: String
+        let icon: String?
+        let official: Official?
+        let community: Community
+        struct Official: Codable { let status: Status; let note: String }
+        struct Community: Codable { let reports: Int; let counts: [String: Int] }
+
+        /// The official result when there is one, else what most people reported.
+        var status: Status? {
+            if let official { return official.status }
+            return community.counts.filter { $0.value > 0 }.max { $0.value < $1.value }.flatMap { Status(rawValue: $0.key) }
+        }
+    }
+
+    @Published private(set) var entries: [String: Entry] = [:]
+    @Published private(set) var updated: Date?
+    private var fetching = false
+
+    private static var cacheFile: URL {
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+#if os(macOS)
+        return root.appendingPathComponent("org.husk.HuskMac", isDirectory: true).appendingPathComponent("compatibility.json")
+#else
+        return root.appendingPathComponent("compatibility.json")
+#endif
+    }
+
+    init(session: URLSession = .shared, sites: [URL]? = nil, cache: URL? = nil, defaults: UserDefaults = .standard) {
+        self.session = session
+        self.endpoints = sites?.isEmpty == false ? sites! : Self.sites
+        self.cache = cache ?? Self.cacheFile
+        self.defaults = defaults
+        if let data = try? Data(contentsOf: self.cache), let list = try? JSONDecoder().decode([Entry].self, from: data) {
+            entries = Dictionary(list.map { ($0.package, $0) }, uniquingKeysWith: { a, _ in a })
+            updated = (try? FileManager.default.attributesOfItem(atPath: self.cache.path)[.modificationDate]) as? Date
+        }
+    }
+
+    func entry(_ package: String?) -> Entry? { package.flatMap { entries[$0] } }
+
+    /// The list again when the copy on disk is older than a few hours (or `force`).
+    func refresh(force: Bool = false) async {
+        guard !fetching, force || updated.map({ Date().timeIntervalSince($0) > 6 * 3600 }) ?? true else { return }
+        fetching = true
+        error = nil
+        defer { fetching = false }
+        struct Response: Decodable { let apps: [Entry] }
+        do {
+            let (data, response) = try await call("api/apps")
+            guard response.statusCode == 200 else { throw URLError(.badServerResponse) }
+            let list = try JSONDecoder().decode(Response.self, from: data).apps
+            entries = Dictionary(list.map { ($0.package, $0) }, uniquingKeysWith: { a, _ in a })
+            updated = Date()
+            try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? JSONEncoder().encode(list).write(to: cache, options: .atomic)
+            Self.log("list updated: \(list.count) apps")
+        } catch {
+            if !Task.isCancelled { self.error = error.localizedDescription }
+            Self.log("list not updated: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: reports
+
+    /// What Husk fills in on every report.
+    static var device: String {
+        var info = utsname()
+        uname(&info)
+        let machine = withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+#if canImport(UIKit)
+        return machine.isEmpty ? UIDevice.current.model : machine
+#else
+        return "Mac (\(machine))"
+#endif
+    }
+    static var jitMethod: String {
+#if canImport(UIKit)
+        switch JITCoordinator.shared.resolvedMethod {
+        case .builtIn: return "StikJIT (built in)"
+        case .stikDebug: return "StikDebug"
+        case .trollStore: return "TrollStore"
+        case .jailbreak: return "Jailbreak"
+        case .automatic: return "Other"
+        }
+#else
+        return "macOS native Runner"
+#endif
+    }
+    static var systemVersion: String {
+#if canImport(UIKit)
+        return UIDevice.current.systemVersion
+#else
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+#endif
+    }
+#if os(macOS)
+    static let build: String = {
+        // Development candidates reuse the same CFBundleVersion. Identify the
+        // code and Java resources so reports and prompt suppression track updates.
+        var hash = SHA256()
+        let root = Bundle.main.bundleURL
+        let files = [Bundle.main.executableURL,
+            root.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
+            root.appendingPathComponent("Contents/Resources/JavaRuntime/runtime-manifest.json")]
+        for file in files.compactMap({ $0 }) {
+            if let data = try? Data(contentsOf: file, options: .mappedIfSafe) { hash.update(data: data) }
+        }
+        let code = hash.finalize().prefix(6).map { String(format: "%02x", $0) }.joined()
+        return "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")-\(code)"
+    }()
+#else
+    static var build: String { (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "" }
+#endif
+
+    /// The app's launcher icon as a small PNG, for a first report on an app the list has no icon for.
+    static func iconPNG(_ path: String?) -> String? {
+#if canImport(UIKit)
+        guard let path, let image = UIImage(contentsOfFile: path) else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let size = CGSize(width: 128, height: 128)
+        let png = UIGraphicsImageRenderer(size: size, format: format).pngData { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        return png.count <= 60_000 ? png.base64EncodedString() : nil
+#else
+        guard let path, let image = NSImage(contentsOfFile: path),
+              let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 128, pixelsHigh: 128, bitsPerSample: 8,
+                                            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                            bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        image.draw(in: NSRect(x: 0, y: 0, width: 128, height: 128))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let png = bitmap.representation(using: .png, properties: [:]), png.count <= 60_000 else { return nil }
+        return png.base64EncodedString()
+#endif
+    }
+
+    func send(package: String, name: String, isGame: Bool, status: Status, notes: String, author: String, iconPath: String? = nil, runtime: String? = nil) async throws {
+        var body: [String: String] = [
+            "package": package, "name": name, "type": isGame ? "game" : "app", "status": status.rawValue,
+            "device": Self.device, "ios": Self.systemVersion, "build": Self.build, "jit": Self.jitMethod,
+            "notes": notes, "author": author,
+        ]
+#if os(macOS)
+        // The upstream schema names its OS field `ios`. Keep the actual platform
+        // in both that field and the visible note, never submit an iPhone result.
+        body["notes"] = "[Husk macOS; \(Self.systemVersion); runtime: \(runtime ?? "unknown")]\n" + notes
+#endif
+        if body["author"]?.isEmpty == true { body["author"] = nil }
+        if entry(package)?.icon == nil, let icon = Self.iconPNG(iconPath) { body["icon"] = icon }
+        let payload = try JSONSerialization.data(withJSONObject: body)
+        // A lost POST response may already have created a report. Do not repeat
+        // it at the fallback site without server-side idempotency.
+        let (data, http) = try await call("api/reports", retry: false) {
+            $0.httpMethod = "POST"
+            $0.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            $0.httpBody = payload
+            $0.timeoutInterval = 20
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+            throw NSError(domain: "Compatibility", code: 1, userInfo: [NSLocalizedDescriptionKey: message ?? "The compatibility list could not be reached."])
+        }
+        Self.log("reported \(package): \(status.rawValue)")
+        markAsked(package)
+        await refresh(force: true)
+    }
+
+    // Ask once per game per Husk build: a new build can change how a game runs.
+    private func askedKey(_ package: String) -> String { "husk.compatAsked.\(package)" }
+    func shouldAsk(_ package: String?) -> Bool {
+#if os(macOS)
+        let defaultAsk = false
+#else
+        let defaultAsk = true
+#endif
+        guard let package, defaults.object(forKey: Self.askKey) as? Bool ?? defaultAsk else { return false }
+        return defaults.string(forKey: askedKey(package)) != Self.build
+    }
+    func markAsked(_ package: String) { defaults.set(Self.build, forKey: askedKey(package)) }
+
+    func pageURL(_ package: String) -> URL { (workingSite ?? endpoints[0]).appendingPathComponent("app").appendingPathComponent(package) }
+}
+
+/// What a report is about, for the sheet.
+struct CompatSubject: Identifiable {
+    let package: String
+    let name: String
+    let isGame: Bool
+    /// The icon Husk shows for it, sent along when the list has none.
+    var iconPath: String? = nil
+    /// Filled in from a crash: it did not work, and why.
+    var crash: String? = nil
+    /// After playing, rather than from the page's button.
+    var afterPlaying = false
+    var runtime: String? = nil
+    var id: String { package }
+}
+
+#if canImport(UIKit)
+/// The game page's section: how it runs for everyone, and a way to add how it ran here.
+struct CompatibilitySection: View {
+    let subject: CompatSubject
+    @Binding var reporting: CompatSubject?
+    @ObservedObject private var compat = CompatibilityStore.shared
+
+    var body: some View {
+        let entry = compat.entry(subject.package)
+        Section {
+            if let entry, let status = entry.status {
+                HStack(spacing: 12) {
+                    Image(systemName: status.symbol).font(.title3).foregroundStyle(status.color)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(status.label).font(.body.weight(.semibold))
+                        Text(entry.official?.note.isEmpty == false ? entry.official!.note : status.explanation)
+                            .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.vertical, 2)
+                if entry.community.reports > 0 {
+                    LabeledContent("Player Reports", value: "\(entry.community.reports)")
+                }
+            } else {
+                Text("Not on the list yet. Be the first to say how it runs.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Button { reporting = subject } label: { Label("Report How It Ran", systemImage: "square.and.pencil") }
+            Link(destination: compat.pageURL(subject.package)) { Label("Open on antiweb.lol", systemImage: "safari") }
+        } header: {
+            Text("Compatibility")
+        } footer: {
+            if entry?.official != nil { Text("Tested by the Husk team on an iPhone.") }
+        }
+    }
+}
+
+/// The report: works, opens or does not work, and a note. Everything else is filled in.
+struct CompatReportSheet: View {
+    let subject: CompatSubject
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("husk.compatAuthor") private var author = ""
+    @State private var status: CompatibilityStore.Status?
+    @State private var notes = ""
+    @State private var sending = false
+    @State private var error: String?
+    @State private var sent = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    ForEach([CompatibilityStore.Status.works, .opens, .broken], id: \.self) { s in
+                        Button { status = s } label: {
+                            HStack {
+                                Label(s == .opens ? "Opens, but Has Problems" : s.label, systemImage: s.symbol)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if status == s { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                            }
+                        }
+                    }
+                } header: {
+                    Text(subject.afterPlaying ? "How did \(subject.name) run?" : "How does \(subject.name) run?")
+                }
+                Section("Notes") {
+                    TextField("What worked, what didn\u{2019}t, how far you got", text: $notes, axis: .vertical)
+                        .lineLimit(3...8)
+                }
+                Section {
+                    TextField("Anonymous", text: $author)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Your Name")
+                } footer: {
+                    Text("Sent with it: \(CompatibilityStore.device), iOS \(UIDevice.current.systemVersion), Husk build \(CompatibilityStore.build), JIT from \(CompatibilityStore.jitMethod). It shows on antiweb.lol for everyone.")
+                }
+                if let error {
+                    Section { Text(error).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle(sent ? "Thanks!" : "Report")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(subject.afterPlaying ? "Not Now" : "Cancel") {
+                        if subject.afterPlaying { CompatibilityStore.shared.markAsked(subject.package) }
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if sending { ProgressView() } else {
+                        Button("Send") { send() }.disabled(status == nil)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            if let crash = subject.crash {
+                status = .broken
+                if notes.isEmpty { notes = crash }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func send() {
+        guard let status else { return }
+        sending = true
+        error = nil
+        Task {
+            do {
+                try await CompatibilityStore.shared.send(package: subject.package, name: subject.name, isGame: subject.isGame,
+                                                         status: status, notes: notes, author: author, iconPath: subject.iconPath)
+                sent = true
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+            }
+            sending = false
+        }
+    }
+}
+
+/// A small label for lists: the app's status on the compatibility list.
+struct CompatBadge: View {
+    let status: CompatibilityStore.Status
+    var body: some View {
+        Label(status.label, systemImage: status.symbol)
+            .labelStyle(.titleAndIcon)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(status.color)
+    }
+}
+#endif
