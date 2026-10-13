@@ -44,6 +44,8 @@ The macOS candidate now embeds Android userspace components under `Contents/Reso
 
 The build copies the original ART, ICU, Conscrypt and tzdata `NOTICE.html.gz` files and system `NOTICE.xml.gz` into `JavaRuntime/Notices`; it also packages framework/compiler provenance and the source image's build properties. These notices preserve the source material but do not establish complete redistribution compliance. Before P6, map the selected binary and resource subset to its exact corresponding sources and licenses, audit generated framework code and third-party components, and satisfy applicable source/notice requirements. A pinned upstream image and a successful resource hash check prove identity, not release clearance.
 
+The same fixed image also supplies `JavaRuntime/android-system/fonts` and its two font configuration XML files. All system fonts, including CJK, are retained. Android font symlinks are materialized within that extracted tree. The legacy XML refers to two filenames absent from the image; the dependency lock records aliases from `NotoSerifKhmer-Regular.otf` to the shipped `.ttf` and from `NotoColorEmojiLegacy.ttf` to `NotoColorEmoji.ttf`. Resource validation checks both alias bytes and every configured font. The original system notice covers the extraction source; P6 must still map the selected fonts and their aliases to the applicable font licenses and notices. No macOS host fonts are copied.
+
 ### Before distributing a macOS binary
 
 1. Resolve each executable's license combination, including the QEMU/libssh/OpenSSL chain and the NativeRunner/MoltenVK GPL version choice. Repeat the closure audit after rebuilding; review ANGLE's compiled dependencies separately.

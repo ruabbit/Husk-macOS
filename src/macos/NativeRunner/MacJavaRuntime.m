@@ -40,19 +40,30 @@ static BOOL validate(NSString *root)
         NSDictionary *entry=files[name];
         if(![entry isKindOfClass:NSDictionary.class]||![sha256(path) isEqual:entry[@"sha256"]])return NO;
     }
-    return files[@"husk-framework.dex"]&&files[@"framework-res.apk"]&&files[@"com.android.art/javalib/core-oj.jar"];
+    return files[@"husk-framework.dex"]&&files[@"framework-res.apk"]&&files[@"com.android.art/javalib/core-oj.jar"]&&
+        files[@"android-system/etc/fonts.xml"]&&files[@"android-system/etc/font_fallback.xml"];
+}
+BOOL mac_runtime_configure(NSString *root)
+{
+    static NSString *configuredRoot;
+    if([configuredRoot isEqual:root])return YES;
+    if(!validate(root)){fprintf(stderr,"runtime: resource verification failed\n");return NO;}
+    void tl_set_cacerts_dir(const char *);
+    void tl_set_system_fonts_dir(const char *);
+    tl_set_cacerts_dir([root stringByAppendingPathComponent:@"com.android.conscrypt/cacerts"].fileSystemRepresentation);
+    tl_set_system_fonts_dir([root stringByAppendingPathComponent:@"android-system"].fileSystemRepresentation);
+    configuredRoot=[root copy];
+    return YES;
 }
 typedef struct { const char *root,*data; bool ok; } Boot;
 static void *boot(void *p) { Boot *b=p;b->ok=tl_dvm_boot(b->root,b->data);return NULL; }
 BOOL mac_java_start(NSString *root,const tl_javaapp_config *cfg)
 {
-    if(!validate(root)){fprintf(stderr,"java: runtime resource verification failed\n");return NO;}
+    if(!mac_runtime_configure(root))return NO;
     Boot b={root.fileSystemRepresentation,cfg->data_dir,false};
     pthread_attr_t attr;pthread_attr_init(&attr);pthread_attr_setstacksize(&attr,256u<<20);
     pthread_t t;int error=pthread_create(&t,&attr,boot,&b);pthread_attr_destroy(&attr);
     if(error)return NO;pthread_join(t,NULL);
     if(!b.ok)return NO;
-    void tl_set_cacerts_dir(const char *);
-    tl_set_cacerts_dir([root stringByAppendingPathComponent:@"com.android.conscrypt/cacerts"].fileSystemRepresentation);
     return tl_javaapp_start(cfg);
 }

@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-10-13 三款游戏修复候选（2.0.0 / build 4）
+
+已修复跨 split 图标和 adaptive XML 被当成图片缓存的问题。实际资料库 10 个图标均自动刷新为 PNG，与隔离解析结果逐字节一致；最终 CUA 主窗口截图确认 Egg、War Thunder、Clash 及其余图标正常。没有改写资料库索引、应用名称或设置。
+
+所有 NativeRunner profile 现在先校验并配置固定 Android 字体/CA 资源。保留 210 个字体名称、CJK 和 XML 引用，兼容别名写入依赖锁，原始 NOTICE 同包保存。通用 NativeActivity 配置 MoltenVK，libvulkan.so.1 使用相同 Vulkan handle/可用性检查，并注册既有 FMOD Java HLE。新增 OpenSL 停止/清空排空：等待正在读取的缓冲区和已开始的回调，避免游戏释放缓冲区后仍被访问；队列代际保护新入队内容，暂停中的完成回调仍能补充缓冲区供恢复使用。新增受控回归覆盖这些竞态，不播放音频。
+
+War 三次自动探测分别对应字体、Vulkan、音频修复，均不可见、静音、使用独立数据。最后会话 F55D0587 实际渲染 1280×720 的 Checking the data 加载页；首帧、截图、默认失焦继续、暂停、恢复 5 项通过。此前 OpenSL 回调的空缓冲区崩溃未再出现。20 秒观察未进入主菜单，自定义 DagorUpdater Java 方法仍未接通；停止后进程 exit 0，但没有 storage-closed/终态回执，监督器仍如实判失败。最新候选在该探测后补了 Vulkan 状态帧数和暂停补队列行为，由最终回归覆盖，未重复启动真实游戏。没有证明完整玩法、音频输出或保存重开。
+
+Clash 在一次日志修复后的探测中输出 5,913,771 bytes；新的首尾轮转和 supervisor.json 保留原生初始化 exit(101)、Runner 实际退出 70、storageClosed=false。Egg 未再次启动，静态证据确认 DT_INIT 经 ExecuteProgram 后仍有未重定位 PLT 初始化问题，Java Application/NativeActivity bridge 仍需补。具体偏移、证据和下一步见 upstream-parity.md。
+
+最终完整默认 CTest **66/66（53.85 秒）**，verify_macos_bundle.py 通过 **18 个 arm64 Mach-O** 的签名/依赖/权限核对和 **406 个运行资源**。唯一候选仍为 `build/macos/Product/HuskMac.app`，保留 VM=ON。CUA 退出通道反复 native pipe closed；每次重新确认仅空闲主程序、无游戏/VM、无导入/安装操作和打开的用户数据后，按已有授权 SIGTERM 空闲残留并确认退出，再原位打包。最终通过 CUA 打开一次 Product，PID 87531，已读取首页 AX 与真实截图；没有启动可见游戏窗口。此前资料库详情导航受 CUA 断开限制，首页截图不能替代该项交互验收。
+
+资料保护核对：437 个原始文件中 435 个 SHA-256 一致，包含全部 APK、索引及其余保存内容。War 的错误时间标记消失、last_debug 更新，另新增一份引擎日志和两份字体缓存；时间均对应 18:23 主界面会话 7F02AF51（headless=false），区别于 18:14 已结束的后台探测。该会话由独立 supervisor/events 记录确认；没有擅自还原用户会话文件，也不能声称所有文件均未变。自动探测的数据目录与日常资料库独立。
+
+证据复用 `build/logs/current-game-repair-result.json`、`current-game-repair-tests.log`、`current-game-repair-bundle.json`、`current-war-thunder-repair/frame.png`、`current-war-thunder-repair-engine-latest.log` 和 `current-clash-repair/`。主 App SHA-256 为 `01170b6bb984da775950a5731c2b4b21cad742ea919e71ea8c635d4749d5f1c9`，NativeRunner 为 `acb0f33fa5460b28b8b9716f39fb2c390c47975039ac6d802a7f4484828cb365`。旧 2.0 代码的 CI 38374832136 已读回 success；本批代码推送后的 CI 必须另行确认。三款完整运行兼容仍开放。
+
 ## 2026-10-13 Husk 2.0 候选验证完成
 
 上游发布标签 2.0 为 e02ac68；当前 main 为 8e79a47，包含发布与随后社区兼容性更新。origin/main 从 f0bd526 对齐到本地 main=8e79a47（3 提交、10 路径），再经真实合并 5866498 进入 macOS；没有文本冲突或 ours 策略。收尾前再次 fetch 两个远端，没有新提交。以下是本轮最终实现与验证，替代上午的“38 项、待退出/打包”状态。

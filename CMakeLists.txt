@@ -27,7 +27,7 @@ if(NOT EXISTS "${HUSK_JAVA_RUNTIME}/runtime-manifest.json")
 endif()
 file(GLOB_RECURSE HUSK_JAVA_SOURCES CONFIGURE_DEPENDS src/java-framework/*.java src/java-framework/gen/*.py)
 add_custom_command(OUTPUT "${HUSK_JAVA_RUNTIME}/husk-framework.dex" "${HUSK_JAVA_RUNTIME}/runtime-manifest.json"
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --refresh-framework --output ${HUSK_JAVA_RUNTIME}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --ensure --output ${HUSK_JAVA_RUNTIME}
     DEPENDS ${HUSK_JAVA_SOURCES} scripts/build_java_framework.py scripts/build_java_runtime.py dependencies/java-runtime.lock.json VERBATIM)
 add_custom_target(JavaRuntimeResources DEPENDS "${HUSK_JAVA_RUNTIME}/husk-framework.dex" "${HUSK_JAVA_RUNTIME}/runtime-manifest.json")
 set(HUSK_ICON_SOURCE "${CMAKE_SOURCE_DIR}/src/app/Husk/Assets.xcassets/AppIcon.appiconset/Icon-Default.png")
@@ -46,10 +46,26 @@ target_link_libraries(SharedCore PUBLIC z "-framework CoreGraphics")
 
 add_library(SharedLibrary STATIC
     ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/WebStorage.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
-    ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/NativeLaunch.swift ${MAC}/SharedLibrary/VMController.swift
+    ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/APKIcon.swift ${MAC}/SharedLibrary/SessionDiagnostics.swift
+    ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/NativeLaunch.swift ${MAC}/SharedLibrary/VMController.swift
     src/app/Husk/ApkMetadata.swift src/app/Husk/BundleUnpacker.swift)
-target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security")
+target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security" "-framework ImageIO" "-framework UniformTypeIdentifiers")
 target_compile_options(SharedLibrary PRIVATE -I ${MAC}/SharedCore)
+
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/IconCases/ready
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_icon_cases.py ${CMAKE_BINARY_DIR}/IconCases
+    DEPENDS tests/macos/prepare_icon_cases.py VERBATIM)
+add_custom_target(IconCases DEPENDS ${CMAKE_BINARY_DIR}/IconCases/ready)
+add_executable(MacAPKIconTests tests/macos/APKIcons.swift ${MAC}/SharedLibrary/APKIcon.swift src/app/Husk/ApkMetadata.swift)
+target_compile_options(MacAPKIconTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacAPKIconTests PRIVATE SharedLibrary)
+add_dependencies(MacAPKIconTests IconCases)
+add_test(NAME macos-apk-icons COMMAND MacAPKIconTests ${CMAKE_BINARY_DIR}/IconCases)
+add_executable(MacSessionDiagnosticsTests tests/macos/SessionDiagnostics.swift)
+target_compile_options(MacSessionDiagnosticsTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacSessionDiagnosticsTests PRIVATE SharedLibrary)
+add_test(NAME macos-session-diagnostics COMMAND MacSessionDiagnosticsTests)
+set_tests_properties(macos-apk-icons macos-session-diagnostics PROPERTIES TIMEOUT 30)
 
 add_library(GameActivityRuntime STATIC
     ${CLASSIC}/husk-tl-sound.c
@@ -162,6 +178,10 @@ enable_testing()
 add_executable(MacVulkanZeroInitTests tests/macos/VulkanZeroInit.c)
 target_include_directories(MacVulkanZeroInitTests PRIVATE ${HUSK_DEPS}/include)
 add_test(NAME macos-vulkan-zero-init COMMAND MacVulkanZeroInitTests "${HUSK_PRODUCT}/Contents/Frameworks/MoltenVK.framework/MoltenVK")
+add_executable(MacVulkanLoaderTests tests/macos/VulkanLoader.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(MacVulkanLoaderTests PRIVATE ${HUSK_DEPS}/include ${MAC}/NativeRunner)
+target_link_libraries(MacVulkanLoaderTests PRIVATE NativeRuntime)
+add_test(NAME macos-vulkan-loader COMMAND MacVulkanLoaderTests "${HUSK_PRODUCT}/Contents/Frameworks/MoltenVK.framework/MoltenVK")
 set_tests_properties(macos-vulkan-zero-init PROPERTIES TIMEOUT 30 ENVIRONMENT "MVK_CONFIG_LOG_LEVEL=1")
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/WebTests/capacitor.apk" "${CMAKE_BINARY_DIR}/WebTests/cordova.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_web_cases.py "${CMAKE_BINARY_DIR}/WebTests" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk"
@@ -234,6 +254,13 @@ add_custom_command(TARGET JavaBootTests POST_BUILD COMMAND codesign --force --si
 add_test(NAME java-runtime-boot COMMAND JavaBootTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/TestResults/JavaBoot")
 set_tests_properties(java-runtime-boot PROPERTIES TIMEOUT 60 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
 add_test(NAME java-runtime-resources COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --verify --output ${HUSK_JAVA_RUNTIME})
+add_executable(MacSystemResourceTests tests/macos/SystemResources.m ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(MacSystemResourceTests PRIVATE ${MAC}/NativeRunner)
+target_compile_options(MacSystemResourceTests PRIVATE -fobjc-arc)
+target_link_libraries(MacSystemResourceTests PRIVATE NativeRuntime)
+add_dependencies(MacSystemResourceTests JavaRuntimeResources)
+add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_RUNTIME})
+set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
     DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java scripts/build_java_framework.py VERBATIM)
@@ -286,6 +313,10 @@ add_test(NAME unity-modern-player COMMAND UnityLifecycleTests modern-player)
 add_test(NAME unity-two-argument-init COMMAND UnityLifecycleTests two-argument-init)
 set_tests_properties(unity-lifecycle unity-incomplete-destroy unity-guest-quit unity-modern-player unity-two-argument-init PROPERTIES TIMEOUT 10)
 add_executable(AndroidRuntimeTests tests/macos/AndroidRuntime.c)
+add_executable(OpenSLLifecycleTests tests/macos/OpenSLLifecycle.c)
+target_link_libraries(OpenSLLifecycleTests PRIVATE NativeRuntime)
+add_test(NAME opensl-lifecycle COMMAND OpenSLLifecycleTests)
+set_tests_properties(opensl-lifecycle PROPERTIES TIMEOUT 10)
 add_executable(NativeActivityLifecycleTests tests/macos/NativeActivityLifecycle.c)
 target_include_directories(NativeActivityLifecycleTests PRIVATE ${CLASSIC})
 target_link_libraries(NativeActivityLifecycleTests PRIVATE NativeRuntime)

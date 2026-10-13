@@ -15,6 +15,14 @@
   "jdkMajor": 21,
   "javaRelease": 8,
   "minAPI": 26,
+  "system": {
+    "files": ["etc/fonts.xml", "etc/font_fallback.xml"],
+    "directories": ["fonts"],
+    "fontAliases": {
+      "NotoSerifKhmer-Regular.otf": "NotoSerifKhmer-Regular.ttf",
+      "NotoColorEmojiLegacy.ttf": "NotoColorEmoji.ttf"
+    }
+  },
   "bootClassPath": [
     "com.android.art/javalib/core-oj.jar",
     "com.android.art/javalib/core-libart.jar",

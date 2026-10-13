@@ -22,6 +22,7 @@
 #include "husk-tl-xmem.h"
 
 void tl_jni_hle_install(void);
+void tl_fmod_install(void);
 void tl_hle_configure(const char *pkg, const char *apk, const char *data, int w, int h);
 void tl_hle_set_activity(jobj *a);
 jobj *tl_hle_assets(void);
@@ -260,6 +261,7 @@ static bool na_load(const tl_ga_config *cfg)
     tl_hle_configure(cfg->package_name, cfg->apk_path, cfg->data_dir, cfg->width, cfg->height);
     tl_jni_hle_install();
     if (N.generic) {
+        tl_fmod_install();
         tl_jni_declare("android/app/NativeActivity", "android/app/Activity");
         N.activity = tl_jni_new_object(tl_jni_class("android/app/NativeActivity"));
         tl_hle_set_activity(N.activity);

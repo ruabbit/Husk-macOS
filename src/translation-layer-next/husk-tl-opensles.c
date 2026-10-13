@@ -121,9 +121,12 @@ typedef struct sl_object {
     const void *vt_engine, *vt_play, *vt_volume, *vt_bq, *vt_config;
     /* a player's queue */
     pthread_mutex_t mu;
+    pthread_cond_t idle;
     struct { const void *data; uint32_t size; } q[MAX_QUEUE];
     int qhead, qcount;
     uint32_t qindex;
+    unsigned queue_generation, pumping_generation;
+    bool pumping;
     void (*bq_cb)(void *caller, void *ctx);
     void *bq_ctx;
     int channels, rate;
@@ -159,6 +162,8 @@ static void o_Destroy(const void *self)
 {
     sl_object *o = obj_of_object(self);
     if (o->kind == K_PLAYER) player_stop_thread(o);
+    pthread_cond_destroy(&o->idle);
+    pthread_mutex_destroy(&o->mu);
     free(o);
 }
 static uint32_t o_SetPriority(const void *self, int32_t p, uint32_t pre) { (void)self; (void)p; (void)pre; return SL_OK; }
@@ -174,6 +179,7 @@ static sl_object *new_object(int kind)
     o->vt_object = k_vt_object;
     o->kind = kind; o->state = SL_OBJECT_UNREALIZED;
     pthread_mutex_init(&o->mu, NULL);
+    pthread_cond_init(&o->idle, NULL);
     return o;
 }
 
@@ -183,10 +189,13 @@ static void *player_pump(void *arg)
     sl_object *o = arg;
     pthread_setname_np("opensl-pump");
     while (atomic_load(&o->thread_run)) {
-        if (atomic_load(&o->play_state) != SL_PLAYING) { usleep(2000); continue; }
         pthread_mutex_lock(&o->mu);
         const void *data = NULL; uint32_t size = 0;
-        if (o->qcount > 0) { data = o->q[o->qhead].data; size = o->q[o->qhead].size; }
+        unsigned generation = o->queue_generation;
+        if (atomic_load(&o->play_state) == SL_PLAYING && o->qcount > 0) {
+            data = o->q[o->qhead].data; size = o->q[o->qhead].size;
+            o->pumping = true; o->pumping_generation = generation;
+        }
         pthread_mutex_unlock(&o->mu);
         if (!data) { usleep(1000); continue; }
         int ch = o->channels > 0 ? o->channels : 2, rate = o->rate > 0 ? o->rate : 48000;
@@ -194,9 +203,21 @@ static void *player_pump(void *arg)
         if (tl_cocos_audio_hook) tl_cocos_audio_hook((const int16_t *)data, frames, ch, rate);
         else { struct timespec ts = { 0, (long)((double)frames * 1e9 / rate) }; nanosleep(&ts, NULL); }
         pthread_mutex_lock(&o->mu);
-        if (o->qcount > 0) { o->qhead = (o->qhead + 1) % MAX_QUEUE; o->qcount--; o->qindex++; }
+        void (*callback)(void *, void *) = NULL; void *context = NULL;
+        if (generation == o->queue_generation && o->qcount > 0) {
+            o->qhead = (o->qhead + 1) % MAX_QUEUE; o->qcount--; o->qindex++;
+            /* A buffer already handed to the sink may complete during pause.
+             * Deliver that completion so the guest can refill it for resume. */
+            if (atomic_load(&o->play_state) != SL_STOPPED && atomic_load(&o->thread_run)) {
+                callback = o->bq_cb; context = o->bq_ctx;
+            }
+        }
         pthread_mutex_unlock(&o->mu);
-        if (o->bq_cb) o->bq_cb(&o->vt_bq, o->bq_ctx);
+        if (callback) callback(&o->vt_bq, context);
+        pthread_mutex_lock(&o->mu);
+        o->pumping = false;
+        pthread_cond_broadcast(&o->idle);
+        pthread_mutex_unlock(&o->mu);
     }
     return NULL;
 }
@@ -219,8 +240,16 @@ static void player_stop_thread(sl_object *o)
 static uint32_t p_SetPlayState(const void *self, uint32_t state)
 {
     sl_object *o = OBJ_FROM(self, vt_play);
+    if (state < SL_STOPPED || state > SL_PLAYING) return SL_PARAMETER_INVALID;
+    pthread_mutex_lock(&o->mu);
     atomic_store(&o->play_state, (int)state);
     if (state == SL_PLAYING) player_start_thread(o);
+    /* A guest can release its PCM buffers after stopping. Wait for both the
+     * host's read and any callback already in progress before returning.
+     * A callback may itself stop playback; it must not wait on itself. */
+    else if (state == SL_STOPPED)
+        while (o->pumping && !pthread_equal(pthread_self(), o->thread)) pthread_cond_wait(&o->idle, &o->mu);
+    pthread_mutex_unlock(&o->mu);
     return SL_OK;
 }
 static uint32_t p_GetPlayState(const void *self, uint32_t *state) { sl_object *o = OBJ_FROM(self, vt_play); if (state) *state = (uint32_t)atomic_load(&o->play_state); return SL_OK; }
@@ -232,6 +261,7 @@ static const void *const k_vt_play[] = { p_SetPlayState, p_GetPlayState, p_unsup
 static uint32_t q_Enqueue(const void *self, const void *buf, uint32_t size)
 {
     sl_object *o = OBJ_FROM(self, vt_bq);
+    if (!buf || !size) return SL_PARAMETER_INVALID;
     pthread_mutex_lock(&o->mu);
     if (o->qcount >= MAX_QUEUE) { pthread_mutex_unlock(&o->mu); return SL_BUFFER_INSUFFICIENT; }
     int tail = (o->qhead + o->qcount) % MAX_QUEUE;
@@ -244,7 +274,12 @@ static uint32_t q_Clear(const void *self)
 {
     sl_object *o = OBJ_FROM(self, vt_bq);
     pthread_mutex_lock(&o->mu);
-    o->qcount = 0;
+    unsigned cleared_generation = o->queue_generation;
+    o->qcount = 0; o->qhead = 0; o->qindex = 0; o->queue_generation++;
+    /* Do not let the completion of an old buffer consume a newly queued one,
+     * and do not return while the host still reads a cleared buffer. */
+    while (o->pumping && o->pumping_generation == cleared_generation && !pthread_equal(pthread_self(), o->thread))
+        pthread_cond_wait(&o->idle, &o->mu);
     pthread_mutex_unlock(&o->mu);
     return SL_OK;
 }
@@ -259,7 +294,9 @@ static uint32_t q_GetState(const void *self, uint32_t *state)       /* { count, 
 static uint32_t q_RegisterCallback(const void *self, void (*cb)(void *, void *), void *ctx)
 {
     sl_object *o = OBJ_FROM(self, vt_bq);
+    pthread_mutex_lock(&o->mu);
     o->bq_cb = cb; o->bq_ctx = ctx;
+    pthread_mutex_unlock(&o->mu);
     return SL_OK;
 }
 static const void *const k_vt_bq[] = { q_Enqueue, q_Clear, q_GetState, q_RegisterCallback };

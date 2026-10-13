@@ -47,8 +47,13 @@
 1. Java 内嵌 WebView：将 stable store 与原生 Android 数据目录关联，补 Java 文档销毁与 WebKit 所有权回执、清除数据测试。保留现有拒绝错误保存确认的行为，不能直接复用独立 WebRunner 回执冒充 native 销毁。
 2. Geode：复用上游 GeodeSupport 的版本匹配下载，改接资料库的每应用配置，向 Cocos 传入 release/launcher/resources/version，补文件完整性和关闭验证。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
-4. Egg：继续核对 DT_INIT/PLT；已知构造函数 RVA 0x1621794 调用 0x16413c0，槽 0x17636b8 仍为 0x1625d90 且没有该槽重定位。现有代码没有证明解决该故障。
-5. Play：个人账号/passkey 仍被 Google 拒绝；只有本人真实登录成功且 Play 会话可用才通过。OBB/PAD、设备配置和已购交付验收仍开放。
-6. VM/P6：VM Minecraft 黑屏与持续 PCM 未通过；QEMU/libssh/OpenSSL 许可、Android 对应源码和发行签名仍按发行门槛处理。
+4. Egg：继续核对 DT_INIT/PLT；已知构造函数 RVA 0x1621794 调用 0x16413c0，槽 0x17636b8 仍为 0x1625d90 且没有该槽重定位。2026-10-13 静态检查确认 DT_INIT=0x17a0000，通过槽 0x1798000 调用导入的 ExecuteProgram；尚不能证明其完成所需初始化。NativeActivity 目前提供合成 Activity，未执行自定义 Application 的 Java 启动；不能直接切换到 Java profile，因为 framework 的 NativeActivity 仍是签名 stub。下一步核对 ExecuteProgram 的输入/输出和 Java Application 初始化契约，再设计对应 bridge/fixture；未复跑 Egg，也没有跳过保护或修改用户 APK。
+5. 三款游戏修复（2026-10-13）：跨 split/adaptive 图标解析、旧缓存升级、全 NativeRunner profile 的 Android 字体/CA 映射、有界 stderr 首尾保留和独立 supervisor.json 已实现。字体来自同一固定镜像，保留 CJK 和系统别名，旧配置的两个缺失名称在 lock 中记录兼容别名。实际资料库十款图标均已刷新，与隔离解码 PNG 一致，包含 Egg、War、Clash。
+   - War Thunder：字体修复后成功生成三种 CJK 字体子集；随后补 `libvulkan.so.1` 映射和通用 NativeActivity 的 MoltenVK 配置。第二次探测的 RVA 0x5875dc4 空缓冲区崩溃进一步定位到 OpenSL 回调：宿主停止/清空操作没有等待正在读取的缓冲区和回调，游戏随后清空缓冲区。已修复排空/队列代际，补通用 NativeActivity 的 FMOD Java HLE。受控生命周期测试通过，第三次探测实际创建 Vulkan 设备/swapchain 并渲染 1280×720 的 Checking the data 加载页，5 项首帧/截图/失焦/暂停/恢复检查通过。
+   - War 仍开放：20 秒观察没有进入主菜单，自定义 DagorUpdater 的 getFreeDiskSpace/isInstanceCreated 等方法仍返回未实现结果，需要接真实 Java 启动/更新器路径。停止后进程 exit 0，但没有 storage-closed，仍按失败处理；须追踪原生销毁末尾的进程退出与生命周期确认，不能把 exit 0 或 application destroyed 文本当成存档成功。最新会话 F55D0587，实测截图 `current-war-thunder-repair/frame.png`，解码引擎日志 `current-war-thunder-repair-engine-latest.log`。此次没有证明完整玩法或保存重开。
+   - Clash：日志修复后的单次探测输出 5,913,771 bytes，末尾仍保留 `exit(101)` 和 NativeRunner 实际退出 70。退出发生在原生库初始化期间；`JNI_OnLoad+0x12c4c` 是最近导出符号标注，不能当成已执行 JNI_OnLoad 的证据。静态原始 RVA 0x6207bc 为 exit(101) 调用，前置控制流经过 0x61a668；需要继续检查混淆初始化分支及其真实 OS/JNI 前置条件，禁止简单跳过 exit。
+   - 日志/静态证据在 `build/logs/current-three-games-audit.json`、`current-icon-repair.log`、`current-war-thunder-repair/`、`current-war-thunder-audio-static.log`、`current-clash-repair/`、`current-egg-init-static.log`、`current-egg-init-relocations.log`、`current-clash-exit-static.log`。自动真实探测静音/不可见，存档位于独立输出目录；三款仍未通过完整运行验收。
+6. Play：个人账号/passkey 仍被 Google 拒绝；只有本人真实登录成功且 Play 会话可用才通过。OBB/PAD、设备配置和已购交付验收仍开放。
+7. VM/P6：VM Minecraft 黑屏与持续 PCM 未通过；QEMU/libssh/OpenSSL 许可、Android 对应源码和发行签名仍按发行门槛处理。
 
 检查入口：CMakeLists.txt、Models/NativeLaunch/SessionController、MacNativeDrivers、NativeRunner、WebRunner、WebApp.swift、build_macos_graphics.py；对照上游 TLReport.nativeEngine、TLUnityView.swift、AppWindows.swift、src/app/project.yml 和 Play。后续每日同步须同时交付平台适配、当前候选与相应验证，不能以 Git 祖先或旧测试替代。

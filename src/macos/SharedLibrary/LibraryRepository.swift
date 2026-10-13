@@ -27,6 +27,7 @@ public actor LibraryRepository {
     private let trustedFixtureHash: String
     private let fm = FileManager.default
     private var upgradedScans = [String: Scan]()
+    private var attemptedIcons = Set<String>()
     private var deletingSaves = Set<String>()
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; return encoder
@@ -121,7 +122,33 @@ public actor LibraryRepository {
         } catch { throw LibraryFailure("无法读取资料库；原文件已保留。\(error.localizedDescription)") }
     }
 
-    public func games() throws -> [LibraryGame] { try locked { try readIndex().games } }
+    public func games() throws -> [LibraryGame] {
+        try locked {
+            let games = try readIndex().games
+            for game in games { refreshIcon(game) }
+            return games
+        }
+    }
+
+    private func refreshIcon(_ game: LibraryGame) {
+        let key = "\(game.id):\(game.digest)"
+        guard attemptedIcons.insert(key).inserted else { return }
+        let directory = paths.game(game.id)
+        let stamp = "\(APKIcon.version):\(game.digest)"
+        if (try? String(contentsOf: directory.appendingPathComponent("icon-version.txt"), encoding: .utf8)) == stamp,
+           let data = try? Data(contentsOf: directory.appendingPathComponent("icon.data")), APKIcon.decode(data) != nil { return }
+        cacheIcon(apks: game.apkNames.map { directory.appendingPathComponent($0) }, game: game, directory: directory)
+    }
+
+    private func cacheIcon(apks: [URL], game: LibraryGame, directory: URL) {
+        guard let png = APKIcon.png(apks: apks, fixtureEntry: game.fixture?.icon, read: Self.entry) else { return }
+        // Icon caches are disposable. Never rewrite the index, game settings or
+        // saves when upgrading them; retain a previous icon if resolution fails.
+        do {
+            try AtomicFile.write(png, to: directory.appendingPathComponent("icon.data"))
+            try AtomicFile.write(Data("\(APKIcon.version):\(game.digest)".utf8), to: directory.appendingPathComponent("icon-version.txt"))
+        } catch { /* A read-only or full library must still be listable. */ }
+    }
 
     public static func digest(_ file: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: file); defer { try? handle.close() }
@@ -276,7 +303,7 @@ public actor LibraryRepository {
         for apk in apks { _ = try listing(apk) }
         let (report, reportData) = try scan(apks)
         let digest = try apks.map(Self.digest).joined(separator: ":")
-        if let duplicate = index.games.first(where: { $0.digest == digest }) { return duplicate }
+        if let duplicate = index.games.first(where: { $0.digest == digest }) { refreshIcon(duplicate); return duplicate }
         let base = apks[0]
         let androidManifest = Self.entry(base, "AndroidManifest.xml") ?? Data()
         let resources = Self.entry(base, "resources.arsc", limit: 64 << 20) ?? Data()
@@ -314,9 +341,7 @@ public actor LibraryRepository {
         game.dexCount = report.dexCount; game.libraryNames = report.libraries?.map(\.name); game.webKind = report.webKind
         game.packageName = packageID; game.versionCode = version; game.signerSHA256 = signing[0]
         if let previous { game.settings = previous.settings; game.lastPlayed = previous.lastPlayed }
-        if let iconName = fixture?.icon ?? metadata.iconEntry, let data = Self.entry(base, iconName, limit: 4 << 20) {
-            try data.write(to: stage.appendingPathComponent("icon.data"))
-        }
+        cacheIcon(apks: apks, game: game, directory: stage)
         try reportData.write(to: stage.appendingPathComponent("scan.json"))
         try encoder.encode(game).write(to: stage.appendingPathComponent("game.json"))
         try Task.checkCancellation()

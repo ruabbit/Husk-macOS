@@ -1,5 +1,15 @@
 # 审计发现
 
+## 2026-10-13 三款游戏修复与剩余阻塞
+
+- 图标根因在 macOS 导入器：只从 base 读取资源，且把 binary adaptive XML 当图像存储。新实现跨 split 解析、合成 PNG 并按版本刷新旧缓存；真实 Egg、War、Clash 图标已解码并目视检查。刷新不重写资料库索引、名称、偏好或存档。
+- War 的字体错误不是存档损坏。固定 Android 系统资源此前未随 macOS 打包；补齐后，真实游戏已从 NotoSansCJK-Regular.ttc 成功生成三份字体子集。继续发现 `.so.1` Vulkan 库名和通用 NativeActivity 的 MoltenVK 配置缺口，修复后实际 VkInstance、Android surface、M1 Ultra 设备初始化通过。
+- War 第二次探测的崩溃位于 OpenSL 回调 RVA 0x5875ca0，RVA 0x5875dc4 用已清空的缓冲区调用 memcpy。静态清理路径先 SetPlayState(STOPPED)/Clear，再释放并清空两份缓冲区；宿主旧实现直接返回，后台仍可回调。修复停止/清空的排空与队列代际，同时补 NativeActivity 的 FMOD Java 接口注册。受控回归覆盖阻塞中的宿主读取、正在执行的回调、Clear 后重新入队、恢复及回调自身停止。第三次针对性探测不再发生该崩溃，实际渲染 1280×720 加载画面，失焦继续、暂停/恢复通过。
+- War 尚未完成运行验收：20 秒内仍显示 Checking the data，日志中的自定义 DagorUpdater Java 方法未实现；停止后进程以 0 退出，但没有 storage-closed/终态回执，监督器如实判失败。后续须接真实 updater Java 路径和可确认的正常关闭，不能伪造方法返回值或存储确认。`current-war-thunder-repair/frame.png` 为实测画面。
+- Clash 原本只保存前 4 MiB 日志，实际这次输出 5,913,771 bytes。新的轮转机制留下初始化尾部的 `exit(101)`、实际监督器退出 70、storageClosed=false。静态调用 RVA 0x6207bc，前置分支经过 0x61a668。`JNI_OnLoad+0x12c4c` 仅是最近导出符号，库还没打印 initialized；不要误称已通过 JNI 初始化。
+- Egg 的 DT_INIT 通过 0x1798000 的 JUMP_SLOT 调用 ExecuteProgram，再进入仍未重定位的 PLT；当前 NativeActivity 合成对象没有跑自定义 Application 的 Java 初始化。两条证据尚未建立完整因果；未改地址、未跳过初始化、未再次启动 Egg。Java framework 的 NativeActivity 仍是空壳，直接改 runtime 标签不能修复。
+- 自动真实探测均静音、无可见窗口，写入独立数据目录。对应字体、Vulkan、音频修复后各探测 War 一次，日志修复后探测 Clash 一次；没有无变更重复启动。资料库原 437 文件基线中 435 个一致（含 APK、索引及其余保存内容）；War 的错误时间标记消失、last_debug 更新，时间对应 18:23 主界面会话 7F02AF51，区别于 18:14 已结束的后台探测。该会话 headless=false，有独立监督器记录；没有擅自还原这两份日志文件。实际十款图标缓存均与隔离解析 PNG 一致。
+
 ## 2026-10-13 Husk 2.0、运行链路与交付
 
 - 本轮 Git 增量 f0bd526..8e79a47 只有社区相关 3 提交，但上游 2.0 和多个引擎此前已进入 Git 祖先，macOS 未完整编入/分发。此次按真实功能对齐补齐；祖先完整不能证明平台功能完整。

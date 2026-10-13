@@ -453,7 +453,7 @@ static int androidKey(unsigned code)
 {
     OrbitSave save={0};if(self.loaded&&!guestRuntime())self.save(&save);
     [self event:@"status" detail:@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
-        @"runtime":runtimeName(),@"presentedFrames":@(tl_egl_frames_presented()),@"surfaceWidth":@(surfaceWidth),@"surfaceHeight":@(surfaceHeight),@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(guestRuntime()?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(guestRuntime()?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
+        @"runtime":runtimeName(),@"presentedFrames":@(tl_egl_frames_presented()+tl_vk_frames_presented()),@"surfaceWidth":@(surfaceWidth),@"surfaceHeight":@(surfaceHeight),@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(guestRuntime()?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(guestRuntime()?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
         @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"lastClick":self.lastClick?:@{},@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)}];
 }
 - (void)command:(NSDictionary *)message
@@ -651,6 +651,8 @@ static int androidKey(unsigned code)
         }
         if(minecraft){tl_ga_input_host host={hostTextState,hostTextActive,hostCursorLocked,(__bridge void *)self};tl_ga_set_input_host(&host);}
         if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);}
+        NSString *runtimeRoot=[[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"../../Resources/JavaRuntime"] stringByStandardizingPath];
+        if(!mac_runtime_configure(runtimeRoot)){[self finish:NO reason:@"Android 系统资源缺失或损坏，请重新构建 Husk。"] ;return;}
         tl_ld_set_verbosity(2);tl_jni_set_trace(0);tl_egl_offscreen_windows(headless);
         for(NSString *split in splitPaths)tl_ld_queue_split(split.fileSystemRepresentation);
         if(unity||nativeactivity||javaapp||nativeDriver){
@@ -666,7 +668,7 @@ static int androidKey(unsigned code)
                 if(nativeDriver){
                     ok=mac_driver_start(&configuration,activityClass,[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"]);
                 }else if(javaapp){
-                    NSString *root=[[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"../../Resources/JavaRuntime"] stringByStandardizingPath];
+                    NSString *root=runtimeRoot;
                     NSString *fw=[root stringByAppendingPathComponent:@"framework-res.apk"];
                     tl_javaapp_config javaConfiguration={.apk_path=configuration.apk_path,.data_dir=configuration.data_dir,
                         .package_name=configuration.package_name,.width=configuration.width,.height=configuration.height,.density=2,
@@ -679,7 +681,7 @@ static int androidKey(unsigned code)
                         .package_name=configuration.package_name,.width=configuration.width,.height=configuration.height,
                         .metal_layer=configuration.metal_layer,.angle_egl=configuration.angle_egl,
                         .frame_dir=configuration.frame_dir,.frame_every=configuration.frame_every};
-                    if(ue4)tl_vk_configure([frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"].fileSystemRepresentation,NULL,0);
+                    tl_vk_configure([frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"].fileSystemRepresentation,frames.fileSystemRepresentation,60);
                     tl_na_set_library(nativeLibrary.UTF8String);
                     ok=tl_na_start(&nativeConfiguration)&&tl_na_run();
                 }else{tl_unity_register_pad_sink();ok=tl_unity_start(&configuration)&&tl_unity_run();}

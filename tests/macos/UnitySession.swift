@@ -15,7 +15,7 @@ import Darwin
         var failure: String?, checks = [String]()
         do {
             let index = try JSONDecoder().decode(LibraryIndex.self, from: Data(contentsOf: source.index))
-            guard var game = index.games.first(where: { $0.id == args[3] }), ["unity", "nativeactivity"].contains(game.runtime ?? "") else { throw LibraryFailure("Native game not found") }
+            guard var game = index.games.first(where: { $0.id == args[3] }), ["unity", "nativeactivity", "java"].contains(game.runtime ?? "") else { throw LibraryFailure("Native or Java game not found") }
             // Refuse a destination within the real library, including symlinks.
             let resolved = output.resolvingSymlinksInPath().path
             guard !resolved.hasPrefix(source.root.resolvingSymlinksInPath().path + "/"), resolved != source.root.resolvingSymlinksInPath().path else { throw LibraryFailure("Use a disposable test output outside the user library") }

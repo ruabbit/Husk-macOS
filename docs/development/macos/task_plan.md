@@ -1,5 +1,19 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-13 三款游戏图标与启动修复
+
+- [x] 核对干净工作区、唯一候选和空闲 Husk；恢复三款 APK/用户日志的只读诊断证据。
+- [x] 跨 split 解析并合成 adaptive 图标，刷新已有图标缓存；像素/方向及旧索引、设置、存档保留回归通过。
+- [x] 从固定依赖来源打包 Android 系统字体与配置，在所有 NativeRunner profile 中接入路径映射；实际全字体名读取通过。
+- [x] 保留有界诊断尾部与独立监督器退出记录；9 MiB fixture 和真实 Clash 输出饱和后的最终错误均保留。
+- [x] 修复 OpenSL 停止/清空返回后仍访问缓冲区及回调的竞态；补通用 NativeActivity 的 FMOD Java 接口注册，并把 Vulkan 帧纳入状态计数。
+- [x] 针对性回归及隔离样本验证：War 已实际渲染 1280×720 加载页，失焦继续、暂停/恢复通过；Clash 留下退出 101 的证据；Egg 静态核对 ExecuteProgram。
+- [ ] 剩余运行兼容：War 数据检查/自定义 Java updater 与正常关闭回执、Clash 原生初始化 exit(101)、Egg 初始化/PLT。下一步和证据保存在 upstream-parity.md，均未标为完整可玩。
+- [x] 默认 CTest 66/66、18 Mach-O / 406 运行资源包验证、唯一候选原位更新；最终主窗口截图确认三款图标正常。
+- [ ] 提交并正常推送本批修复；三款完整运行验收保持开放。
+
+诊断基线：Egg 的图标在 density split；War/Clash 的 icon.data 是 ImageIO 无法解码的 adaptive XML。War 在读取 `/system/fonts/%s` 时失败，候选缺少系统字体。Egg 仍在原生构造函数跳到未重定位 PLT。Clash 的 stderr 被前 4 MiB 截断，尚无完整终止证据。原始证据为 `build/logs/current-three-games-audit.json`，修复前候选为 2.0.0/build 3。
+
 ## 当前执行：2026-10-13 Husk 2.0 与手柄交付
 
 - [x] 核对工作区、origin/upstream 和实际会话；上游 main=8e79a47，包含 2.0=e02ac68，真实合并 5866498。

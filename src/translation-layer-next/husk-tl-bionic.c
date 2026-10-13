@@ -645,6 +645,9 @@ static void *dlopen_impl(const char *path, int flags)
     if (!path) return &g_sys_handle[0];          /* the global namespace */
     const char *base = strrchr(path, '/');
     base = base ? base + 1 : path;
+    // Some cross-platform Android engines (Dagor) use the versioned loader name.
+    // Both names represent the same Vulkan ABI and must use the same availability gate.
+    if (!strcmp(base, "libvulkan.so.1")) base = "libvulkan.so";
     /* RTLD_NOLOAD (bionic: 4): only one already loaded. Geode finds the game this way. */
     if (flags & 4) {
         tl_lib *L = tl_ld_find_lib(base);
@@ -890,7 +893,7 @@ bool tl_bionic_is_system_lib(const char *soname)
     static const char *const sys[] = {
         "libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so", "libEGL.so", "libGLESv1_CM.so",
         "libGLESv2.so", "libGLESv3.so", "libz.so", "libmediandk.so", "libOpenSLES.so", "libaaudio.so",
-        "libvulkan.so", "libnativewindow.so", "libjnigraphics.so", "libcamera2ndk.so", "libstdc++.so",
+        "libvulkan.so", "libvulkan.so.1", "libnativewindow.so", "libjnigraphics.so", "libcamera2ndk.so", "libstdc++.so",
         /* the rest of the NDK's libraries an app may list as needed without calling much in them (Roblox needs OpenMAX AL) */
         "libOpenMAXAL.so", "libneuralnetworks.so", "libbinder_ndk.so", "libsync.so", "libamidi.so",
         /* the Java runtime's: answered by Husk (husk-tl-dvm-jvm.c), never loaded */ "libopenjdkjvm.so", "libdl_android.so", "libart.so", NULL };

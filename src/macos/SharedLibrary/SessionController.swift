@@ -43,14 +43,13 @@ final class PipeReader: @unchecked Sendable {
     private var outputPipe: Pipe?
     private var errorPipe: Pipe?
     private var eventLog: FileHandle?
-    private var errorLog: FileHandle?
+    private var diagnosticsLog: SessionDiagnostics?
     private var buffer = Data()
     private var sequence = 0
     private var checkpointReceived = false
     private var checkpoint: URL?
     private var stdoutEnded = false
     private var stderrEnded = false
-    private var stderrBytes = 0
     private var readers: [PipeReader] = []
     private var drainDeadline: Task<Void, Never>?
     private var exited: Int32?
@@ -76,12 +75,11 @@ final class PipeReader: @unchecked Sendable {
         let sessionLog = logs.appendingPathComponent(id)
         try FileManager.default.createDirectory(at: sessionLog, withIntermediateDirectories: true)
         try Data().write(to: sessionLog.appendingPathComponent("events.jsonl"))
-        try Data().write(to: sessionLog.appendingPathComponent("stderr.log"))
         eventLog = try FileHandle(forWritingTo: sessionLog.appendingPathComponent("events.jsonl"))
-        errorLog = try FileHandle(forWritingTo: sessionLog.appendingPathComponent("stderr.log"))
+        diagnosticsLog = try SessionDiagnostics(directory: sessionLog)
         state = "starting"; gameID = game.id; sessionID = id; error = nil; latest = [:]; events = []
         sequence = 0; checkpointReceived = false; self.checkpoint = checkpoint
-        stdoutEnded = false; stderrEnded = false; stderrBytes = 0; exited = nil; terminalEvent = nil; buffer = Data(); signalExit = false
+        stdoutEnded = false; stderrEnded = false; exited = nil; terminalEvent = nil; buffer = Data(); signalExit = false; pid = 0
         startDate = Date(); lastEvent = startDate
         let child = Process(), input = Pipe(), output = Pipe(), errors = Pipe()
         child.executableURL = executable
@@ -111,6 +109,7 @@ final class PipeReader: @unchecked Sendable {
                 guard let self, self.sessionID == id else { return }
                 self.exited = child.terminationStatus
                 self.signalExit = child.terminationReason == .uncaughtSignal
+                self.recordTermination(phase: "draining")
                 self.finishIfReaped()
                 if self.active {
                     self.drainDeadline = Task { [weak self] in
@@ -124,6 +123,7 @@ final class PipeReader: @unchecked Sendable {
         }
         do { try child.run() } catch {
             self.process = nil; state = "failed"; self.error = error.localizedDescription
+            recordTermination(phase: "launch-failed")
             closePipes(); throw error
         }
         pid = child.processIdentifier
@@ -153,10 +153,7 @@ final class PipeReader: @unchecked Sendable {
                     if stderr {
                         // Guest diagnostics are separate from control messages.
                         if data.isEmpty { self.stderrEnded = true; self.finishIfReaped() }
-                        else if self.stderrBytes < 4 << 20 {
-                            let bounded = data.prefix((4 << 20) - self.stderrBytes)
-                            self.stderrBytes += bounded.count; try? self.errorLog?.write(contentsOf: bounded)
-                        }
+                        else { self.diagnosticsLog?.append(data) }
                     } else if data.isEmpty {
                         self.stdoutEnded = true
                         if !self.buffer.isEmpty { self.fail("运行进程返回了不完整的消息。") }
@@ -264,18 +261,29 @@ final class PipeReader: @unchecked Sendable {
         let success = exited == 0 && !signalExit && checkpointReceived && terminalEvent == "exited" && error == nil
         if !success { error = error ?? "游戏进程意外退出（\(exited)）。资料库仍可使用；之前的存档保留。" }
         state = success ? "exited" : "failed"
+        recordTermination(phase: "finished")
         watchdog?.cancel(); watchdog = nil; stopping?.cancel(); stopping = nil
         drainDeadline?.cancel(); drainDeadline = nil
         process?.terminationHandler = nil; process = nil
         closePipes()
     }
 
+    private func recordTermination(phase: String) {
+        diagnosticsLog?.record([
+            "session": sessionID ?? "", "pid": pid, "runtime": runtime ?? "", "phase": phase, "state": state,
+            "startedAt": startDate.timeIntervalSince1970, "recordedAt": Date().timeIntervalSince1970,
+            "exitStatus": exited as Any? ?? NSNull(), "terminationReason": exited == nil ? "not-started" : signalExit ? "signal" : "exit",
+            "storageClosed": checkpointReceived, "terminalEvent": terminalEvent as Any? ?? NSNull(),
+            "stdoutEnded": stdoutEnded, "stderrEnded": stderrEnded, "error": error as Any? ?? NSNull()
+        ])
+    }
+
     private func closePipes() {
         readers.forEach { $0.stop() }; readers.removeAll()
         try? commandPipe?.fileHandleForWriting.close()
         try? outputPipe?.fileHandleForReading.close(); try? errorPipe?.fileHandleForReading.close()
-        try? eventLog?.close(); try? errorLog?.close()
-        commandPipe = nil; outputPipe = nil; errorPipe = nil; eventLog = nil; errorLog = nil
+        try? eventLog?.close(); diagnosticsLog?.close()
+        commandPipe = nil; outputPipe = nil; errorPipe = nil; eventLog = nil; diagnosticsLog = nil
     }
 
     public func wait(until predicate: @MainActor () -> Bool, timeout: Double = 10) async throws {

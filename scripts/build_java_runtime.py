@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import zipfile
 import urllib.request
+import xml.etree.ElementTree as ET
 
 from build_java_framework import ROOT, LOCK, digest, source_digest, build as build_framework
 
@@ -38,6 +39,10 @@ def verify(root, check_sources=False):
         raise RuntimeError('Java runtime resources are missing, stale or modified')
     required = {'framework-res.apk', 'husk-framework.json', 'Notices/system-NOTICE.xml.gz', 'system-build.prop'}
     required.update(lock['bootClassPath'])
+    required.update('android-system/'+name for name in lock['system']['files'])
+    for directory in lock['system']['directories']:
+        if not any((root/'android-system'/directory).rglob('*')):
+            raise RuntimeError(f'Missing Android system resource directory: {directory}')
     for module, spec in lock['modules'].items():
         required.add(f'Notices/{module}-NOTICE.html.gz')
         required.update(f'com.android.{module}/{f}' for f in spec['files'])
@@ -46,6 +51,17 @@ def verify(root, check_sources=False):
                 raise RuntimeError(f'Missing Java runtime directory: {module}/{directory}')
     if not required <= record['files'].keys():
         raise RuntimeError('Java runtime manifest omits required files')
+    # Keep every configured typeface, including CJK. Shipping an XML family list
+    # whose files are absent reproduces the original native font-load failure.
+    for name in lock['system']['files']:
+        for font in ET.parse(root/'android-system'/name).iter('font'):
+            filename = (font.text or '').strip()
+            if not filename or Path(filename).name != filename or not (root/'android-system/fonts'/filename).is_file():
+                raise RuntimeError(f'Missing or invalid configured system font: {filename}')
+    for alias, target in lock['system']['fontAliases'].items():
+        a, b = (record['files'].get('android-system/fonts/'+name) for name in (alias, target))
+        if not a or a != b:
+            raise RuntimeError(f'System font compatibility alias differs from its source: {alias}')
     for name in lock['bootClassPath']:
         path = root/name
         if name.endswith('.jar'):
@@ -164,6 +180,40 @@ def extract(work, output, debugfs):
                          ('etc/NOTICE.xml.gz', 'Notices/system-NOTICE.xml.gz'),
                          ('build.prop', 'system-build.prop')]:
         dump(work/'system.img', '/system/'+source, output/dest)
+    for name in lock['system']['files']:
+        dump(work/'system.img', '/system/'+name, output/'android-system'/name)
+    for name in lock['system']['directories']:
+        dump(work/'system.img', '/system/'+name, output/'android-system'/name, directory=True)
+    # Android keeps legacy font names as aliases (for example DroidSans-Bold).
+    # Materialize only aliases within the extracted fonts tree, never follow
+    # an absolute Android path on the host or silently drop an alias a game uses.
+    fonts = output/'android-system/fonts'
+    def font_source(path, seen):
+        if path in seen:
+            raise RuntimeError(f'Cyclic system font alias: {path.name}')
+        if not path.is_symlink():
+            return path
+        target = Path(os.readlink(path))
+        if target.is_absolute():
+            if target.parent != Path('/system/fonts'):
+                raise RuntimeError(f'Font alias outside system fonts: {target}')
+            target = fonts/target.name
+        else:
+            target = Path(os.path.normpath(path.parent/target))
+        if not target.is_relative_to(fonts):
+            raise RuntimeError(f'Font alias escapes extracted fonts: {target}')
+        return font_source(target, seen | {path})
+    for path in sorted(fonts.iterdir()):
+        if path.is_symlink():
+            data = font_source(path, set()).read_bytes()
+            path.unlink(); path.write_bytes(data)
+    # The pinned image's legacy fonts.xml names two files it no longer ships.
+    # Keep that configuration intact and provide explicit, recorded aliases to
+    # its current Khmer/emoji fonts. This does not consult host system fonts.
+    for alias, target in lock['system']['fontAliases'].items():
+        if Path(alias).name != alias or Path(target).name != target or (fonts/alias).exists():
+            raise RuntimeError(f'Invalid or no longer needed font alias: {alias}')
+        shutil.copyfile(fonts/target, fonts/alias)
 
 
 def prepare(image, output):
@@ -194,12 +244,15 @@ def prepare(image, output):
 
 def ensure(output):
     if (output/RECORD).exists():
-        verify(output)
-        record = json.loads((output/'husk-framework.json').read_text())
-        if record['sourcesSHA256'] != source_digest():
-            build_framework(output/'husk-framework.dex')
-            write_record(output)
-        return
+        previous_record = json.loads((output/RECORD).read_text())
+        if previous_record.get('lockSHA256') == digest(LOCK):
+            verify(output)
+            record = json.loads((output/'husk-framework.json').read_text())
+            if record['sourcesSHA256'] != source_digest():
+                build_framework(output/'husk-framework.dex')
+                write_record(output)
+            return
+        print('Runtime dependency lock changed; rebuilding from the immutable source image', flush=True)
     # Reuse the immutable original download; never inspect an installed VM disk.
     explicit = os.environ.get('HUSK_JAVA_IMAGE')
     previous = ROOT/'build/macos-p5/guest-cache/vda-v12.qcow2'
