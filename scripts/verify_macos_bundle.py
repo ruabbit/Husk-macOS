@@ -9,6 +9,7 @@ import plistlib
 import re
 import subprocess
 from build_java_runtime import verify as verify_java
+from build_macos_graphics import patches as graphics_patches
 
 def command(*args):
     return subprocess.run([str(a) for a in args], capture_output=True, text=True, check=True)
@@ -16,6 +17,10 @@ def command(*args):
 def verify(app):
     command('codesign','--verify','--deep','--strict',app)
     java = verify_java(app/'Contents/Resources/JavaRuntime', check_sources=True)
+    graphics = json.loads((app/'Contents/Resources/Notices/moltenvk-build.json').read_text())
+    assert graphics['patches'] == graphics_patches(), 'Packaged graphics source patches differ'
+    for path, checksum in graphics['patches'].items():
+        assert hashlib.sha256((app/'Contents/Resources/Notices'/Path(path).name).read_bytes()).hexdigest() == checksum
     icons={}
     for bundle in [app,*sorted((app/'Contents/Helpers').glob('*.app'))]:
         info=plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
@@ -31,7 +36,7 @@ def verify(app):
     angle=app/'Contents/Frameworks/libANGLE-shared.dylib'
     molten=(app/'Contents/Frameworks/MoltenVK.framework/MoltenVK').resolve()
     results={}
-    for path in [main,runner,angle,molten]:
+    for path in [main,runner,app/'Contents/Helpers/WebRunner.app/Contents/MacOS/WebRunner',angle,molten]:
         relative=str(path.relative_to(app))
         arch=command('lipo','-archs',path).stdout.strip()
         assert arch=='arm64',(relative,arch)

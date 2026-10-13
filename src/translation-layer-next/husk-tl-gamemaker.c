@@ -5,6 +5,8 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include "husk-tl-driver.h"
+#include "husk-tl-gamepad.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +32,8 @@ void tl_audiotrack_hle_install(void);
 
 #define LIB "com/yoyogames/runner/RunnerJNILib"
 
+static atomic_int lifecycle;
+bool tl_guest_threads_quiescent(void);
 static struct {
     tl_gm_config cfg;
     char apk[1024], data[512], save[600], pkg[128], frame_dir[512], angle_egl[600], angle_gles[600];
@@ -318,7 +322,7 @@ static void drain_events(void)
     pthread_mutex_unlock(&q_lock);
     for (int i = 0; i < n; i++) {
         if (local[i].kind == EV_TOUCH) send_touch(&local[i]); else send_key(&local[i]);
-        if (tl_jni_pending()) tl_jni_clear();
+        if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
     }
 }
 
@@ -344,7 +348,7 @@ static void *gl_main(void *arg)
     unsigned (*swapBuffers)(EGLDisplay, EGLSurface) = tl_egl_resolve("eglSwapBuffers");
     unsigned (*swapInterval)(EGLDisplay, EGLint) = tl_egl_resolve("eglSwapInterval");
     EGLint (*getError)(void) = tl_egl_resolve("eglGetError");
-    if (!getDisplay || !createWindowSurface || !swapBuffers) { tl_log_line("gamemaker: EGL is not available"); atomic_store(&G.ended, true); return NULL; }
+    if (!getDisplay || !createWindowSurface || !swapBuffers) { tl_log_line("gamemaker: EGL is not available"); atomic_store(&G.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
 
     EGLDisplay dpy = getDisplay(NULL);
     EGLint major = 0, minor = 0;
@@ -354,11 +358,11 @@ static void *gl_main(void *arg)
     const EGLint want[] = { 0x3040, 0x4 /* ES2 */, 0x3033, 0x4, 0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8,
                             0x3025, 16, 0x3026, 8, EGL_NONE };
     EGLConfig cfg = NULL; EGLint ncfg = 0;
-    if (!chooseConfig(dpy, want, &cfg, 1, &ncfg) || ncfg < 1) { tl_log_line("gamemaker: eglChooseConfig found nothing (%#x)", getError()); atomic_store(&G.ended, true); return NULL; }
+    if (!chooseConfig(dpy, want, &cfg, 1, &ncfg) || ncfg < 1) { tl_log_line("gamemaker: eglChooseConfig found nothing (%#x)", getError()); atomic_store(&G.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     const EGLint ctx_attr[] = { 0x3098 /* CONTEXT_CLIENT_VERSION */, 2, EGL_NONE };
     EGLContext ctx = createContext(dpy, cfg, NULL, ctx_attr);
     EGLSurface surf = createWindowSurface(dpy, cfg, tl_nwindow_get(), NULL);
-    if (!ctx || !surf || !makeCurrent(dpy, surf, surf, ctx)) { tl_log_line("gamemaker: no GL context (%#x)", getError()); atomic_store(&G.ended, true); return NULL; }
+    if (!ctx || !surf || !makeCurrent(dpy, surf, surf, ctx)) { tl_log_line("gamemaker: no GL context (%#x)", getError()); atomic_store(&G.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     if (swapInterval) swapInterval(dpy, 1);
     tl_log_line("gamemaker: EGL context ready (EGL %d.%d)", major, minor);
 
@@ -371,7 +375,7 @@ static void *gl_main(void *arg)
     /* DemoRenderer's DoStartup: Startup(apk, saveDir, package, sleepMargin, dynamicAssets), then the display's rate. */
     typedef void (*startup_fn)(void *env, void *cls, void *apk, void *save, void *pkg, int sleep_margin, uint8_t dynamic);
     startup_fn startup = (startup_fn)native_of("Startup");
-    if (!startup) { atomic_store(&G.ended, true); return NULL; }
+    if (!startup) { atomic_store(&G.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     char *ini = read_options(G.apk);
     int sleep_margin = option_int(ini, "SleepMargin", 0);
     free(ini);
@@ -388,24 +392,25 @@ static void *gl_main(void *arg)
     process_fn process = (process_fn)native_of("Process");
     flip_fn can_flip = (flip_fn)native_of("canFlip");
     int_fn pause_fn = (int_fn)native_of("Pause"), resume_fn = (int_fn)native_of("Resume");
-    if (!process) { atomic_store(&G.ended, true); return NULL; }
+    if (!process) { atomic_store(&G.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     int orientation = G.cfg.width > G.cfg.height ? 0 : 1;       /* RunnerActivity.Orientation: landscape 0, portrait 1 */
 
+    tl_driver_transition(&lifecycle, TL_DRIVER_RUNNING);
     bool was_paused = false;
     int64_t next = now_ns();
-    while (!atomic_load(&G.stop)) {
+    while (!atomic_load(&G.stop) && atomic_load(&lifecycle) != TL_DRIVER_FAILED) {
+        drain_events();
         if (atomic_load(&G.paused)) {
-            if (!was_paused) { if (pause_fn) pause_fn(env, cls, 0); was_paused = true; }
+            if (!was_paused) { if (pause_fn) pause_fn(env, cls, 0); was_paused = true; tl_driver_transition(&lifecycle, tl_jni_pending() ? TL_DRIVER_FAILED : TL_DRIVER_PAUSED); }
             usleep(20000); next = now_ns(); continue;
         }
-        if (was_paused) { if (resume_fn) resume_fn(env, cls, 0); was_paused = false; next = now_ns(); }
-        drain_events();
+        if (was_paused) { if (resume_fn) resume_fn(env, cls, 0); was_paused = false; tl_driver_transition(&lifecycle, tl_jni_pending() ? TL_DRIVER_FAILED : TL_DRIVER_RUNNING); next = now_ns(); }
         int64_t t0 = now_ns();
         /* One displayed frame: Process until the runner says it has something to show. */
         int ret = 1;
         for (int tries = 0; tries < 8; tries++) {
             ret = process(env, cls, G.cfg.width, G.cfg.height, 0.f, 0.f, -1.f, 0, orientation, 60.f);
-            if (tl_jni_pending()) tl_jni_clear();
+            if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
             if (ret == 0 || !can_flip || can_flip(env, cls)) break;
         }
         if (ret == 0) { tl_log_line("gamemaker: Process returned 0: the game ended"); atomic_store(&G.ended, true); break; }
@@ -422,15 +427,30 @@ static void *gl_main(void *arg)
         if (late > 100000000ll) next = now_ns();
         else if (late < 0) { struct timespec ts = { 0, (long)(-late) }; nanosleep(&ts, NULL); }
     }
+    tl_driver_transition(&lifecycle, TL_DRIVER_STOPPING);
+    drain_events();
+    if (!was_paused && pause_fn) pause_fn(env, cls, 0);
+    void (*destroy)(void *, void *) = native_of("Exit");
+    if (destroy) destroy(env, cls);
+    bool closed = destroy && !tl_jni_pending();
+    unsigned (*destroy_surface)(void *, void *) = tl_egl_resolve("eglDestroySurface");
+    unsigned (*destroy_context)(void *, void *) = tl_egl_resolve("eglDestroyContext");
+    makeCurrent(dpy, NULL, NULL, NULL);
+    if (destroy_surface) destroy_surface(dpy, surf);
+    if (destroy_context) destroy_context(dpy, ctx);
+    tl_driver_transition(&lifecycle, closed ? TL_DRIVER_DESTROYED : TL_DRIVER_FAILED);
     return NULL;
 }
 
 bool tl_gm_run(void)
 {
+    atomic_store(&lifecycle, TL_DRIVER_STARTING);
     pthread_attr_t a;
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, 16u << 20);
-    if (pthread_create(&G.thread, &a, gl_main, NULL) != 0) return false;
+    int error = pthread_create(&G.thread, &a, gl_main, NULL);
+    pthread_attr_destroy(&a);
+    if (error) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return false; }
     G.thread_started = true;
     return true;
 }
@@ -451,3 +471,12 @@ void tl_gm_perf_snapshot(tl_gm_perf *out)
 void tl_gm_set_paused(bool paused) { atomic_store(&G.paused, paused); }
 unsigned long tl_gm_frames(void) { return atomic_load(&G.frames); }
 bool tl_gm_ended(void) { return atomic_load(&G.ended); }
+
+void tl_gm_stop(void)
+{
+    tl_pad_set_sink(NULL);
+    atomic_store(&G.stop, true);
+    if (G.thread_started) { pthread_join(G.thread, NULL); G.thread_started = false; }
+    if (atomic_load(&lifecycle) != TL_DRIVER_DESTROYED || !tl_guest_threads_quiescent()) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
+}
+tl_driver_state tl_gm_state(void) { return atomic_load(&lifecycle); }

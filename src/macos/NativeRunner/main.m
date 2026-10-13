@@ -13,6 +13,9 @@
 #include "husk-tl-unity.h"
 #include "husk-tl-nativeactivity.h"
 #import "MacJavaRuntime.h"
+#import "MacNativeDrivers.h"
+#include "husk-tl-vulkan.h"
+#include "husk-tl-gamemaker.h"
 #include "husk-tl-bionic.h"
 #include "husk-tl-gamepad.h"
 #include "husk-tl-audio.h"
@@ -29,12 +32,12 @@
 
 static NSMutableArray<NSString *> *splitPaths;
 static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *diagnostics;
-static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow;
+static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow, fullScreen;
 static int variant, exitStatus;
-static BOOL minecraft, unity, nativeactivity, javaapp, portrait;
-static NSString *packageName, *nativeLibrary;
-static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity || javaapp; }
-static NSString *runtimeName(void) { return javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
+static BOOL minecraft, unity, nativeactivity, javaapp, nativeDriver, ue4, portrait;
+static NSString *packageName, *nativeLibrary, *activityClass;
+static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity || javaapp || nativeDriver; }
+static NSString *runtimeName(void) { return nativeDriver ? mac_driver_name() : ue4 ? @"ue4" : javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
 static void activityGuestExit(int status) {
     tl_log_line("%s: guest requested process exit %d before lifecycle acknowledgement",runtimeName().UTF8String,status);
     // The isolated process has no completed destroy receipt. Exit normally so
@@ -99,7 +102,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {(void)event;return YES;}
 - (void)keyDown:(NSEvent *)event
 {
-    if((minecraft||javaapp)&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
+    if((minecraft||javaapp||nativeDriver)&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
     if(event.modifierFlags & NSEventModifierFlagCommand) {[super keyDown:event];return;}
     if(!guestRuntime() && (event.keyCode==53 || event.keyCode==35)) {if(!event.isARepeat)[self.runner togglePause:nil];return;}
     if([self.runner.state isEqual:@"running"]) {[self.runner guestKey:event.keyCode down:YES repeat:event.isARepeat];}
@@ -147,7 +150,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
             drag?2:down?0:1;
         // AppKit raises for scrollingDeltaY on ordinary mouse events.
         tl_ga_mouse(action,x,y,self.mouseButtons,event.type==NSEventTypeScrollWheel?event.scrollingDeltaY:0);
-    } else if(unity||nativeactivity||javaapp) {
+    } else if(unity||nativeactivity||javaapp||nativeDriver) {
         if(![self.runner.state isEqual:@"running"]||self.runner.changingPause||(!press&&!release&&!drag)||event.buttonNumber!=0)return;
         if((release||drag)&&!(self.mouseButtons&1))return;
         NSPoint guest=[self renderPointForViewPoint:point];
@@ -158,6 +161,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
         if(press)self.mouseButtons|=1;
         if(release)self.mouseButtons&=~1;
         if(javaapp)tl_javaapp_touch(press?0:release?2:1,0,guest.x,guest.y);
+        else if(nativeDriver)mac_driver_touch(press?0:release?2:1,0,guest.x,guest.y);
         else if(nativeactivity)tl_na_touch(press?0:release?2:1,0,guest.x,guest.y);
         else tl_unity_touch(press?0:release?2:1,0,guest.x,guest.y);
         self.runner.lastClick=@{@"x":@(guest.x),@"y":@(guest.y),@"buttons":@(self.mouseButtons)};
@@ -185,6 +189,7 @@ static void javaKeyboard(int show,int inputType,int imeOptions) {
     (void)inputType;(void)imeOptions;
     dispatch_async(dispatch_get_main_queue(),^{javaHost.textInput.textInputActive=show!=0;});
 }
+static void nativeKeyboard(int action) { javaKeyboard(action==1,1,0); }
 static void javaSetClipboard(const char *text) {
     NSString *value=[NSString stringWithUTF8String:text?:""]?:@"";
     dispatch_async(dispatch_get_main_queue(),^{[NSPasteboard.generalPasteboard clearContents];[NSPasteboard.generalPasteboard setString:value forType:NSPasteboardTypeString];});
@@ -300,13 +305,13 @@ static int androidKey(unsigned code)
 {
     if(atomic_load(&finished)||[self.state isEqual:@"stopping"])return;
     [self transition:@"stopping" reason:reason];[self clearInput];
-    if((unity||nativeactivity||javaapp) && self.lifecycleQueue) {
+    if((unity||nativeactivity||javaapp||nativeDriver) && self.lifecycleQueue) {
         // Initialization and join share a queue, so stop during loading cannot
         // race the loader or miss a thread that has not been created yet.
         dispatch_async(self.lifecycleQueue,^{
             tl_audio_set_muted(true);tl_audio_set_paused(false);
-            if(javaapp)tl_javaapp_stop();else if(nativeactivity)tl_na_stop();else tl_unity_stop();
-            BOOL ok=javaapp?tl_javaapp_get_state()==TL_JAVA_DESTROYED:nativeactivity?tl_na_get_state()==TL_NA_DESTROYED:tl_unity_get_state()==TL_UNITY_DESTROYED;
+            if(nativeDriver)mac_driver_stop();else if(javaapp)tl_javaapp_stop();else if(nativeactivity)tl_na_stop();else tl_unity_stop();
+            BOOL ok=nativeDriver?mac_driver_state()==TL_DRIVER_DESTROYED:javaapp?tl_javaapp_get_state()==TL_JAVA_DESTROYED:nativeactivity?tl_na_get_state()==TL_NA_DESTROYED:tl_unity_get_state()==TL_UNITY_DESTROYED;
             dispatch_async(dispatch_get_main_queue(),^{[self gameStopped:ok];});
         });return;
     }
@@ -335,16 +340,16 @@ static int androidKey(unsigned code)
     int key=androidKey(code);if(!key)return;
     if(down){if(![self.state isEqual:@"running"]||self.changingPause)return;[self.heldKeys addObject:@(key)];}
     else [self.heldKeys removeObject:@(key)];
-    if(javaapp)tl_javaapp_key(key,down);else if(nativeactivity)tl_na_key(key,down);else if(unity)tl_unity_key(key,down,repeat?1:0);else tl_ga_key(key,down,repeat?1:0);
+    if(nativeDriver)mac_driver_key(key,down);else if(javaapp)tl_javaapp_key(key,down);else if(nativeactivity)tl_na_key(key,down);else if(unity)tl_unity_key(key,down,repeat?1:0);else tl_ga_key(key,down,repeat?1:0);
 }
 - (void)clearInput {
     [self releaseCursor];
     if([self.textInput isKindOfClass:GameView.class])((GameView *)self.textInput).mouseButtons=0;
     mac_input_clear(&input);
     if(guestRuntime()&&self.loaded){
-        for(NSNumber *key in self.heldKeys){if(javaapp)tl_javaapp_key(key.intValue,false);else if(nativeactivity)tl_na_key(key.intValue,false);else if(unity)tl_unity_key(key.intValue,false,0);else tl_ga_key(key.intValue,false,0);}
+        for(NSNumber *key in self.heldKeys){if(nativeDriver)mac_driver_key(key.intValue,false);else if(javaapp)tl_javaapp_key(key.intValue,false);else if(nativeactivity)tl_na_key(key.intValue,false);else if(unity)tl_unity_key(key.intValue,false,0);else tl_ga_key(key.intValue,false,0);}
         [self.heldKeys removeAllObjects];
-        if(javaapp)tl_javaapp_touch(3,0,0,0);else if(nativeactivity)tl_na_touch(3,0,0,0);else if(unity)tl_unity_touch(3,0,0,0);else {tl_ga_touch(3,0,0,0);tl_ga_mouse_cancel();}
+        if(nativeDriver)mac_driver_touch(3,0,0,0);else if(javaapp)tl_javaapp_touch(3,0,0,0);else if(nativeactivity)tl_na_touch(3,0,0,0);else if(unity)tl_unity_touch(3,0,0,0);else {tl_ga_touch(3,0,0,0);tl_ga_mouse_cancel();}
         tl_pad_state empty={0};for(int slot=0;slot<TL_PADS;slot++)if(tl_pad_connected(slot))tl_pad_update(slot,&empty);
     }
 }
@@ -364,10 +369,10 @@ static int androidKey(unsigned code)
     BOOL pause=[self.state isEqual:@"running"];
     if(self.changingPause)return;
     [self clearInput];
-    if(unity||nativeactivity||javaapp){
+    if(unity||nativeactivity||javaapp||nativeDriver){
         self.changingPause=YES;self.requestedPause=pause;self.pauseStarted=NSDate.date;
         if(!pause)tl_audio_set_paused(false);
-        if(javaapp)tl_javaapp_set_paused(pause);else if(nativeactivity)tl_na_set_paused(pause);else tl_unity_set_paused(pause);return;
+        if(nativeDriver)mac_driver_pause(pause);else if(javaapp)tl_javaapp_set_paused(pause);else if(nativeactivity)tl_na_set_paused(pause);else tl_unity_set_paused(pause);return;
     }
     if(minecraft) {
         self.changingPause=YES;
@@ -389,9 +394,9 @@ static int androidKey(unsigned code)
 - (void)frame
 {
     @autoreleasepool {
-    if(unity||nativeactivity||javaapp){
-        self.ticks=javaapp?tl_javaapp_frames():nativeactivity?tl_na_frames():tl_unity_frames();
-        tl_unity_state state=tl_unity_get_state();
+    if(unity||nativeactivity||javaapp||nativeDriver){
+        self.ticks=nativeDriver?mac_driver_frames():javaapp?tl_javaapp_frames():nativeactivity?tl_na_frames():tl_unity_frames();
+        tl_unity_state state=nativeDriver?(tl_unity_state)mac_driver_state():tl_unity_get_state();
         if(nativeactivity){
             switch(tl_na_get_state()){
                 case TL_NA_RUNNING:state=TL_UNITY_RUNNING;break;
@@ -418,7 +423,7 @@ static int androidKey(unsigned code)
         if([self.state isEqual:@"starting"]){
             if(self.loaded&&state==TL_UNITY_RUNNING&&self.ticks>0){
                 [self transition:@"running" reason:@"game-ready"];
-                if(!headless&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+                if(!headless&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];if(fullScreen&&!(self.window.styleMask&NSWindowStyleMaskFullScreen))[self.window toggleFullScreen:nil];[NSApp activateIgnoringOtherApps:YES];}
             }else if(-self.launchStarted.timeIntervalSinceNow>90){[self finish:NO reason:@"游戏启动超时，请查看日志。"];}
         }
         if(self.changingPause){
@@ -434,7 +439,7 @@ static int androidKey(unsigned code)
         if(tl_ga_failed()){[self finish:NO reason:@"Minecraft Activity 初始化失败，请查看日志。"];return;}
         if([self.state isEqual:@"starting"]&&tl_ga_ready()&&self.ticks>0){
             [self transition:@"running" reason:@"game-ready"];
-            if(!headless&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+            if(!headless&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];if(fullScreen&&!(self.window.styleMask&NSWindowStyleMaskFullScreen))[self.window toggleFullScreen:nil];[NSApp activateIgnoringOtherApps:YES];}
         }
         return;
     }
@@ -461,6 +466,15 @@ static int androidKey(unsigned code)
     else if([command isEqual:@"pause"]&&[self.state isEqual:@"running"]) [self togglePause:nil];
     else if([command isEqual:@"resume"]&&[self.state isEqual:@"paused"]) [self togglePause:nil];
     else if([command isEqual:@"status"]) [self status];
+    else if([command isEqual:@"window"]&&self.window&&!hiddenWindow&&!headless) {
+        NSString *action=message[@"action"];
+        if([action isEqual:@"show"]){[self.window deminiaturize:nil];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+        else if([action isEqual:@"minimize"])[self.window miniaturize:nil];
+        else if([action isEqual:@"zoom"])[self.window zoom:nil];
+        else if([action isEqual:@"fullscreen"])[self.window toggleFullScreen:nil];
+        else {[self event:@"rejected" detail:@{@"reason":@"unknown-window-action"}];return;}
+        [self event:@"window" detail:@{@"action":action}];
+    }
     else if([command isEqual:@"set-pause-inactive"]&&[message[@"enabled"] isKindOfClass:NSNumber.class]) {
         pauseInactive=[message[@"enabled"] boolValue];
         [self event:@"pause-policy" detail:@{@"pauseWhenInactive":@(pauseInactive)}];
@@ -469,8 +483,9 @@ static int androidKey(unsigned code)
         NSString *source=message[@"source"];
         if([source isEqual:@"key"]) {[self guestKey:[message[@"code"] unsignedIntValue] down:[message[@"down"] boolValue] repeat:NO];}
         else if(minecraft&&[source isEqual:@"touch"]) {tl_ga_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
-        else if((unity||nativeactivity||javaapp)&&[source isEqual:@"touch"]) {
+        else if((unity||nativeactivity||javaapp||nativeDriver)&&[source isEqual:@"touch"]) {
             if(javaapp)tl_javaapp_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);
+            else if(nativeDriver)mac_driver_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);
             else if(nativeactivity)tl_na_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);
             else tl_unity_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"mouse"]) {tl_ga_mouse([message[@"action"] intValue],[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue],[message[@"scroll"] floatValue]);self.pointerEvents++;}
@@ -534,9 +549,10 @@ static int androidKey(unsigned code)
         NSData *data=[NSData dataWithBytes:raw length:strlen(raw)];husk_tl_free(raw);
         NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
         if(javaapp)return mac_java_accepts_scan(scan);
+        if(nativeDriver)return mac_driver_accepts_scan(scan);
         return [scan isKindOfClass:NSDictionary.class] && [scan[@"ok"] boolValue] &&
             [scan[@"hasManifest"] boolValue] && [scan[@"engine"] isKindOfClass:NSString.class] &&
-            (nativeactivity?[scan[@"engine"] isEqual:@"NativeActivity"]:unity?([scan[@"engine"] hasPrefix:@"Unity"]&&![scan[@"engine"] isEqual:@"Unity 6"]):[scan[@"engine"] isEqual:@"Minecraft"]) &&
+            (ue4?[scan[@"engine"] isEqual:@"Unreal Engine"]:nativeactivity?[scan[@"engine"] isEqual:@"NativeActivity"]:unity?([scan[@"engine"] hasPrefix:@"Unity"]&&![scan[@"engine"] isEqual:@"Unity 6"]):[scan[@"engine"] isEqual:@"Minecraft"]) &&
             [scan[@"abis"] isKindOfClass:NSArray.class] && [scan[@"abis"] containsObject:@"arm64-v8a"];
     }
     NSString *catalogPath=[NSBundle.mainBundle pathForResource:@"fixture-catalog" ofType:@"json"];
@@ -617,6 +633,11 @@ static int androidKey(unsigned code)
             tl_ga_text(text.UTF8String,(int)selection.location,(int)NSMaxRange(selection),marked.location==NSNotFound?-1:(int)marked.location,marked.location==NSNotFound?-1:(int)NSMaxRange(marked));
         };
         self.textInput.textCommand=^(unsigned code){[weakSelf guestKey:code down:YES repeat:NO];[weakSelf guestKey:code down:NO repeat:NO];};
+        if(nativeDriver){
+            javaHost=self; mac_driver_keyboard(nativeKeyboard);
+            self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])mac_driver_text(text.UTF8String);};
+            self.textInput.textCommand=^(unsigned code){if(code==51)mac_driver_delete();else{[weakSelf guestKey:code down:YES repeat:NO];[weakSelf guestKey:code down:NO repeat:NO];}};
+        }
         if(javaapp){
             javaHost=self;
             self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])tl_javaapp_text(text.UTF8String);};
@@ -632,7 +653,7 @@ static int androidKey(unsigned code)
         if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);}
         tl_ld_set_verbosity(2);tl_jni_set_trace(0);tl_egl_offscreen_windows(headless);
         for(NSString *split in splitPaths)tl_ld_queue_split(split.fileSystemRepresentation);
-        if(unity||nativeactivity||javaapp){
+        if(unity||nativeactivity||javaapp||nativeDriver){
             self.runtimePaths=@[apkPath,data,packageName,angle,frames?:@""];
             self.launchStarted=NSDate.date;self.lifecycleQueue=dispatch_queue_create("org.husk.game.lifecycle",DISPATCH_QUEUE_SERIAL);
             tl_guest_exit_hook=activityGuestExit;
@@ -642,7 +663,9 @@ static int androidKey(unsigned code)
                     .width=(int)surfaceWidth,.height=(int)surfaceHeight,.metal_layer=(__bridge void *)layer,
                     .angle_egl=self.runtimePaths[3].fileSystemRepresentation,.frame_dir=frames?self.runtimePaths[4].fileSystemRepresentation:NULL,.frame_every=-60};
                 BOOL ok;
-                if(javaapp){
+                if(nativeDriver){
+                    ok=mac_driver_start(&configuration,activityClass,[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"]);
+                }else if(javaapp){
                     NSString *root=[[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"../../Resources/JavaRuntime"] stringByStandardizingPath];
                     NSString *fw=[root stringByAppendingPathComponent:@"framework-res.apk"];
                     tl_javaapp_config javaConfiguration={.apk_path=configuration.apk_path,.data_dir=configuration.data_dir,
@@ -656,6 +679,7 @@ static int androidKey(unsigned code)
                         .package_name=configuration.package_name,.width=configuration.width,.height=configuration.height,
                         .metal_layer=configuration.metal_layer,.angle_egl=configuration.angle_egl,
                         .frame_dir=configuration.frame_dir,.frame_every=configuration.frame_every};
+                    if(ue4)tl_vk_configure([frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"].fileSystemRepresentation,NULL,0);
                     tl_na_set_library(nativeLibrary.UTF8String);
                     ok=tl_na_start(&nativeConfiguration)&&tl_na_run();
                 }else{tl_unity_register_pad_sink();ok=tl_unity_start(&configuration)&&tl_unity_run();}
@@ -695,7 +719,7 @@ static int androidKey(unsigned code)
     [self transition:@"running" reason:@"game-ready"];self.draw(0);[graphics present];
     }
     if(!headless){
-        if(!guestRuntime()&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
+        if(!guestRuntime()&&!hiddenWindow){[self.window makeKeyAndOrderFront:nil];if(fullScreen&&!(self.window.styleMask&NSWindowStyleMaskFullScreen))[self.window toggleFullScreen:nil];[NSApp activateIgnoringOtherApps:YES];}
         for(GCController *controller in GCController.controllers)[self setupController:controller];
         [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){[self setupController:note.object];}];
         [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidDisconnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){
@@ -730,10 +754,12 @@ int main(int argc,const char **argv)
             if([arg isEqual:@"--headless"])headless=YES;
             else if([arg isEqual:@"--show-window"])headless=NO;
             else if([arg isEqual:@"--hidden-window"]){headless=NO;hiddenWindow=YES;}
+            else if([arg isEqual:@"--fullscreen"])fullScreen=YES;
             else if([arg isEqual:@"--mute"])muted=YES;
             else if([arg isEqual:@"--automation"])automation=YES;
             else if([arg isEqual:@"--pause-inactive"])pauseInactive=YES;
             else if([arg isEqual:@"--portrait"])portrait=YES;
+            else if(i+1<argc&&[arg isEqual:@"--activity"])activityClass=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--package"])packageName=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--native-library"])nativeLibrary=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--session"])sessionID=@(argv[++i]);
@@ -741,7 +767,12 @@ int main(int argc,const char **argv)
             else if(i+1<argc&&[arg isEqual:@"--split"])[splitPaths addObject:@(argv[++i])];
             else if(i+1<argc&&[arg isEqual:@"--apk-sha256"])apkDigest=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--checkpoint"])checkpointPath=@(argv[++i]);
-            else if(i+1<argc&&[arg isEqual:@"--runtime"]){NSString *runtime=@(argv[++i]);if(![runtime isEqual:@"orbit"]&&![runtime isEqual:@"minecraft"]&&![runtime isEqual:@"unity"]&&![runtime isEqual:@"nativeactivity"]&&![runtime isEqual:@"java"])return 64;minecraft=[runtime isEqual:@"minecraft"];unity=[runtime isEqual:@"unity"];nativeactivity=[runtime isEqual:@"nativeactivity"];javaapp=[runtime isEqual:@"java"];}
+            else if(i+1<argc&&[arg isEqual:@"--runtime"]){
+                NSString *runtime=@(argv[++i]); nativeDriver=mac_driver_select(runtime);
+                if(!nativeDriver&&![@[@"orbit",@"minecraft",@"unity",@"nativeactivity",@"java",@"ue4"] containsObject:runtime])return 64;
+                minecraft=[runtime isEqual:@"minecraft"];unity=[runtime isEqual:@"unity"];ue4=[runtime isEqual:@"ue4"];
+                nativeactivity=ue4||[runtime isEqual:@"nativeactivity"];javaapp=[runtime isEqual:@"java"];
+            }
             else if(i+1<argc&&[arg isEqual:@"--variant"])variant=atoi(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--title"])gameTitle=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--diagnostics"])diagnostics=@(argv[++i]);
@@ -749,10 +780,10 @@ int main(int argc,const char **argv)
         }
         if(![[NSUUID alloc] initWithUUIDString:sessionID]||!apkPath||!checkpointPath||variant<0||variant>1)return 64;
         if(splitPaths.count>=TL_LD_MAX_APKS || (!guestRuntime() && splitPaths.count))return 64;
-        if(portrait&&!unity&&!nativeactivity&&!javaapp)return 64;
+        if(portrait&&!unity&&!nativeactivity&&!javaapp&&!nativeDriver)return 64;
         if(nativeLibrary&&(!nativeactivity||!nativeLibrary.length||nativeLibrary.length>56||[nativeLibrary rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-"] invertedSet]].location!=NSNotFound))return 64;
-        if((unity||nativeactivity||javaapp)&&(!packageName.length||packageName.length>199||[packageName rangeOfCharacterFromSet:
+        if((unity||nativeactivity||javaapp||nativeDriver)&&(!packageName.length||packageName.length>199||[packageName rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"] invertedSet]].location!=NSNotFound))return 64;
         if(guestRuntime()){
             NSArray<NSString *> *hashes=[apkDigest componentsSeparatedByString:@":"];
@@ -762,6 +793,8 @@ int main(int argc,const char **argv)
         }
         gameTitle=gameTitle?:@"Orbit Garden";
         if(diagnostics){if(!automation)return 64;[NSFileManager.defaultManager createDirectoryAtPath:diagnostics withIntermediateDirectories:YES attributes:nil error:NULL];}
+        if(nativeDriver&&[mac_driver_name() isEqual:@"gamemaker"]){int orientation=tl_gm_orientation(apkPath.fileSystemRepresentation);if(orientation>=0)portrait=orientation==1;}
+        if(activityClass&&(activityClass.length>512||[activityClass rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/$"] invertedSet]].location!=NSNotFound))return 64;
         if(guestRuntime()){surfaceWidth=portrait?720:1280;surfaceHeight=portrait?1280:720;}
         mac_runtime_diagnostics_install();signal(SIGPIPE,SIG_IGN);
         Runner *runner=[Runner new];[runner transition:@"starting" reason:@"launch"];

@@ -4,7 +4,15 @@ import Foundation
 public struct GameSettings: Codable, Equatable, Sendable {
     public var muted = false
     public var pauseWhenInactive = false
+    public var openFullScreen = false
     public init() {}
+    private enum CodingKeys: String, CodingKey { case muted, pauseWhenInactive, openFullScreen }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
+        pauseWhenInactive = try c.decodeIfPresent(Bool.self, forKey: .pauseWhenInactive) ?? false
+        openFullScreen = try c.decodeIfPresent(Bool.self, forKey: .openFullScreen) ?? false
+    }
 }
 
 public struct FixtureManifest: Codable, Sendable {
@@ -39,7 +47,9 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     // imported the APK. Codable ignores the old persisted unavailableReason.
     public var runtime: String? {
         if fixture != nil { return "orbit" }
-        guard (1...32).contains(apkNames.count), abis.isEmpty || abis.contains("arm64-v8a") else { return nil }
+        guard (1...32).contains(apkNames.count) else { return nil }
+        if ["Capacitor", "Cordova"].contains(engine ?? "") { return "web" }
+        guard abis.isEmpty || abis.contains("arm64-v8a") else { return nil }
         if abis.isEmpty { return (dexCount ?? 0) > 0 && webKind == nil ? "java" : nil }
         if engine == "Unity 6" { return "java" }
         if ["Python", "Flutter", "libGDX", "Java", "React Native", ".NET / Xamarin"].contains(engine ?? "") { return "java" }
@@ -48,6 +58,12 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
         if engine == "SDL", let libraries = libraryNames, !libraries.contains(where: { $0.hasPrefix("libdxvk") }) { return "java" }
         if (1...32).contains(apkNames.count) && abis.contains("arm64-v8a") {
             if engine == "Minecraft" { return "minecraft" }
+            if engine == "Cocos" { return "cocos" }
+            if engine == "SDL" { return "sdl" }
+            if engine == "Godot" { return "godot" }
+            if engine == "GameMaker" { return "gamemaker" }
+            if engine == "Unreal Engine" { return "ue4" }
+            if engine == "Rockstar" { return "gta" }
             if engine == "NativeActivity" { return "nativeactivity" }
             if engine?.hasPrefix("Unity") == true { return "unity" }
         }

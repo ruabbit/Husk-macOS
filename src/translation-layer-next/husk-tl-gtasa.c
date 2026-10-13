@@ -4,6 +4,7 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include "husk-tl-driver.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,11 @@ void tl_nwindow_configure(int w, int h, void *layer);
 #define CLS_VIEW OSW "GameView"
 #define CLS_DEV OSW "DeviceInfo"
 #define CLS_NATIVE OSW "GameNative"
+
+static atomic_int lifecycle;
+static atomic_bool stop_requested;
+static bool thread_started;
+bool tl_guest_threads_quiescent(void);
 
 static struct {
     tl_ga_config cfg;
@@ -88,7 +94,7 @@ static void S_log(tl_jcall *c) { (void)c; }
 static void S_splashImage(tl_jcall *c) { tl_log_line("gta: splash image %s", Str(c->args[0].l)); }
 static void S_splashText(tl_jcall *c) { tl_log_line("gta: splash text \"%s\"", Str(c->args[0].l)); }
 static void S_openLink(tl_jcall *c) { tl_log_line("gta: the game opens %s", Str(c->args[0].l)); }
-static void S_quit(tl_jcall *c) { (void)c; tl_log_line("gta: the game asks to quit"); }
+static void S_quit(tl_jcall *c) { (void)c; tl_log_line("gta: the game asks to quit"); atomic_store(&stop_requested, true); }
 
 /* HTTP: the Rockstar services are not reached from here; each request is answered with an error, which the game carries on from. */
 static void S_httpGet(tl_jcall *c) { tl_log_line("gta: http GET #%d %s", c->args[0].i, Str(c->args[1].l)); post(EV_HTTP_ERROR, c->args[0].i, 0, NULL); }
@@ -316,7 +322,7 @@ static void *game_main(void *arg)
     void (*rs_id)(void *, void *, void *) = game_native("implOnRockstarIdChanged");
     void (*http_error)(void *, void *, int, int) = game_native("implOnHttpRequestError");
     void (*playlist_done)(void *, void *, uint8_t, int) = game_native("implOnPlaylistOpenComplete");
-    if (!on_created || !on_setup || !on_frame) return NULL;
+    if (!on_created || !on_setup || !on_frame) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
 
     /* GameActivityBase.onCreate: the activity's services, then the one-time set-up with the device, the assets and where the packages are. */
     on_created(env, cls, G.services, initialized ? initialized(env, cls) : 0);
@@ -340,6 +346,7 @@ static void *game_main(void *arg)
     if (on_resume) on_resume(env, cls);
     tl_log_line("gta: lifecycle delivered");
     atomic_store(&G.running, true);
+    tl_driver_transition(&lifecycle, TL_DRIVER_RUNNING);
 
     struct timespec last; clock_gettime(CLOCK_MONOTONIC, &last);
     bool pad_known[TL_PADS] = { false };
@@ -354,8 +361,8 @@ static void *game_main(void *arg)
             }
             case EV_PAD_KEY: if (e->b >= 0 ? pad_down : pad_up) (e->b >= 0 ? pad_down : pad_up)(env, cls, e->a, e->b >= 0 ? e->b : -e->b); break;
             case EV_PAD_AXES: if (pad_axes) pad_axes(env, cls, e->a, e->f[0], e->f[1], e->f[2], e->f[3], e->f[4], e->f[5]); break;
-            case EV_PAUSE: paused = true; if (on_pause) on_pause(env, cls); break;
-            case EV_RESUME: paused = false; if (on_resume) on_resume(env, cls); break;
+            case EV_PAUSE: paused = true; if (on_pause) on_pause(env, cls); tl_driver_transition(&lifecycle, tl_jni_pending() ? TL_DRIVER_FAILED : TL_DRIVER_PAUSED); break;
+            case EV_RESUME: paused = false; if (on_resume) on_resume(env, cls); tl_driver_transition(&lifecycle, tl_jni_pending() ? TL_DRIVER_FAILED : TL_DRIVER_RUNNING); break;
             case EV_GATE: if (rs_gate) rs_gate(env, cls, e->a, (uint8_t)e->b); break;
             case EV_SIGNIN: if (rs_signin) rs_signin(env, cls); break;
             case EV_SIGNOUT: if (rs_signout) rs_signout(env, cls); break;
@@ -367,7 +374,7 @@ static void *game_main(void *arg)
             case EV_HTTP_ERROR: if (http_error) http_error(env, cls, e->a, e->b); break;
             default: break;
             }
-            if (tl_jni_pending()) tl_jni_clear();
+            if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
         }
         for (int s = 0; s < TL_PADS; s++) {                       /* a controller coming or going */
             bool c = tl_pad_connected(s);
@@ -375,6 +382,7 @@ static void *game_main(void *arg)
             if (!c && pad_known[s] && pad_disc) pad_disc(env, cls, s);
             pad_known[s] = c;
         }
+        if (atomic_load(&stop_requested)) break;
         if (paused) { usleep(20000); continue; }
         if (initialized && initialized(env, cls)) {
             struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now);
@@ -382,8 +390,17 @@ static void *game_main(void *arg)
             last = now;
             on_frame(env, cls, dt);
         } else usleep(5000);
-        if (tl_jni_pending()) tl_jni_clear();
+        if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
     }
+    tl_driver_transition(&lifecycle, TL_DRIVER_STOPPING);
+    if (!paused && on_pause) on_pause(env, cls);
+    bool declared_static;
+    void (*destroy)(void *, void *) = NULL;
+    if (tl_dexidx_declares_method(CLS_NATIVE, "implOnActivityDestroyed", "()V", &declared_static)) destroy = game_native("implOnActivityDestroyed");
+    else if (tl_dexidx_declares_method(CLS_NATIVE, "implOnDestroy", "()V", &declared_static)) destroy = game_native("implOnDestroy");
+    if (destroy) destroy(env, cls);
+    atomic_store(&G.running, false);
+    tl_driver_transition(&lifecycle, destroy && !tl_jni_pending() ? TL_DRIVER_DESTROYED : TL_DRIVER_FAILED);
     return NULL;
 }
 
@@ -391,7 +408,10 @@ bool tl_gta_run(void)
 {
     if (!G.started) return false;
     pthread_attr_t a; pthread_attr_init(&a); pthread_attr_setstacksize(&a, 16u << 20);
+    atomic_store(&lifecycle, TL_DRIVER_STARTING);
     bool ok = pthread_create(&G.thread, &a, game_main, NULL) == 0;
+    thread_started = ok;
+    if (!ok) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
     pthread_attr_destroy(&a);
     return ok;
 }
@@ -412,3 +432,14 @@ void tl_gta_set_paused(bool paused)
 }
 
 unsigned long tl_gta_frames(void) { return tl_egl_frames_presented(); }
+
+tl_driver_state tl_gta_state(void) { return atomic_load(&lifecycle); }
+void tl_gta_stop(void) {
+    tl_pad_set_sink(NULL); atomic_store(&stop_requested, true);
+    if (thread_started) { pthread_join(G.thread, NULL); thread_started = false; }
+    if (atomic_load(&lifecycle) != TL_DRIVER_DESTROYED || !tl_guest_threads_quiescent()) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
+}
+void tl_gta_key(int key, bool down) {
+    /* The wrapper exposes controller keys; only the Android Back key is common to keyboard input. */
+    if (key == 4 || key == 111) post(EV_PAD_KEY, 0, down ? 97 : -97, NULL);
+}

@@ -11,6 +11,7 @@ struct MacPlayStoreView: View {
     @State private var details: PlayAPI.PlayApp?
     @State private var detailError: String?
     @State private var login = false
+    @State private var showDownloads = false
     @State private var reporting: CompatSubject?
     var body: some View {
         VStack(spacing: 0) {
@@ -19,6 +20,7 @@ struct MacPlayStoreView: View {
                 TextField("搜索应用名称或包名", text: $query).textFieldStyle(.plain).disabled(store.session == nil)
                 if store.searching { ProgressView().controlSize(.small) }
                 Spacer()
+                Button { showDownloads = true } label: { Label("下载", systemImage: "arrow.down.circle") }
                 if let session = store.session {
                     Text(session.isAnonymous ? "访客" : session.email).foregroundStyle(.secondary).lineLimit(1)
                     Button("退出登录") { store.signOut() }.disabled(store.hasActiveDownloads)
@@ -91,10 +93,16 @@ struct MacPlayStoreView: View {
                     Button("关闭") { store.error = nil }
                 }.padding(12).background(.bar)
             }
-            if store.hasActiveDownloads { downloadsBar }
+
         }
         .frame(minWidth: 900, minHeight: 600)
         .navigationTitle("Google Play")
+        .sheet(isPresented: $showDownloads) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack { Text("下载").font(.title2.bold()); Spacer(); Button("完成") { showDownloads = false } }
+                if store.hasActiveDownloads { downloadsBar } else { Text("没有正在进行的下载").foregroundStyle(.secondary) }
+            }.padding(24).frame(minWidth: 600)
+        }
         .sheet(isPresented: $login) { GoogleLoginView(store: store, browser: store.browserLogin) }
         .sheet(item: $reporting) { MacCompatReportSheet(subject: $0) }
         .task { await store.restore() }

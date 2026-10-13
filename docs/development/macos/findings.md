@@ -1,12 +1,17 @@
 # 审计发现
 
-## 2026-10-13 同步与输入
+## 2026-10-13 Husk 2.0、运行链路与交付
 
-- 上游 3 个提交只改兼容性查询/报告 UI，TLReport.nativeEngine、TLUnityView、project.yml、共享 PlayAPI、图形依赖构建没有增量。复核后保留当前 Java 分发；PR #82 仍 OPEN，head e304785。
-- 新共享 CompatibilityStore 原为 UIKit / iOS 专用。当前条件编译复用客户端、缓存和回退，macOS 报告明确带系统/运行组件；不自动发送报告。官方结果注明 iPhone 来源，未改变本地 playable 规则。POST 失败不跨站重发，避免重复公开报告。
-- Java 手柄缺口不止 sink：InputDevice 只枚举触摸屏、MotionEvent 丢失 device/axes，ViewGroup 将摇杆坐标用于点击命中。现已接 AppRunner 所属线程、元数据/热插拔、焦点分发和复制轴值，并用真实 DEX 验证。Context7 两次常规 Android 查询无结果，reference 命中通用移动事件与轴值 API，按官方文档使用 SOURCE_JOYSTICK / ACTION_MOVE / onGenericMotionEvent。
-- 首轮 7 项针对性回归通过。第一次 Swift 测试构建因两个 Compatibility.swift 文件同名失败，测试改名 CommunityCompatibility.swift 后通过。线上只读 GET 返回 231 条；未发布任何报告。一次写开发记录的 Python stdin UTF-8 解码失败，改用 patch 更新。
-- CUA 选择当前应用及 reset 重连两次均 native pipe closed，旧 Product PID 98251 保持空闲。只构建不依赖 PackageMac 的目标，未绕过活动候选保护；已异步请求用户正常退出。
+- 本轮 Git 增量 f0bd526..8e79a47 只有社区相关 3 提交，但上游 2.0 和多个引擎此前已进入 Git 祖先，macOS 未完整编入/分发。此次按真实功能对齐补齐；祖先完整不能证明平台功能完整。
+- 上游 AppWindows.swift 自身同时只有一个引擎窗口；macOS 保留真实独立 AppKit 窗口及单会话，不套用 iOS 模拟窗口。圣诞装饰复用共享 Holiday，减少动态效果时关闭飘雪，图层不拦截点击。
+- Java 手柄此前缺少 InputDevice 枚举、MotionEvent 轴/设备复制和 ViewGroup 通用移动事件焦点分发。现在通过同一 AppRunner 队列、真实 DEX 和打包会话验证，不只接一个 host sink。
+- 原生共享引擎的暂停/停止需平台适配：GL 回调同线程、worker join、真实销毁函数以及 sticky 失败。Godot/GM/SDL/GTA 缺销毁入口时必须失败；Cocos 没有 renderer destroy，采用 Android nativeOnPause 保存后 join/检查 worker。六个打包 profile 的 fixture 通过不代表真实商业游戏兼容。
+- WebKit 在没有初始化主 RunLoop 的新 helper 中调用静态 store 删除 API 曾崩溃；先建立临时非持久化 WebView 后删除成功。每个 save 持有稳定 UUID，数据由 WebKit 保管；document detach/API callback 不能等同全局磁盘 fsync，因此新回执明确为 webkit-managed。localStorage/IndexedDB 重开/删除验证通过，自定义 scheme 的 document.cookie 为空。
+- 隐藏 WebKit 页定时器被节流；测试先看到实际 tick，再检查暂停和恢复，不能用固定 10 ms 前台假设导致误报。旧失败测试 4 个 fixture store 已清理。
+- 上游 SPIRV-Cross 补丁此前未进入 macOS 图形构建。现固定 checkout、实际打补丁、哈希验证缓存并随包附源码修改；实际包内 MoltenVK 的初始化 workgroup compute shader 编译通过。
+- Context7 本轮后续查询达到月度配额，Apple/WebKit API 以官方资料和本机 SDK 头文件核对；没有把失败的文档查询写成成功。
+- 用户正常退出后完整构建/打包成功，61/61 默认回归、18 个 Mach-O 和 194 个 Java 资源通过。CUA 单次启动读到新首页和商店截图，后续恢复 native pipe closed，资料库详情等可见验收未完成。当前候选与历史 PID 98251 已不是同一实例。
+- Geode 下载/配置 UI 和 Java 内嵌 WebView 的混合存储关闭仍未完成；真实手柄/引擎、Egg、Play、VM/P6 按证据继续开放。详见 upstream-parity.md，不将“2.0 源码合并”写成“全部游戏兼容”。
 
 ## 2026-10-12 Java / Unity 6
 

@@ -27,6 +27,7 @@ public actor LibraryRepository {
     private let trustedFixtureHash: String
     private let fm = FileManager.default
     private var upgradedScans = [String: Scan]()
+    private var deletingSaves = Set<String>()
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; return encoder
     }()
@@ -341,13 +342,14 @@ public actor LibraryRepository {
     }
 
     public func update(_ id: String, settings: GameSettings? = nil, played: Bool = false,
-                       muted: Bool? = nil, pauseWhenInactive: Bool? = nil) throws {
+                       muted: Bool? = nil, pauseWhenInactive: Bool? = nil, openFullScreen: Bool? = nil) throws {
         try locked {
             var index = try readIndex()
             guard let position = index.games.firstIndex(where: { $0.id == id }) else { throw LibraryFailure("游戏已移除。") }
             if let settings { index.games[position].settings = settings }
             if let muted { index.games[position].settings.muted = muted }
             if let pauseWhenInactive { index.games[position].settings.pauseWhenInactive = pauseWhenInactive }
+            if let openFullScreen { index.games[position].settings.openFullScreen = openFullScreen }
             if played { index.games[position].lastPlayed = Date() }
             try AtomicFile.write(encoder.encode(index), to: paths.index)
         }
@@ -368,7 +370,11 @@ public actor LibraryRepository {
         }
     }
 
-    public func deleteSave(_ id: String) throws {
+    public func deleteSave(_ id: String, webHelper: URL? = nil) async throws {
+        guard Self.validID(id) else { throw LibraryFailure("无效的游戏标识。") }
+        guard deletingSaves.insert(id).inserted else { throw LibraryFailure("正在清除该应用的存档。") }
+        defer { deletingSaves.remove(id) }
+        try await WebStorage.remove(in: paths.save(id), helper: webHelper ?? WebStorage.helper(in: Bundle.main.bundleURL))
         try locked {
             guard Self.validID(id) else { throw LibraryFailure("无效的游戏标识。") }
             if fm.fileExists(atPath: paths.save(id).path) { try fm.removeItem(at: paths.save(id)) }
@@ -376,7 +382,8 @@ public actor LibraryRepository {
     }
 
     public func prepare(_ id: String) throws -> (LibraryGame, [URL], URL) {
-        try locked {
+        guard !deletingSaves.contains(id) else { throw LibraryFailure("请等待存档清理完成。") }
+        return try locked {
             guard let game = try readIndex().games.first(where: { $0.id == id }), game.playable else { throw LibraryFailure("此游戏当前无法运行。") }
             let apks = game.apkNames.map { paths.game(id).appendingPathComponent($0) }
             guard try apks.map(Self.digest).joined(separator: ":") == game.digest else { throw LibraryFailure("游戏文件已改变或损坏，请重新导入。") }
@@ -391,7 +398,8 @@ public actor LibraryRepository {
         return (game, apks[0], package)
     }
     public func prepareVMSet(_ id: String) throws -> (LibraryGame, [URL], String) {
-        try locked {
+        guard !deletingSaves.contains(id) else { throw LibraryFailure("请等待存档清理完成。") }
+        return try locked {
             guard let game = try readIndex().games.first(where: { $0.id == id }), (1...32).contains(game.apkNames.count) else {
                 throw LibraryFailure("Android VM 的 APK 集合不完整。")
             }

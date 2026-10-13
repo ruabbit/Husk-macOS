@@ -15,9 +15,15 @@ SOURCES = ROOT / "third_party/build/macos"
 OUT = ROOT / "build/macos-deps"
 LOGS = ROOT / "build/logs"
 
+def patches():
+    return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted((ROOT / "patches").glob("husk-spirv-cross-*.patch"))}
+
 def record(name, binary):
     manifest = {"commit": LOCK[name]["commit"], "binary": str(binary.relative_to(OUT)),
                 "sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}
+    if name == "moltenvk":
+        manifest["patches"] = patches()
     (OUT / f"{name}.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 def verify(prefix):
@@ -26,6 +32,8 @@ def verify(prefix):
         binary = prefix / manifest["binary"]
         if manifest["commit"] != LOCK[name]["commit"] or hashlib.sha256(binary.read_bytes()).hexdigest() != manifest["sha256"]:
             raise RuntimeError(f"{name} cached artifact does not match its pinned source record")
+        if name == "moltenvk" and manifest.get("patches") != patches():
+            raise RuntimeError("MoltenVK cache needs the current upstream SPIRV-Cross patches")
     print("Pinned macOS graphics cache verified", flush=True)
 
 
@@ -95,8 +103,30 @@ def angle(path):
 
 
 def moltenvk(path):
-    if not (path / "External/build/Release/SPIRVCross.xcframework").exists():
-        run(["./fetchDependencies", "--macos"], cwd=path, log="macos-moltenvk-dependencies.log")
+    revision = (path / "ExternalRevisions/SPIRV-Cross_repo_revision").read_text().strip()
+    cross = SOURCES / "spirv-cross"
+    existing = path / "External/SPIRV-Cross"
+    if not cross.exists():
+        if existing.is_dir() and not existing.is_symlink():
+            # Reuse the dependency checkout rather than retain another source copy.
+            shutil.move(existing, cross)
+        else:
+            run(["git", "clone", "https://github.com/KhronosGroup/SPIRV-Cross", cross])
+            run(["git", "checkout", "--detach", revision], cwd=cross)
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cross, text=True).strip() != revision:
+        raise RuntimeError("SPIRV-Cross source is not at MoltenVK's pinned revision")
+    for patch in patches():
+        patch = ROOT / patch
+        applied = subprocess.run(["git", "apply", "--reverse", "--check", str(patch)], cwd=cross,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        if not applied:
+            run(["git", "apply", "--check", patch], cwd=cross)
+            run(["git", "apply", patch], cwd=cross)
+    stamp = path / "External/build/husk-macos-patches.json"
+    wanted = json.dumps({"revision": revision, "patches": patches()}, sort_keys=True)
+    if not (path / "External/build/Release/SPIRVCross.xcframework").exists() or not stamp.exists() or stamp.read_text() != wanted:
+        run(["./fetchDependencies", "--macos", "--spirv-cross-root", cross], cwd=path, log="macos-moltenvk-dependencies.log")
+        stamp.write_text(wanted)
     run(["make", "macos"], cwd=path, log="macos-moltenvk.log")
     framework = path / "Package/Release/MoltenVK/dynamic/MoltenVK.xcframework/macos-arm64_x86_64/MoltenVK.framework"
     if not framework.exists():

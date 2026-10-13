@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build-and-core:
-    # Stable GitHub-hosted Apple Silicon image; remote execution is unverified.
+    # GitHub-hosted Apple Silicon; full GPU/session checks use the opted-in hardware job.
     runs-on: macos-26
     timeout-minutes: 90
     steps:
@@ -47,7 +47,7 @@ jobs:
             build/macos-deps/include
             build/macos-deps/notices
             build/macos-deps/*.json
-          key: macos26-arm64-${{ hashFiles('dependencies/macos.lock.json', 'scripts/build_macos_graphics.py') }}
+          key: macos26-arm64-${{ hashFiles('dependencies/macos.lock.json', 'scripts/build_macos_graphics.py', 'patches/husk-spirv-cross-*.patch') }}
       - name: Native application and helpers
         env:
           ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld

@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from build_java_runtime import verify as verify_java
+from build_macos_graphics import verify as verify_graphics, patches as graphics_patches
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,11 +30,14 @@ def sign(path, entitlements=None, identity="-"):
     if entitlements: args += ["--entitlements",str(entitlements)]
     subprocess.run([*args,str(path)],check=True)
 
-def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=None, java_runtime=None):
+def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=None, java_runtime=None, web_runner=None):
     assert_bundle_idle(destination)
+    if web_runner is None:
+        raise RuntimeError("WebRunner is required")
     if java_runtime is None:
         raise RuntimeError('A verified Java runtime is required')
     verify_java(java_runtime, check_sources=True)
+    verify_graphics(deps)
     if destination.exists(): shutil.rmtree(destination)
     (destination/'Contents/MacOS').mkdir(parents=True)
     shutil.copy2(app/'Contents/Info.plist',destination/'Contents/Info.plist')
@@ -50,6 +54,13 @@ def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=No
     if archs!=['arm64']:
         thin=binary.with_suffix('.thin');subprocess.run(['lipo',binary,'-thin','arm64','-output',thin],check=True);thin.replace(binary)
     embedded=helpers/'NativeRunner.app';copytree(runner,embedded)
+    web=helpers/'WebRunner.app'
+    (web/'Contents/MacOS').mkdir(parents=True)
+    shutil.copy2(web_runner/'Contents/Info.plist',web/'Contents/Info.plist')
+    shutil.copy2(web_runner/'Contents/MacOS/WebRunner',web/'Contents/MacOS/WebRunner')
+    # Swift's build bundle includes dependency sidecars; ship only the executable.
+    (web/'Contents/Resources').mkdir()
+    shutil.copy2(app/'Contents/Resources/Husk.icns',web/'Contents/Resources/Husk.icns')
     if vm_runner:
         if identity != '-':
             raise RuntimeError('VM signing currently supports local development only; release signing is a separate gate')
@@ -64,9 +75,13 @@ def package(app, runner, deps, fixtures, destination, identity="-", vm_runner=No
     shutil.copy2(ROOT/'dependencies/java-runtime.lock.json',resources/'Notices/java-runtime.lock.json')
     shutil.copy2(ROOT/'LICENSE',resources/'Notices/Husk-LICENSE')
     shutil.copy2(ROOT/'dependencies/macos.lock.json',resources/'Notices/macos.lock.json')
+    shutil.copy2(deps/'moltenvk.json',resources/'Notices/moltenvk-build.json')
+    for patch in graphics_patches():
+        shutil.copy2(ROOT/patch,resources/'Notices'/Path(patch).name)
     sign(frameworks/'libANGLE-shared.dylib',identity=identity);sign(frameworks/'MoltenVK.framework',identity=identity)
     entitlement='NativeRunner.development.entitlements' if identity=='-' else 'NativeRunner.entitlements'
     sign(embedded,ROOT/'src/macos/NativeRunner'/entitlement,identity=identity)
+    sign(helpers/'WebRunner.app',identity=identity)
     sign(app,identity=identity)
     subprocess.run(['codesign','--verify','--deep','--strict',app],check=True)
 
@@ -74,6 +89,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     for name in ['app','runner','deps','fixtures','destination']: p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--identity',default='-',help='Explicit identity only; default is local ad-hoc, never automatic certificate selection')
+    p.add_argument('--web-runner',type=Path,required=True,help='Independent WebKit application helper')
     p.add_argument('--vm-runner',type=Path,help='Optional, already packaged native VM helper')
     p.add_argument('--java-runtime',type=Path,required=True,help='Verified Java boot class path and source-built framework')
     package(**vars(p.parse_args()))

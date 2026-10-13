@@ -1,10 +1,10 @@
 # 原生 macOS 开发版
 
-当前原生运行入口包含 **Orbit Garden / Dusk、Minecraft、Unity、NativeActivity 和 Java 运行链路**。它们使用 Android ELF、bionic/JNI 适配、ANGLE/Metal 和 AudioQueue，在独立 NativeRunner 中执行。资料库统一显示“开始游戏”，测试覆盖记录在开发文档中。旧 Play/本地导入按当前运行组件重新判定，无需重下，保留原有设置和存档。各游戏的实际验证范围及候选交付状态见 [开发记录](development/macos/progress.md)。
+当前候选为 **Husk 2.0.0 / build 3**，已合入上游 2.0（e02ac68）及 main 的后续更新（8e79a47）。首页、资料库、Store、内置帮助、圣诞装饰和窗口控制已适配 macOS。下载进度位于 Store 面板；应用详情支持下次启动全屏和导出启动快捷方式。
 
-上游 main 的源码已合并到 `f0bd526`，保留 macOS 的 JIT、生命周期、输入、音频与隔离实现，并补齐此前源码同步未记录的 Git 祖先关系。来源见 [同步锁](../dependencies/upstream.lock.json)，当前打包验证与推送状态见 [开发记录](development/macos/progress.md)。上游新增 Godot、Geode、Unity、SDL/DXVK 与 iOS Store 的源码，不代表这些入口都已接入 macOS GUI。
+运行入口包含 Orbit、Minecraft、Unity、NativeActivity、Java / Unity 6，以及新增 Cocos + FMOD、Godot、GameMaker、SDL + DXVK、Unreal、Rockstar 和 Capacitor/Cordova。原生游戏在独立 NativeRunner 执行；Web 应用使用独立 WebRunner 复用上游桥接。手柄进入 Java AppRunner 的同线程输入队列，支持设备/轴/按钮和断连、失焦、暂停释放。旧导入按当前组件重新判定，无需重新下载，保留原有设置和存档。
 
-本地验收、候选来源及待验收项见 [P1–P3 实施报告](2026-10-08-macos-p1-p3-report.md)、[P4 Minecraft 报告](2026-10-08-macos-p4-report.md) 和 [上游接入现况](development/macos/upstream-parity.md)。Java / Unity 6 及上游交给 Java 的 Cocos、SDL、Flutter、Python 等已接通共同运行链路；真实应用兼容、Java 手柄和 WebKit 关闭仍待验证或实现。Unreal、Godot、Rockstar 等独立 native profiles 尚未接入。
+这些入口具备构建和后台 fixture 证据，不能替代每款真实应用的兼容验收。Java 内嵌 WebView 关闭、Geode 配置、个人 Play 登录和 VM/P6 仍有明确开放项。当前候选测试、推送与前台状态见 [开发记录](development/macos/progress.md)，逐项接入和证据见 [上游现况](development/macos/upstream-parity.md)，来源见 [同步锁](../dependencies/upstream.lock.json)。
 
 ## 构建与运行
 
@@ -25,11 +25,11 @@
 
 首次构建还会下载约 2 GB 的固定 Lineage 来源镜像，只读提取约 96 MB 的 Java 资源，临时 raw/system/APEX 文件自动清理。已有原始来源缓存或 `HUSK_JAVA_IMAGE` 可直接复用；不能指定日常 VM 磁盘。Java 缓存为 `build/macos/JavaRuntime`，只保留一套，资源或源码修改会重新校验/构建 DEX。`HUSK_JDK`、`HUSK_D8`、`ANDROID_SDK_ROOT` 可指定工具；D8 的 SHA-256 必须匹配来源锁。构建会拒绝替换正在运行的候选，请先正常退出空闲 Husk。
 
-首次构建下载并编译固定提交的 ANGLE 和 MoltenVK，后续校验缓存的提交记录及二进制 SHA-256。构建依赖在 `third_party/build/macos`；缓存产物在 `build/macos-deps`；不会改动 iOS 的构建目录。LLVM/NDK 只用于构建，产物不会链接 Homebrew 库。可通过 `ELF_CC`、`ELF_LD` 指定交叉工具，通过 `HUSK_BUILD_JOBS` 调整并行数。
+首次构建下载并编译固定提交的 ANGLE 和 MoltenVK，后续校验缓存的提交记录、二进制及上游 SPIRV-Cross 补丁 SHA-256；不匹配会拒绝旧缓存。构建依赖在 `third_party/build/macos`；缓存产物在 `build/macos-deps`；不会改动 iOS 的构建目录。LLVM/NDK 只用于构建，产物不会链接 Homebrew 库。可通过 `ELF_CC`、`ELF_LD` 指定交叉工具，通过 `HUSK_BUILD_JOBS` 调整并行数。
 
 打开 `build/macos/Product/HuskMac.app`。在资料库点击“添加示例游戏”，选择游戏并点击“开始游戏”。游戏使用独立 AppKit 窗口；关闭该窗口或使用“结束游戏”会先保存，再退出 Runner。主 App 退出也会等待同一保存协议。
 
-主 App 与两个运行组件共用上游默认 Husk 图标。构建时从 `src/app/Husk/Assets.xcassets/AppIcon.appiconset/Icon-Default.png` 生成含普通及 Retina 尺寸的 `Husk.icns`，打包到各自的 Resources；上游图标更新会自动触发重新生成。包检查同时核对图标声明、资源与签名。
+主 App 与 NativeRunner、WebRunner、VMRunner 共用上游默认 Husk 图标。构建时从 `src/app/Husk/Assets.xcassets/AppIcon.appiconset/Icon-Default.png` 生成含普通及 Retina 尺寸的 `Husk.icns`，打包到各自的 Resources；上游图标更新会自动触发重新生成。包检查同时核对图标声明、资源与签名。
 
 Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍。方向键/WASD 移动；按住鼠标移动到目标；手柄左摇杆和方向键移动。P/Esc 暂停，R 或手柄 A 开始新一轮。得分在左上，已完成轮数在右上。
 
@@ -44,13 +44,14 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 | `library.json` | 版本化索引、游戏设置及上次游玩时间 |
 | `Games/<id>` | APK 副本、图标、扫描报告和导入元数据 |
 | `Saves/<id>/checkpoint.json` | 与游戏文件分开的存档 |
-| `Saves/<id>/data` | Minecraft / Unity / NativeActivity / Java 管理的游戏数据和设置；其 checkpoint 只记录正常关闭回执 |
+| `Saves/<id>/data` | 原生/Java 引擎管理的游戏数据和设置；其 checkpoint 记录正常关闭回执 |
+| `Saves/<id>/web-store.json`、`web-assets` | 独立 Web 应用的 WebKit 数据库 UUID 和提取资源缓存；实际网页数据库由系统 WebKit 保管 |
 | `Logs/<session UUID>` | Runner 状态事件及独立 stderr |
 | `Staging`、`Trash` | 导入/移除事务暂存；不包含原始用户文件 |
 
 “移除游戏”保留存档；同一包重新导入后恢复使用。“清除存档”是详情页中的独立操作，并有确认。运行中的游戏禁止删除和清除存档。损坏索引或存档保留原文件并报告错误。同包、同签名且版本号更高的更新会原子替换游戏文件，保留应用身份、设置、上次游玩时间和存档。降级、签名不一致、损坏下载以及运行中的应用更新会被拒绝。安装事务日志用于恢复在文件替换和索引提交之间中断的更新。旧版单 APK 导入仍可读取；不能验证旧签名的安装不会被自动覆盖。
 
-普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及扫描识别为 Minecraft、Unity 或 NativeActivity 的 arm64 APK 集合，或上游 Java profile 接受的 DEX / arm64 应用。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft、Unity 和 NativeActivity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
+普通 APK 可入库和扫描。原生启动范围是 ELF hash 与随附清单匹配的 Orbit fixture，以及上游已接入引擎的 arm64 APK 集合、Java profile 接受的 DEX / arm64 应用，以及包含完整资源的 Capacitor/Cordova Web 应用。P4 验收样本的 SHA-256 为 `83468d0acede2cabe3645ff4025a9c190be3cfb90e1864bcbe0277e97967cd95`，该值仅保留在测试与验收记录中，不参与产品分类。资料库准备阶段与 Runner 都核对导入时整个 APK 集合的 hash，Runner 还独立复扫引擎和 ABI。无法识别或未接入的引擎保持不可启动状态。Minecraft、Unity 和 NativeActivity 分包均传入同一原生加载器；游戏文件不随 Husk 分发，扫描成功并不代表完整兼容。
 
 ## Unity 运行
 
@@ -118,13 +119,13 @@ Minecraft 初始内容区域为 960×540 点，内部渲染保持 1280×720 像�
 
 ## 构建边界与签名
 
-`CMakeLists.txt` 定义 `HuskMac`、`NativeRunner`、`SharedCore`、`SharedLibrary` 和 `NativeRuntime`。主界面复用 Foundation 元数据解析、ZIP/ELF 扫描、prefs/blit；执行内存和游戏 guest 只在 Runner 内。每次启动创建新进程，避免尝试在同一地址空间卸载引擎全局状态。
+`CMakeLists.txt` 定义 `HuskMac`、`NativeRunner`、`WebRunner`、`SharedCore`、`SharedLibrary` 和 `NativeRuntime`。主界面复用 Foundation 元数据解析、ZIP/ELF 扫描、prefs/blit；执行内存和游戏 guest 只在 Runner 内。每次启动创建新进程，避免尝试在同一地址空间卸载引擎全局状态。
 
 图形依赖锁定在 `dependencies/macos.lock.json`。ANGLE 和 MoltenVK 放在主 App 的 `Contents/Frameworks`，Runner 放在 `Contents/Helpers`；许可证及 MoltenVK 下游修订记录放在 `Contents/Resources/Notices`。
 
 本地默认采用 ad-hoc Hardened Runtime：主 App **没有 entitlement**；Runner 的开发配置有 `allow-unsigned-executable-memory` 和 `disable-library-validation`。后一项仅用于无 Team ID 的本地 Runner 加载随附 ANGLE，已通过实际失败日志确认必要性。`NativeRunner.entitlements` 是同一 Team ID 正式签名的候选，只含执行内存项；打包器只有显式收到签名 identity 才选择它。没有自动选择用户证书，也没有执行 Developer ID 签名、公证或发布。
 
-独立进程负责生命周期和崩溃隔离，不是文件系统或网络沙箱。Minecraft 路径只提供该样本需要的 Android 兼容接口，不等于完整 Android 环境。其余引擎仍需独立样本。macOS 的许可证边界、实际依赖与发行阻塞项见 [许可证说明](01-licensing.md#macos-distribution-status-2026-10-08)；当前开发产物没有通过 P6 发行门槛。
+独立进程负责生命周期和崩溃隔离，不是文件系统或网络沙箱。Minecraft 路径只提供该样本需要的 Android 兼容接口，不等于完整 Android 环境。其余引擎仍需独立样本。macOS 的许可证边界、实际依赖与发行阻塞项见 [许可证说明](01-licensing.md#macos-distribution-status-updated-2026-10-13)；当前开发产物没有通过 P6 发行门槛。
 
 ## 可选 Android VM 候选
 

@@ -70,7 +70,7 @@ final class PipeReader: @unchecked Sendable {
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
-        guestManagedStorage = runtime == "minecraft" || runtime == "unity" || runtime == "nativeactivity" || runtime == "java"
+        guestManagedStorage = runtime != "orbit"
         self.runtime = runtime
         let id = UUID().uuidString
         let sessionLog = logs.appendingPathComponent(id)
@@ -88,12 +88,14 @@ final class PipeReader: @unchecked Sendable {
         child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
-        if runtime == "unity" || runtime == "nativeactivity" || runtime == "java" {
-            child.arguments! += NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity")
+        if runtime != "orbit" && runtime != "minecraft" {
+            child.arguments! += NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity" || runtime == "ue4")
         }
+        if runtime == "web" { child.arguments! += ["--web-kind", game.engine == "Capacitor" ? "capacitor" : "cordova"] }
         for name in game.apkNames.dropFirst() {
             child.arguments! += ["--split", apk.deletingLastPathComponent().appendingPathComponent(name).path]
         }
+        if game.settings.openFullScreen && !headless && !hiddenWindow { child.arguments!.append("--fullscreen") }
         if hiddenWindow { child.arguments!.append("--hidden-window") }
         else if headless { child.arguments!.append("--headless") } else { child.arguments!.append("--show-window") }
         if game.settings.muted || headless { child.arguments!.append("--mute") }
@@ -187,16 +189,26 @@ final class PipeReader: @unchecked Sendable {
             sequence = seq; lastEvent = Date(); latest = event
             if events.count == 1000 { events.removeFirst(500) }
             events.append(event); try? eventLog?.write(contentsOf: Data(line) + Data([10]))
-            if kind == "checkpoint" || kind == "storage-closed" {
-                let completed = self.guestManagedStorage
+            if kind == "checkpoint" || kind == "storage-closed" || kind == "web-storage-detached" {
+                let completed = runtime == "web"
+                    ? kind == "web-storage-detached" && event["lifecycle"] as? String == "detached" && event["storage"] as? String == "webkit-managed"
+                    : self.guestManagedStorage
                     ? kind == "storage-closed" && event["lifecycle"] as? String == "destroyed"
                     : kind == "checkpoint" && event["saved"] as? Bool == true
                 guard phase == "stopping", completed,
                       let checkpoint, let data = try? Data(contentsOf: checkpoint),
                       let saved = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                       saved["session"] as? String == sessionID else { fail("未能确认游戏存档写入。"); return }
-                if guestManagedStorage && (saved["runtime"] as? String != runtime || saved["lifecycle"] as? String != "destroyed") {
+                if guestManagedStorage && (saved["runtime"] as? String != runtime || saved["lifecycle"] as? String != (runtime == "web" ? "detached" : "destroyed")) {
                     fail("运行组件没有完成存储关闭确认。"); return
+                }
+                if runtime == "web" {
+                    guard saved["storage"] as? String == "webkit-managed", let store = saved["store"] as? String,
+                          store == event["store"] as? String,
+                          let identity = try? Data(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent("web-store.json")),
+                          (try? JSONDecoder().decode(UUID.self, from: identity))?.uuidString == store else {
+                        fail("Web 存档标识不匹配。"); return
+                    }
                 }
                 checkpointReceived = true
             }

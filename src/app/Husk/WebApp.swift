@@ -4,6 +4,8 @@ import WebKit
 import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
+#else
+import AppKit
 #endif
 
 /// Web apps: Capacitor, Cordova and Ionic (which is one of the two underneath). The app is HTML, CSS and JavaScript in a WebView,
@@ -24,6 +26,7 @@ enum WebAppKind: String {
     var name: String { self == .capacitor ? "Capacitor" : "Cordova" }
 }
 
+#if !HUSK_MAC_WEB
 extension TLReport {
     var webKind: WebAppKind? {
         switch engine {
@@ -33,6 +36,8 @@ extension TLReport {
         }
     }
 }
+
+#endif
 
 /// One running web app. Kept for the life of the process (or until it is closed), so minimising a window or leaving the screen does
 /// not reload it.
@@ -48,6 +53,9 @@ final class WebAppRuntime: NSObject {
     let webView: WKWebView
     /// The app asked to close itself (App.exitApp, navigator.app.exitApp, back on the first page).
     var onClose: (() -> Void)?
+    var onReady: (() -> Void)?
+    var onFailure: ((String) -> Void)?
+    let dataDir: URL
     var origin: String { "\(kind.scheme)://\(package.lowercased())" }
 
     private var capacitorListeners: [String: [String]] = [:]       // "Plugin.event" -> callback ids
@@ -56,6 +64,7 @@ final class WebAppRuntime: NSObject {
     private var bridgeSecret = Int.random(in: 1000...999_999)
     private var statusBarColor: String?
 
+    #if !HUSK_MAC_WEB
     private static var running: [String: WebAppRuntime] = [:]
 
     /// The app's runtime, made (and its files copied out) the first time.
@@ -92,13 +101,17 @@ final class WebAppRuntime: NSObject {
         return true
     }
 
-    init(kind: WebAppKind, package: String, label: String, version: String, assets: URL, dataDir: URL) {
+    #endif
+
+    init(kind: WebAppKind, package: String, label: String, version: String, assets: URL, dataDir: URL, store: WKWebsiteDataStore? = nil, lifecycleScript: String? = nil) {
         self.kind = kind
         self.package = package
         self.label = label
         self.version = version
         self.assets = assets
+        self.dataDir = dataDir
         let config = WKWebViewConfiguration()
+        if let store { config.websiteDataStore = store }
         let controller = WKUserContentController()
         config.userContentController = controller
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
@@ -113,6 +126,9 @@ final class WebAppRuntime: NSObject {
         handler.runtime = self
         controller.add(WeakMessageHandler(self), name: "huskBridge")
         controller.add(WeakMessageHandler(self), name: "huskLog")
+        if let lifecycleScript {
+            controller.addUserScript(WKUserScript(source: lifecycleScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         controller.addUserScript(WKUserScript(source: bootScript(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView.uiDelegate = self
         webView.navigationDelegate = self
@@ -458,7 +474,14 @@ final class WebAppRuntime: NSObject {
         guard let top = Self.topController(from: webView) else { done(0, field); return }
         top.present(alert, animated: true)
         #else
-        done(0, field)
+        guard let window = webView.window else { done(1, nil); return }
+        let alert = NSAlert(); alert.messageText = title ?? label; alert.informativeText = message
+        buttons.forEach { alert.addButton(withTitle: $0) }
+        let input = field.map { value -> NSTextField in
+            let text = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); text.stringValue = value; return text
+        }
+        alert.accessoryView = input
+        alert.beginSheetModal(for: window) { response in done(response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue, input?.stringValue) }
         #endif
     }
 
@@ -536,19 +559,19 @@ extension WebAppRuntime: WKUIDelegate, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        MainActor.assumeIsolated { HuskLog.log("web", "loaded \(webView.url?.absoluteString ?? "?")") }
+        MainActor.assumeIsolated { HuskLog.log("web", "loaded \(webView.url?.absoluteString ?? "?")"); onReady?() }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        MainActor.assumeIsolated { HuskLog.log("web", "load failed: \(error.localizedDescription)") }
+        MainActor.assumeIsolated { HuskLog.log("web", "load failed: \(error.localizedDescription)"); onFailure?(error.localizedDescription) }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        MainActor.assumeIsolated { HuskLog.log("web", "load failed: \(error.localizedDescription)") }
+        MainActor.assumeIsolated { HuskLog.log("web", "load failed: \(error.localizedDescription)"); onFailure?(error.localizedDescription) }
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        MainActor.assumeIsolated { HuskLog.log("web", "the page's process ended; reloading"); webView.reload() }
+        MainActor.assumeIsolated { HuskLog.log("web", "the page's process ended"); if let onFailure { onFailure("Web content process ended") } else { webView.reload() } }
     }
 }
 
@@ -562,10 +585,16 @@ private final class SchemeHandler: NSObject, WKURLSchemeHandler {
         let file: URL? = MainActor.assumeIsolated {
             guard let runtime else { return nil }
             var path = url.path.removingPercentEncoding ?? url.path
-            if path.hasPrefix("/_capacitor_file_") { return URL(fileURLWithPath: String(path.dropFirst("/_capacitor_file_".count))) }
+            if path.hasPrefix("/_capacitor_file_") {
+                let file = URL(fileURLWithPath: String(path.dropFirst("/_capacitor_file_".count))).resolvingSymlinksInPath()
+                #if HUSK_MAC_WEB
+                guard [runtime.root, runtime.dataDir].contains(where: { file.path.hasPrefix($0.resolvingSymlinksInPath().path + "/") }) else { return nil }
+                #endif
+                return file
+            }
             if path.isEmpty || path == "/" { path = "/index.html" }
             let candidate = runtime.root.appendingPathComponent(String(path.dropFirst())).standardizedFileURL
-            guard candidate.path.hasPrefix(runtime.root.standardizedFileURL.path) else { return nil }
+            guard candidate.resolvingSymlinksInPath().path.hasPrefix(runtime.root.resolvingSymlinksInPath().path + "/") else { return nil }
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: candidate.path, isDirectory: &isDir) {
                 return isDir.boolValue ? candidate.appendingPathComponent("index.html") : candidate

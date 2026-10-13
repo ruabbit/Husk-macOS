@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Supported native architecture")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Provisional deployment floor; requires separate machine validation")
-project(HuskMac VERSION 0.2.0 LANGUAGES C OBJC Swift)
+project(HuskMac VERSION 2.0.0 LANGUAGES C OBJC Swift)
 if(NOT APPLE OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "HuskMac currently targets native macOS arm64")
 endif()
@@ -45,7 +45,7 @@ target_include_directories(SharedCore PUBLIC ${MAC}/SharedCore PRIVATE ${CLASSIC
 target_link_libraries(SharedCore PUBLIC z "-framework CoreGraphics")
 
 add_library(SharedLibrary STATIC
-    ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
+    ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/WebStorage.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
     ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/NativeLaunch.swift ${MAC}/SharedLibrary/VMController.swift
     src/app/Husk/ApkMetadata.swift src/app/Husk/BundleUnpacker.swift)
 target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security")
@@ -71,6 +71,10 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-dvm-gles31.c ${NEXT}/husk-tl-dvm-gles32.c
     ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-unity.c ${NEXT}/husk-tl-gamepad.c
     ${NEXT}/husk-tl-nativeactivity.c ${NEXT}/husk-tl-jni-ue4.c
+    ${NEXT}/husk-tl-cocos.c ${NEXT}/husk-tl-jni-cocos.c ${NEXT}/husk-tl-cocos-text.c
+    ${NEXT}/husk-tl-godot.c ${NEXT}/husk-tl-jni-godot.c ${NEXT}/husk-tl-gamemaker.c
+    ${NEXT}/husk-tl-sdl.c ${NEXT}/husk-tl-sdl-apps.c ${NEXT}/husk-tl-gtasa.c
+    ${NEXT}/husk-tl-geode.c ${NEXT}/husk-tl-python.c
     ${NEXT}/husk-tl-audio.c ${NEXT}/husk-tl-http.m ${NEXT}/husk-tl-vulkan.m)
 target_include_directories(GameActivityRuntime PUBLIC ${NEXT} PRIVATE ${CLASSIC})
 target_compile_options(GameActivityRuntime PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
@@ -88,7 +92,7 @@ target_compile_options(NativeActivityProbe PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-
 target_link_libraries(NativeActivityProbe PRIVATE NativeRuntime "-framework Foundation")
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
-    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m
+    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m "${HUSK_ICON}")
 add_dependencies(NativeRunner MacIcon)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
@@ -97,12 +101,18 @@ target_link_libraries(NativeRunner PRIVATE NativeRuntime "-framework AppKit" "-f
     "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox")
 set_target_properties(NativeRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/NativeRunner/Info.plist.in)
 
+add_executable(WebRunner MACOSX_BUNDLE ${MAC}/WebRunner/main.swift ${MAC}/WebRunner/WebLifecycle.swift src/app/Husk/WebApp.swift "${HUSK_ICON}")
+add_dependencies(WebRunner MacIcon)
+target_compile_options(WebRunner PRIVATE -D HUSK_MAC_WEB -I ${MAC}/SharedCore)
+target_link_libraries(WebRunner PRIVATE SharedLibrary "-framework AppKit" "-framework WebKit")
+set_target_properties(WebRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/WebRunner/Info.plist.in)
+
 set(MAC_PLAY_SOURCES
     src/app/Husk/Play/Protobuf.swift src/app/Husk/Play/PlayDevice.swift src/app/Husk/Play/PlayAPI.swift
     ${MAC}/Play/GoogleLoginPolicy.swift ${MAC}/Play/GoogleBrowserLogin.swift
     ${MAC}/Play/PlayCredentials.swift ${MAC}/Play/PlayDownload.swift ${MAC}/Play/MacPlayStore.swift)
 add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift
-    ${MAC}/HuskMac/HuskMac.swift ${MAC}/HuskMac/MacCompatibility.swift src/app/Husk/Compatibility.swift "${HUSK_ICON}")
+    ${MAC}/HuskMac/HuskMac.swift ${MAC}/HuskMac/MacShell.swift ${MAC}/HuskMac/MacCompatibility.swift src/app/Husk/Holiday.swift src/app/Husk/Compatibility.swift "${HUSK_ICON}")
 # Swift's whole-module link does not follow the object-level resource copy rule.
 add_custom_target(HuskMacResources DEPENDS "${CMAKE_BINARY_DIR}/HuskMac.app/Contents/Resources/Husk.icns")
 add_dependencies(HuskMac MacIcon HuskMacResources)
@@ -145,10 +155,63 @@ add_custom_target(PackageMac ALL
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/package_macos.py
         --app "$<TARGET_BUNDLE_DIR:HuskMac>" --runner "$<TARGET_BUNDLE_DIR:NativeRunner>"
         --deps ${HUSK_DEPS} --fixtures ${FIXTURES} --destination ${HUSK_PRODUCT}
-        --java-runtime ${HUSK_JAVA_RUNTIME} ${VM_PACKAGE_ARGUMENTS}
-    DEPENDS HuskMac NativeRunner Fixtures JavaRuntimeResources ${VM_PACKAGE_DEPENDS} VERBATIM)
+        --java-runtime ${HUSK_JAVA_RUNTIME} --web-runner "$<TARGET_BUNDLE_DIR:WebRunner>" ${VM_PACKAGE_ARGUMENTS}
+    DEPENDS HuskMac NativeRunner WebRunner Fixtures JavaRuntimeResources ${VM_PACKAGE_DEPENDS} VERBATIM)
 
 enable_testing()
+add_executable(MacVulkanZeroInitTests tests/macos/VulkanZeroInit.c)
+target_include_directories(MacVulkanZeroInitTests PRIVATE ${HUSK_DEPS}/include)
+add_test(NAME macos-vulkan-zero-init COMMAND MacVulkanZeroInitTests "${HUSK_PRODUCT}/Contents/Frameworks/MoltenVK.framework/MoltenVK")
+set_tests_properties(macos-vulkan-zero-init PROPERTIES TIMEOUT 30 ENVIRONMENT "MVK_CONFIG_LOG_LEVEL=1")
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/WebTests/capacitor.apk" "${CMAKE_BINARY_DIR}/WebTests/cordova.apk"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_web_cases.py "${CMAKE_BINARY_DIR}/WebTests" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk"
+    DEPENDS tests/macos/prepare_web_cases.py NativeDriverFixtures "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" VERBATIM)
+add_custom_target(WebFixtures DEPENDS "${CMAKE_BINARY_DIR}/WebTests/capacitor.apk" "${CMAKE_BINARY_DIR}/WebTests/cordova.apk")
+add_executable(MacWebSessionTests tests/macos/WebSession.swift)
+target_compile_options(MacWebSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacWebSessionTests PRIVATE SharedLibrary)
+add_dependencies(MacWebSessionTests PackageMac WebFixtures)
+foreach(kind capacitor cordova)
+    add_test(NAME macos-web-${kind} COMMAND MacWebSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/WebTests/${kind}.apk" ${kind} "${CMAKE_BINARY_DIR}/TestResults")
+    set_tests_properties(macos-web-${kind} PROPERTIES TIMEOUT 150)
+endforeach()
+add_executable(MacNativeDriverSessionTests tests/macos/NativeDriverSession.swift)
+target_compile_options(MacNativeDriverSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacNativeDriverSessionTests PRIVATE SharedLibrary)
+add_dependencies(MacNativeDriverSessionTests PackageMac NativeDriverFixtures)
+foreach(engine cocos godot gamemaker sdl gta ue4)
+    add_test(NAME macos-${engine}-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/${engine}.apk" ${engine} "${CMAKE_BINARY_DIR}/TestResults")
+    set_tests_properties(macos-${engine}-session PROPERTIES TIMEOUT 60)
+endforeach()
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/gamemaker-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-missing.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/sdl.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/ue4.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/sdl-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta-missing.apk"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_cases.py "${CMAKE_BINARY_DIR}/NativeTests"
+    DEPENDS tests/macos/prepare_native_cases.py tests/macos/fixture/native_driver.c scripts/build_macos_fixture.py VERBATIM)
+add_custom_target(NativeDriverFixtures DEPENDS "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk")
+add_executable(NativeDriverLifecycleTests tests/macos/NativeDriverLifecycle.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacDiagnostics.c)
+target_compile_options(NativeDriverLifecycleTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
+target_include_directories(NativeDriverLifecycleTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(NativeDriverLifecycleTests PRIVATE NativeRuntime)
+add_dependencies(NativeDriverLifecycleTests NativeDriverFixtures)
+add_custom_command(TARGET NativeDriverLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:NativeDriverLifecycleTests>" VERBATIM)
+add_test(NAME native-driver-failure-sticky COMMAND NativeDriverLifecycleTests godot "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk"
+    "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/NativeDrivers")
+set_tests_properties(native-driver-failure-sticky PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
+foreach(engine cocos godot gamemaker sdl gta)
+    add_test(NAME native-${engine}-lifecycle COMMAND NativeDriverLifecycleTests ${engine} "${CMAKE_BINARY_DIR}/NativeTests/${engine}.apk"
+        "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/NativeDrivers")
+    set_tests_properties(native-${engine}-lifecycle PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
+endforeach()
+foreach(engine godot gamemaker sdl gta)
+    add_test(NAME native-${engine}-missing-destroy COMMAND NativeDriverLifecycleTests ${engine} "${CMAKE_BINARY_DIR}/NativeTests/${engine}-missing.apk"
+        "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/NativeDrivers")
+    set_tests_properties(native-${engine}-missing-destroy PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
+endforeach()
 add_executable(MacCompatibilityTests tests/macos/CommunityCompatibility.swift src/app/Husk/Compatibility.swift)
 target_compile_options(MacCompatibilityTests PRIVATE -parse-as-library)
 target_link_libraries(MacCompatibilityTests PRIVATE "-framework AppKit" "-framework SwiftUI")
@@ -252,7 +315,7 @@ add_test(NAME macos-render-surface COMMAND MacRenderSurfaceTests "${HUSK_DEPS}/l
 set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
 add_executable(MacNativeMouseTests tests/macos/NativeMouse.m ${MAC}/NativeRunner/MacRenderView.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m ${MAC}/NativeRunner/MacAudio.m
-    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m)
+    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m)
 target_include_directories(MacNativeMouseTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(MacNativeMouseTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(MacNativeMouseTests PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"

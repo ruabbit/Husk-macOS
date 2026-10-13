@@ -4,6 +4,7 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include "husk-tl-driver.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,11 @@ void tl_sdl_apps_install(const char *package);
 #define SDLCTRL "org/libsdl/app/SDLControllerManager"
 #define STKA "org/supertuxkart/stk/SuperTuxKartActivity"
 #define SDLHID "org/libsdl/app/HIDDeviceManager"
+
+static atomic_int lifecycle;
+static atomic_bool stop_requested, pause_requested, sdl_ended;
+static bool ui_started, sdl_started;
+bool tl_guest_threads_quiescent(void);
 
 static struct {
     tl_ga_config cfg;
@@ -781,7 +787,7 @@ bool tl_sdl_start(const tl_ga_config *cfg, const char *activity_class)
         if (!ls.main && ls.ncand > 1) {
             for (int i = 0; i < ls.ncand; i++) {
                 snprintf(name, sizeof(name), "%s", ls.cand[i] + 3); name[strlen(name) - 3] = 0;
-                if (strcmp(ls.cand[i], S.main_lib)) { load_library(name); if (tl_jni_pending()) tl_jni_clear(); }
+                if (strcmp(ls.cand[i], S.main_lib)) { load_library(name); if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); } }
                 tl_lib *cl = tl_ld_find_lib(ls.cand[i]);
                 if (cl && (tl_ld_sym(cl, "SDL_main") || tl_ld_sym(cl, "SDL_Main"))) { snprintf(S.main_lib, sizeof(S.main_lib), "%s", ls.cand[i]); break; }
             }
@@ -792,7 +798,7 @@ bool tl_sdl_start(const tl_ga_config *cfg, const char *activity_class)
     static const char *const fmod[] = { "fmod", "fmodstudio", NULL };
     if (tl_ld_has_lib("libfmod.so")) {
         for (int i = 0; fmod[i]; i++) load_library(fmod[i]);
-        if (tl_jni_pending()) tl_jni_clear();
+        if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
     }
     /* The function SDLActivity runs on its thread: SDL_main, which a game that links SDL into its own library may name SDL_Main. */
     snprintf(S.main_fn, sizeof(S.main_fn), "SDL_main");
@@ -823,7 +829,7 @@ static void *sdl_main_thread(void *arg)
     void (*init_main)(void *, void *) = find_native(SDLA, "nativeInitMainThread", "()V");
     int (*run_main)(void *, void *, void *, void *, void *) = native_of(SDLA, "nativeRunMain", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)I");
     void (*cleanup)(void *, void *) = find_native(SDLA, "nativeCleanupMainThread", "()V");
-    if (!run_main) return NULL;
+    if (!run_main) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); atomic_store(&sdl_ended, true); return NULL; }
     if (init_main) init_main(env, cls);
     tl_log_line("sdl: SDL_main starting");
     /* SDLActivity.getArguments(): what the player set as the game's launch arguments, split at spaces */
@@ -836,6 +842,8 @@ static void *sdl_main_thread(void *arg)
     int r = run_main(env, cls, tl_jni_new_string(S.main_lib[0] ? S.main_lib : "libmain.so"), tl_jni_new_string(S.main_fn[0] ? S.main_fn : "SDL_main"), jargs);
     tl_log_line("sdl: SDL_main returned %d", r);
     if (cleanup) cleanup(env, cls);
+    if (r || tl_jni_pending()) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
+    atomic_store(&sdl_ended, true);
     return NULL;
 }
 
@@ -931,17 +939,42 @@ static void *ui_main(void *arg)
     tl_dexidx_each_string(set_display_env, &de);
 
     pthread_attr_t a; pthread_attr_init(&a); pthread_attr_setstacksize(&a, 8u << 20);
-    if (pthread_create(&S.sdl, &a, sdl_main_thread, NULL) != 0) tl_log_line("sdl: cannot start the SDL thread");
+    sdl_started = pthread_create(&S.sdl, &a, sdl_main_thread, NULL) == 0;
     pthread_attr_destroy(&a);
 
+    if (!sdl_started) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
+    tl_driver_transition(&lifecycle, TL_DRIVER_RUNNING);
+
     /* A real activity gets its window focus after SDL's window exists (the focus event above came first and found no window to give it to), so say it again then. */
-    for (int i = 0; i < 300 && tl_egl_frames_presented() == 0; i++) usleep(10000);
+    for (int i = 0; i < 300 && !atomic_load(&stop_requested) && !atomic_load(&sdl_ended) && tl_sdl_frames() == 0; i++) usleep(10000);
     usleep(100000);
     if (focus) focus(env, cls, 1);
 
     /* The activity's message loop: nothing to serve beyond keeping the thread (and its looper) alive. */
     int (*poll_once)(int, int *, int *, void **) = tl_bionic_find("ALooper_pollOnce");
-    for (;;) { poll_once(200, NULL, NULL, NULL); if (tl_jni_pending()) tl_jni_clear(); }
+    bool paused = false;
+    while (!atomic_load(&stop_requested) && !atomic_load(&sdl_ended)) {
+        bool want = atomic_load(&pause_requested);
+        if (want != paused) {
+            void (*life)(void *, void *) = find_native(SDLA, want ? "nativePause" : "nativeResume", "()V");
+            if (life) life(env, cls);
+            if (!life || tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); break; }
+            paused = want;
+            tl_driver_transition(&lifecycle, paused ? TL_DRIVER_PAUSED : TL_DRIVER_RUNNING);
+        }
+        poll_once(20, NULL, NULL, NULL);
+        if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); break; }
+    }
+    bool failed = atomic_load(&lifecycle) == TL_DRIVER_FAILED;
+    tl_driver_transition(&lifecycle, TL_DRIVER_STOPPING);
+    void (*send_quit)(void *, void *) = find_native(SDLA, "nativeSendQuit", "()V");
+    void (*quit)(void *, void *) = find_native(SDLA, "nativeQuit", "()V");
+    if (send_quit) send_quit(env, cls);
+    for (int i = 0; i < 1000 && !atomic_load(&sdl_ended); i++) usleep(10000);
+    if (!atomic_load(&sdl_ended)) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
+    pthread_join(S.sdl, NULL); sdl_started = false;
+    if (quit) quit(env, cls);
+    tl_driver_transition(&lifecycle, !failed && send_quit && quit && !tl_jni_pending() ? TL_DRIVER_DESTROYED : TL_DRIVER_FAILED);
     return NULL;
 }
 
@@ -951,8 +984,11 @@ bool tl_sdl_run(void)
     pthread_attr_t a;
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, 8u << 20);
-    if (pthread_create(&S.ui, &a, ui_main, NULL) != 0) return false;
-    return true;
+    atomic_store(&lifecycle, TL_DRIVER_STARTING);
+    ui_started = pthread_create(&S.ui, &a, ui_main, NULL) == 0;
+    pthread_attr_destroy(&a);
+    if (!ui_started) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
+    return ui_started;
 }
 
 /* SDL games draw with GL or, through SDL_Vulkan, with Vulkan: frames presented by either. */
@@ -1009,11 +1045,11 @@ void tl_sdl_mouse(int phase, float x, float y)
     mouse(tl_jni_env(), tl_jni_class_object(SDLA), phase == 2 ? 0 : (down ? 1 : 0), phase == 0 ? 0 : phase == 2 ? 1 : 2, x, y, 0);
 }
 
-void tl_sdl_set_paused(bool paused)
-{
-    /* SDL starts un-paused, and a resume that follows no pause makes it release a GL context it never saved. So only a real change is passed on. */
-    static atomic_bool is_paused;
-    if (atomic_exchange(&is_paused, paused) == paused) return;
-    void (*vv)(void *, void *) = find_native(SDLA, paused ? "nativePause" : "nativeResume", "()V");
-    if (vv) vv(tl_jni_env(), tl_jni_class_object(SDLA));
+void tl_sdl_set_paused(bool paused) { atomic_store(&pause_requested, paused); }
+tl_driver_state tl_sdl_state(void) { return atomic_load(&lifecycle); }
+void tl_sdl_stop(void) {
+    tl_pad_set_sink(NULL);
+    atomic_store(&stop_requested, true);
+    if (ui_started) { pthread_join(S.ui, NULL); ui_started = false; }
+    if (atomic_load(&lifecycle) != TL_DRIVER_DESTROYED || !tl_guest_threads_quiescent()) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
 }

@@ -37,6 +37,9 @@ enum NativeLaunch {
             launcherIndex = elements.firstIndex { $0.name == "activity" && $0.attributes.contains { $0.name == "name" && qualified($0.value) == qualified(target) } }
         }
         let launcher = launcherIndex.map { elements[$0] }
+        if let name = qualified(launcher?.attributes.first(where: { $0.name == "name" })?.value) {
+            arguments += ["--activity", name.replacingOccurrences(of: ".", with: "/")]
+        }
         if let orientation = launcher?.attributes.first(where: { $0.name == "screenOrientation" }),
            (orientation.dataType == 0x10 || orientation.dataType == 0x11),
            [1, 7, 9, 12].contains(orientation.data) { arguments.append("--portrait") }

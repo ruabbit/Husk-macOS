@@ -1,16 +1,20 @@
 # Husk macOS 迁移实施
 
-## 当前执行：2026-10-13 上游兼容性与 Java 手柄
+## 当前执行：2026-10-13 Husk 2.0 与手柄交付
 
-- [x] 干净工作树、origin 无新增、无游戏/VM/构建；昨日 CI 38193490652 成功。
-- [x] fetch `f0bd526..8e79a47`（3 提交 / 10 路径），main 快进后无文本冲突合入 macOS。
-- [x] 源码接入社区兼容性查询与手动报告，报告明确 macOS 来源；不恢复本地试运行/验证分类。客户端/缓存/回退/报告请求回归和线上 GET/231 条解码通过。
-- [x] Java 手柄进入真实 AppRunner 回调；设备/轴、热插拔、断连/暂停释放和按住按钮关闭通过真实 DEX 验证。
-- [x] 编译主 App / Runner 和独立测试目标；38/38 不依赖包的默认回归通过，保留 VM=ON。
-- [ ] 原位构建、默认 CTest、bundle 验证；正常推送并读回，单次重开候选。
-- [ ] CUA 两次连接（含 reset）均 native pipe closed，旧绑定不可用，PID 98251 仍为空闲旧候选；已请求用户正常退出。没有绕过保护、替换或假称重启。
+- [x] 核对工作区、origin/upstream 和实际会话；上游 main=8e79a47，包含 2.0=e02ac68，真实合并 5866498。
+- [x] 接入 2.0 首页/资料库/Store/帮助、外观/圣诞装饰、窗口控制、全屏偏好、快捷方式和下载面板。
+- [x] 完成共享社区兼容性查询/缓存/回退，Mac 报告带真实来源；没有发送公共报告。
+- [x] Java 手柄的按钮/轴、设备/热插拔、断连/失焦/暂停/停止释放，真实 DEX 与打包会话通过。
+- [x] 六条新增原生引擎路径接通共享驱动、资料库、Runner、输入、暂停与可确认的销毁/存储关闭；正常及失败路径经过真实 ELF fixture 验证。
+- [x] 独立 WebRunner 接入 Capacitor/Cordova；真实 WebKit 持久化、重开、清除与暂停/恢复测试通过，回执区分 WebKit 所有权。
+- [x] MoltenVK 实际应用上游 SPIRV-Cross 补丁，随包源记录与实际 compute shader 回归通过。
+- [x] 唯一 build/macos 原位构建 2.0.0/build 3，保留 VM=ON；默认 CTest 61/61，18 Mach-O / 194 Java 资源校验通过。
+- [x] 旧候选由用户正常退出；CUA 单次打开新 Product，PID 68836、首页初始 AX 与商店截图已核对。
+- [ ] 资料库详情/帮助/前台输入等可见验收：CUA 再次 native pipe closed。没有重复启动或假称完整 GUI 通过。
+- [ ] 本轮代码和验证记录提交、正常推送两分支、读回远端 SHA；新 GitHub CI 状态按实际读取。
 
-当前源码保存为本地检查点，不推送未完成打包验证的结果。下一步确认 Product 没有进程后运行 scripts/test_macos.sh、verify_macos_bundle.py，重点完成 macos-java-session 的新手柄回调检查，再正常推送与读回两分支。若用户正常退出后仍有空闲残留，按用户后续明确授权处理，不直接杀掉进程。当前 Product 仍是 10/12 版本。
+本轮的代码/后台/包验证已完成，剩余真实应用和旧迁移缺口按 [upstream-parity.md](upstream-parity.md) 保持开放。不得用 fixture 或编译通过替代完整游戏兼容；也不得将 Java WebView 与独立 WebRunner 的存储语义混为一谈。
 
 ## 当前执行：2026-10-12 上游与 Java 运行链路
 

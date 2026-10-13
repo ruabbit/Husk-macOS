@@ -5,8 +5,19 @@
   "integratedRevision": "8e79a47b3f771eddd005bf338749e01a96443689",
   "checkedOn": "2026-10-13",
   "commitCount": 3,
-  "integration": "Merged locally through fork main without conflicts. Community compatibility is adapted to macOS; Java controller dispatch, devices and lifecycle release have real DEX coverage. 38 non-package CTests pass. Product replacement, the complete default suite, bundle verification and pushes remain pending because CUA cannot quit the idle active candidate. See docs/development/macos/upstream-parity.md.",
+  "integration": "Merged through fork main without conflicts. Husk 2.0 macOS UI, Java controllers, community client, six native profiles, independent WebRunner and upstream SPIRV-Cross patch are built and packaged in the sole candidate. Default CTest 61/61 and bundle checks (18 Mach-O, 194 Java resources) pass. CUA launched the candidate once and captured Home AX and Store; further UI inspection failed when its native pipe closed. Real games, physical controllers and documented migration gaps remain open; see docs/development/macos/upstream-parity.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "pending-package-validation"
+  "deliveryStatus": "verified-local-pending-push",
+  "release": {
+    "tag": "2.0",
+    "revision": "e02ac68f1065e86dd40a371020c1243bbc685b7f"
+  },
+  "candidate": {
+    "version": "2.0.0",
+    "build": "3",
+    "defaultTests": 61,
+    "bundleMachO": 18,
+    "javaResources": 194
+  }
 }

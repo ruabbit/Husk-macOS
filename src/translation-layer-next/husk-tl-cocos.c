@@ -5,6 +5,8 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include "husk-tl-driver.h"
+#include "husk-tl-gamepad.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +37,8 @@ void tl_cocos_set_interval(double seconds)
     if (seconds > 0.002 && seconds < 1.0) atomic_store(&g_interval_ns, (long long)(seconds * 1e9));
 }
 
+static atomic_int lifecycle;
+bool tl_guest_threads_quiescent(void);
 static struct {
     tl_cocos_config cfg;
     char apk[1024], data[512], pkg[128], frame_dir[512], angle_egl[600], angle_gles[600];
@@ -248,7 +252,7 @@ static void drain_events(void)
             } else e->cb("");
             break;
         }
-        if (tl_jni_pending()) tl_jni_clear();
+        if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
     }
 }
 
@@ -275,7 +279,7 @@ static void *gl_main(void *arg)
     unsigned (*swapBuffers)(EGLDisplay, EGLSurface) = tl_egl_resolve("eglSwapBuffers");
     unsigned (*swapInterval)(EGLDisplay, EGLint) = tl_egl_resolve("eglSwapInterval");
     EGLint (*getError)(void) = tl_egl_resolve("eglGetError");
-    if (!getDisplay || !createWindowSurface || !swapBuffers) { tl_log_line("cocos: EGL is not available"); atomic_store(&U.ended, true); return NULL; }
+    if (!getDisplay || !createWindowSurface || !swapBuffers) { tl_log_line("cocos: EGL is not available"); atomic_store(&U.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
 
     EGLDisplay dpy = getDisplay(NULL);
     EGLint major = 0, minor = 0;
@@ -285,11 +289,11 @@ static void *gl_main(void *arg)
     const EGLint want[] = { 0x3040 /* RENDERABLE_TYPE */, 0x4 /* ES2 */, 0x3033 /* SURFACE_TYPE */, 0x4 /* WINDOW */,
                             0x3024, 8, 0x3023, 8, 0x3022, 8, 0x3021, 8, 0x3025 /* DEPTH */, 16, 0x3026 /* STENCIL */, 8, EGL_NONE };
     EGLConfig cfg = NULL; EGLint ncfg = 0;
-    if (!chooseConfig(dpy, want, &cfg, 1, &ncfg) || ncfg < 1) { tl_log_line("cocos: eglChooseConfig found nothing (error %#x)", getError()); atomic_store(&U.ended, true); return NULL; }
+    if (!chooseConfig(dpy, want, &cfg, 1, &ncfg) || ncfg < 1) { tl_log_line("cocos: eglChooseConfig found nothing (error %#x)", getError()); atomic_store(&U.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     const EGLint ctx_attr[] = { 0x3098 /* CONTEXT_CLIENT_VERSION */, 2, EGL_NONE };
     EGLContext ctx = createContext(dpy, cfg, NULL, ctx_attr);
     EGLSurface surf = createWindowSurface(dpy, cfg, tl_nwindow_get(), NULL);
-    if (!ctx || !surf || !makeCurrent(dpy, surf, surf, ctx)) { tl_log_line("cocos: could not make a GL context current (error %#x)", getError()); atomic_store(&U.ended, true); return NULL; }
+    if (!ctx || !surf || !makeCurrent(dpy, surf, surf, ctx)) { tl_log_line("cocos: could not make a GL context current (error %#x)", getError()); atomic_store(&U.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     if (swapInterval) swapInterval(dpy, 1);
     tl_log_line("cocos: EGL context ready (EGL %d.%d)", major, minor);
 
@@ -301,17 +305,19 @@ static void *gl_main(void *arg)
     typedef void (*life_fn)(void *env, void *cls);
     life_fn on_pause = (life_fn)native_of(CLS_RENDERER, "nativeOnPause", "()V", "Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeOnPause");
     life_fn on_resume = (life_fn)native_of(CLS_RENDERER, "nativeOnResume", "()V", "Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeOnResume");
-    if (!init || !render) { atomic_store(&U.ended, true); return NULL; }
+    if (!init || !render) { atomic_store(&U.ended, true); tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return NULL; }
     void *env = tl_jni_env(), *cls = tl_jni_class_object(CLS_RENDERER);
     init(env, cls, U.cfg.width, U.cfg.height);
     tl_log_line("cocos: nativeInit(%d, %d) done", U.cfg.width, U.cfg.height);
     if (tl_jni_pending()) { tl_log_line("cocos: an exception is pending after nativeInit"); tl_jni_clear(); }
 
+    tl_driver_transition(&lifecycle, TL_DRIVER_RUNNING);
     bool was_paused = false;
     int64_t next = now_ns();
-    while (!atomic_load(&U.stop)) {
+    while (!atomic_load(&U.stop) && atomic_load(&lifecycle) != TL_DRIVER_FAILED) {
+        drain_events();
         if (atomic_load(&U.paused)) {
-            if (!was_paused) { if (on_pause) on_pause(env, cls); was_paused = true; tl_log_line("cocos: paused"); }
+            if (!was_paused) { if (on_pause) on_pause(env, cls); was_paused = true; tl_driver_transition(&lifecycle, tl_jni_pending() ? TL_DRIVER_FAILED : TL_DRIVER_PAUSED); tl_log_line("cocos: paused"); }
             usleep(20000);
             next = now_ns();
             continue;
@@ -320,9 +326,8 @@ static void *gl_main(void *arg)
             if (on_resume) on_resume(env, cls);
             /* The game's own resume does not bring its music back here; the activity's resumeSound does. */
             tl_cocos_resume_sound();
-            was_paused = false; next = now_ns(); tl_log_line("cocos: resumed");
+            was_paused = false; tl_driver_transition(&lifecycle, tl_jni_pending() ? TL_DRIVER_FAILED : TL_DRIVER_RUNNING); next = now_ns(); tl_log_line("cocos: resumed");
         }
-        drain_events();
         int64_t t0 = now_ns();
         render(env, cls);
         swapBuffers(dpy, surf);
@@ -332,22 +337,36 @@ static void *gl_main(void *arg)
         unsigned long long m = atomic_load(&U.perf_max_ns), ns = (unsigned long long)(t1 - t0);
         while (ns > m && !atomic_compare_exchange_weak(&U.perf_max_ns, &m, ns)) {}
         atomic_fetch_add(&U.frames, 1);
-        if (tl_jni_pending()) tl_jni_clear();
+        if (tl_jni_pending()) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); tl_jni_clear(); }
         /* A GLSurfaceView renders at the display's pace; the game's own animation interval is 1/60 s. */
         next += atomic_load(&g_interval_ns);
         int64_t late = now_ns() - next;
         if (late > 100000000ll) next = now_ns();
         else if (late < 0) { struct timespec ts = { 0, (long)(-late) }; nanosleep(&ts, NULL); }
     }
+    tl_driver_transition(&lifecycle, TL_DRIVER_STOPPING);
+    drain_events();
+    /* Cocos2dxRenderer has no destroy entry: Android saves via nativeOnPause. */
+    if (!was_paused && on_pause) on_pause(env, cls);
+    bool closed = on_pause && !tl_jni_pending();
+    unsigned (*destroy_surface)(void *, void *) = tl_egl_resolve("eglDestroySurface");
+    unsigned (*destroy_context)(void *, void *) = tl_egl_resolve("eglDestroyContext");
+    makeCurrent(dpy, NULL, NULL, NULL);
+    if (destroy_surface) destroy_surface(dpy, surf);
+    if (destroy_context) destroy_context(dpy, ctx);
+    tl_driver_transition(&lifecycle, closed ? TL_DRIVER_DESTROYED : TL_DRIVER_FAILED);
     return NULL;
 }
 
 bool tl_cocos_run(void)
 {
+    atomic_store(&lifecycle, TL_DRIVER_STARTING);
     pthread_attr_t a;
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, 16u << 20);
-    if (pthread_create(&U.thread, &a, gl_main, NULL) != 0) return false;
+    int error = pthread_create(&U.thread, &a, gl_main, NULL);
+    pthread_attr_destroy(&a);
+    if (error) { tl_driver_transition(&lifecycle, TL_DRIVER_FAILED); return false; }
     U.thread_started = true;
     return true;
 }
@@ -369,8 +388,12 @@ void tl_cocos_set_paused(bool paused) { atomic_store(&U.paused, paused); }
 unsigned long tl_cocos_frames(void) { return atomic_load(&U.frames); }
 bool tl_cocos_ended(void) { return atomic_load(&U.ended); }
 
+
 void tl_cocos_stop(void)
 {
+    tl_pad_set_sink(NULL);
     atomic_store(&U.stop, true);
-    if (U.thread_started) pthread_join(U.thread, NULL);
+    if (U.thread_started) { pthread_join(U.thread, NULL); U.thread_started = false; }
+    if (atomic_load(&lifecycle) != TL_DRIVER_DESTROYED || !tl_guest_threads_quiescent()) tl_driver_transition(&lifecycle, TL_DRIVER_FAILED);
 }
+tl_driver_state tl_cocos_state(void) { return atomic_load(&lifecycle); }

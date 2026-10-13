@@ -1,20 +1,24 @@
 # 审计进度
 
-## 2026-10-13 源码适配与后台回归，候选更新待退出
+## 2026-10-13 Husk 2.0 候选验证完成
 
-起始 HEAD 5c3612b，工作树干净，origin 两分支无新增，无进行中的 Git 操作或游戏/VM/构建。昨日代码 fcce001 的 [GitHub CI 38193490652](https://github.com/ruabbit/Husk-macOS/actions/runs/38193490652) 已成功，hardware 跳过。上游 f0bd526..8e79a47 共 3 提交、10 路径，新增社区兼容性查询/报告和服务地址回退；共享运行时、PlayAPI 和图形构建无增量。main 快进后 macOS 无文本冲突合并。当前阶段仅保存本地源码检查点，尚未推送。
+上游发布标签 2.0 为 e02ac68；当前 main 为 8e79a47，包含发布与随后社区兼容性更新。origin/main 从 f0bd526 对齐到本地 main=8e79a47（3 提交、10 路径），再经真实合并 5866498 进入 macOS；没有文本冲突或 ours 策略。收尾前再次 fetch 两个远端，没有新提交。以下是本轮最终实现与验证，替代上午的“38 项、待退出/打包”状态。
 
-当前空闲 Husk PID 98251 从唯一 Product 运行。CUA 选择应用及 reset 后重连均 native pipe closed，无法正常退出；未替换活动候选，已异步请求用户退出。源码适配继续，打包与完整回归待进程退出。
+2.0 的首页、资料库、Store、帮助导航、最近应用、外观、圣诞装饰、独立窗口管理、按应用全屏偏好和启动快捷方式已进入 macOS。下载进度改为 Store 面板。共享社区查询/缓存/回退和手动报告保留 macOS 来源，未提交公共报告。Java 手柄接 AppRunner 所属线程，包含设备 41–44、按钮/轴、热插拔和断连/失焦/暂停/停止释放；真实 DEX 与打包会话验证完成。没有把 iPhone 的 150+ 游戏宣传当作 macOS 兼容结论。
 
-社区功能复用上游 CompatibilityStore，新增 AppKit 图标转换、应用独立缓存和 macOS 详情/Store 报告入口。社区结果说明 iPhone 来源，不参与启动能力判断；报告明确 Mac 系统和实际运行组件，代码/资源摘要区分开发 build。手动发送前显示公开字段，游戏后询问默认关闭，未自动发送或提交测试报告。GET 服务回退、4xx/坏数据保留缓存、POST 禁止跨站重发、报告图标和字段在隔离 URLProtocol 中通过；真实 Swift 客户端只读 GET 成功解码 231 条。
+新增 Cocos+FMOD、Godot、GameMaker、SDL+DXVK、Rockstar 的原生 profile，以及 Unreal 的 NativeActivity 路径。实际共享驱动编译、资料库判断、Runner 分发、输入、GL 线程暂停、销毁/join、worker 与存储回执一并接入。失败状态保持 sticky，后续成功销毁不能覆盖早先 JNI 失败；缺少销毁入口不会伪报保存成功。六条路径均用本仓库 Android ELF fixture 经过实际打包 Runner 验证，真实商业游戏另行验收。
 
-Java 手柄已接同一个 AppRunner 输入队列，支持按钮、摇杆/帽轴/扳机、device/source/时间、InputDevice 元数据和 InputManager 热插拔。MotionEvent 复制/PointerCoords 保留轴，焦点视图接通通用移动事件；macOS 按设备分配独立槽。断连释放相应设备，失焦释放所有输入，暂停期间不接受新手柄事件；销毁先派发已排队释放，避免 stop 清队列丢失 key-up。原存储关闭和 guest worker 检查不变。顺手修正 Java 详情误显示 Orbit 操作说明。
+Capacitor/Cordova 使用独立 WebRunner，复用上游 WebAppRuntime，增加原生窗口、菜单/输入法、返回、暂停及独立 WebKit store。localStorage/IndexedDB 写入、进程退出重开、清除后不复现均经真实 WebKit 验证。回执为 web-storage-detached / webkit-managed，明确区别于 native storage-closed，不声称 WebKit 提供断电 fsync 保证。未初始化 WebKit 时直接删除 store 的崩溃已修复；失败测试留下的 4 个已知 fixture store 也通过修复后的 helper 清理，没有触碰用户存档。隐藏页面的定时器会被 WebKit 节流，测试先观察实际 tick 后验证暂停与恢复。
 
-仅构建不依赖 PackageMac 的目标，主 App / NativeRunner 与当前 framework DEX 均编译完成。38/38 不依赖新包的 CTest 通过，新增真实 DEX 两手柄、轴/事件复制、热插拔/回调线程、断连、暂停拒绝输入、按住按钮正常关闭；已有 Java 异常销毁/写失败/线程未退/SQLite 未提交等回归保持通过。默认共 42 项，macos-java-session、macos-input-vulkan、macos-library-session、macos-library-upgrade 四项未按新候选执行；新增打包会话的手柄/失焦验证仍开放。最终 bundle 校验未执行，现有 bundle-verification.json 仍属于 10/12，不能拿它验收本轮。首次 Swift 测试因文件同名失败，改名后已解决。
+固定 MoltenVK/SPIRV-Cross 已实际应用上游 zero-init-stride 补丁；构建记录、补丁哈希和许可证随包保存。针对实际包内 MoltenVK 的 Vulkan workgroup 零初始化 compute shader 编译回归通过。CI 图形缓存键包含补丁内容，避免后续上游补丁变化继续命中旧缓存。
 
-构建仍只用 build/macos，VM=ON，日志复用 current-upstream-build.log、current-upstream-runtime-final-build.log、current-upstream-ctest.log、current-upstream-community-tests.log 与 current-upstream-community-live.log。没有运行用户 APK、Android VM 或可见游戏，没有修改 APK、存档或 Android 磁盘。PR #82 仍 OPEN / e304785；Egg 未重跑，Play 个人登录仍失败，WebKit 持久化与其他 profiles 继续开放。
+唯一候选仍为 build/macos/Product/HuskMac.app，版本 **2.0.0 / build 3**，HUSK_BUILD_VM=ON。完整构建通过，默认 **CTest 61/61**（39.38 秒），verify_macos_bundle.py 通过 **18 个 arm64 Mach-O** 的签名/依赖/权限核对和 **194 个 Java 资源**。主 App 与 WebRunner 无 JIT entitlement，执行内存权限仍限定在相应原生 helper。日志复用 build/logs/current-2.0-build.log、current-2.0-tests.log、current-2.0-web-cleanup.log，结构化包证据为 build/macos/bundle-verification.json。
 
-收尾步骤：确认旧候选正常退出后，原位构建并跑完整 42 项和 verify_macos_bundle.py；通过后正常推送本地 main=8e79a47 与迁移分支，读回 SHA，最后 CUA 只重开一次 Product。保持 codex/macos-p0，不 force push。
+用户已正常退出旧候选，本轮没有绕过活动包保护。CUA 按完整 Product 路径只启动一次，实际 PID 68836 指向当前候选。已读到新首页初始 AX 和商店完整截图/应用列表；随后导航请求先被工具的“user changed”状态保护拒绝，再次读取报 native pipe closed。因此资料库加载后详情、帮助页、前台 IME 和窗口调整尚未完成可见验收，不能冒充通过；没有再次重启。没有运行用户游戏或本项目 Android VM、播放测试音频、修改用户 APK/存档/Android 磁盘。
+
+候选主程序 SHA-256 为 17eb20da8de8bbf5d45d51d52306fa5c356df7ced3543c9dac46a1e76a698431，NativeRunner 为 9e691aac0103d12355f3aac704d8e580d1f5fdd893d30e69f32dd71029bf3add，WebRunner 为 30a4eb4fb232d73cc6ebf869d1fbb2fe509c5a22dca3b839353700527bfe9695。
+
+本地交付门槛已通过；提交、正常推送两分支并读回远端是收尾步骤。此次 GitHub CI 在推送前尚未运行，之前 38193490652 的成功不作为新候选 CI 证据。Java 内嵌 WebView 关闭、Geode 配置/下载接入、真实引擎/实体手柄、Egg 初始化、个人 Play/passkey 登录、VM/P6 继续开放，具体证据和下一步见 upstream-parity.md。
 
 ## 2026-10-12 上游同步与 Java 运行链路
 

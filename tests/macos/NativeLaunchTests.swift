@@ -61,7 +61,7 @@ import Foundation
         for alias in [false, true] {
             for library: String? in [nil, "../wrong", "", String(repeating: "x", count: 57)] {
                 let args = NativeLaunch.arguments(manifest: manifest(0, alias: alias, library: library), package: nil, nativeActivity: true)
-                guard args == ["--package", "org.husk.test"] else {
+                guard args == ["--package", "org.husk.test", "--activity", "org/husk/test/Game"] else {
                     print("FAIL invalid or non-Activity library escaped manifest scope"); exit(1)
                 }
             }

@@ -83,18 +83,27 @@ import ImageIO
             do {
                 if session.active { session.stop(); try await session.wait(until: { !self.session.active }, timeout: 35) }
                 let (fresh, apks, checkpoint) = try await repository.prepare(game.id)
-                let runner = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
+                let runner = fresh.runtime == "web" ? WebStorage.helper(in: Bundle.main.bundleURL) : Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
                 try session.start(executable: runner, game: fresh, apk: apks[0], checkpoint: checkpoint, logs: paths.logs)
                 try await session.wait(until: { self.session.state == "running" || !self.session.active }, timeout: 95)
                 if session.state == "running" { try await repository.update(game.id, played: true); await reload() }
             } catch { self.error = error.localizedDescription }
         }
     }
-    func settings(_ game: LibraryGame, muted: Bool? = nil, pause: Bool? = nil) {
+    func shortcut(_ game: LibraryGame) {
+        let panel = NSSavePanel(); panel.allowedContentTypes = [UTType(filenameExtension: "webloc")!]
+        panel.nameFieldStringValue = game.title + ".webloc"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        var link = URLComponents(); link.scheme = "husk-macos"; link.host = "open_app"
+        link.queryItems = [URLQueryItem(name: "id", value: game.id)]
+        do { try PropertyListSerialization.data(fromPropertyList: ["URL": link.url!.absoluteString], format: .xml, options: 0).write(to: url, options: .atomic) }
+        catch { self.error = error.localizedDescription }
+    }
+    func settings(_ game: LibraryGame, muted: Bool? = nil, pause: Bool? = nil, fullScreen: Bool? = nil) {
         guard let repository else { return }
         Task {
             do {
-                try await repository.update(game.id, muted: muted, pauseWhenInactive: pause)
+                try await repository.update(game.id, muted: muted, pauseWhenInactive: pause, openFullScreen: fullScreen)
                 if let pause, session.gameID == game.id { session.setPauseWhenInactive(pause) }
                 await reload()
             } catch { self.error = error.localizedDescription }
@@ -292,7 +301,7 @@ struct GameDetail: View {
                                 Label("WASD 移动，鼠标控制视角；其他按键可在游戏中设置", systemImage: "keyboard")
                                 Label("支持手柄与中文文字输入", systemImage: "gamecontroller")
                                 Label("Esc 打开游戏菜单；结束游戏时等待世界保存完成", systemImage: "pause.circle")
-                            } else if game.runtime == "unity" || game.runtime == "nativeactivity" || game.runtime == "java" {
+                            } else if game.runtime != "orbit" {
                                 Label("鼠标点击和拖动对应屏幕触摸", systemImage: "cursorarrow")
                                 Label("键盘和手柄操作取决于游戏本身", systemImage: "gamecontroller")
                                 Label("⌘P 暂停或继续；⌘Q 结束游戏", systemImage: "pause.circle")
@@ -312,6 +321,7 @@ struct GameDetail: View {
                 GroupBox("游戏设置") {
                     VStack(alignment: .leading, spacing: 12) {
                         Toggle("静音", isOn: Binding(get: { game.settings.muted }, set: { model.settings(game, muted: $0) })).disabled(running)
+                        Toggle("启动时全屏", isOn: Binding(get: { game.settings.openFullScreen }, set: { model.settings(game, fullScreen: $0) })).disabled(running)
                         Toggle("游戏窗口失去焦点时暂停", isOn: Binding(get: { game.settings.pauseWhenInactive }, set: { model.settings(game, pause: $0) }))
                         Text("失焦暂停立即生效；静音在下次启动游戏时生效。").font(.caption).foregroundStyle(.secondary)
                     }.padding(10)
@@ -323,6 +333,7 @@ struct GameDetail: View {
                     Text("Android 实验功能尚未通过 Minecraft 运行和持续音频验证。安装成功不代表游戏可运行；存档保存在所选虚拟机的数据盘中。").font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
+                    Button("创建启动快捷方式…") { model.shortcut(game) }.disabled(!game.playable)
                     Button("在访达中显示文件") { NSWorkspace.shared.activateFileViewerSelecting([model.paths.game(game.id)]) }
                     Spacer()
                     Button("清除存档…", role: .destructive) { saveConfirmation = true }.disabled(running)
@@ -343,8 +354,12 @@ struct GameDetail: View {
 struct SettingsView: View {
     @ObservedObject var model: LibraryModel
     @AppStorage(CompatibilityStore.askKey) private var askCompatibility = false
+    @AppStorage(Holiday.key) private var holiday = true
+    @AppStorage("macos.appearance") private var appearance = "system"
     var body: some View {
         Form {
+            Picker("外观", selection: $appearance) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") }
+            Toggle("圣诞装饰", isOn: $holiday)
             LabeledContent("资料目录") { Text(model.paths.root.path).font(.caption).textSelection(.enabled) }
             Button("在访达中打开资料目录") { NSWorkspace.shared.open(model.paths.root) }
             Text("导入会复制游戏到资料库。移除游戏保留存档；清除存档需在游戏详情中单独操作。").foregroundStyle(.secondary)
@@ -375,7 +390,7 @@ struct HuskMacApp: App {
     @StateObject private var model = LibraryModel()
     var body: some Scene {
         Window("Husk", id: "library") {
-            LibraryView(model: model).onAppear { delegate.model = model }
+            MacHomeShell(model: model).onAppear { delegate.model = model }
         }
         .defaultSize(width: 1040, height: 700)
         .commands {
@@ -385,12 +400,16 @@ struct HuskMacApp: App {
             }
             CommandMenu("游戏") {
                 Button("暂停 / 继续") { model.session.togglePause() }.keyboardShortcut("p").disabled(!model.session.active)
+                Button("显示游戏窗口") { model.session.send("window", values: ["action": "show"]) }.disabled(!model.session.active)
+                Button("最小化游戏窗口") { model.session.send("window", values: ["action": "minimize"]) }.disabled(!model.session.active)
+                Button("切换游戏全屏") { model.session.send("window", values: ["action": "fullscreen"]) }.disabled(!model.session.active)
                 Button("结束游戏") { model.session.stop() }.disabled(!model.session.active)
             }
         }
         Window("Google Play", id: "play-store") {
             MacPlayStoreView(model: model, store: model.playStore)
         }.defaultSize(width: 1040, height: 700)
+        Window("Husk 帮助", id: "help") { MacHelpView() }.defaultSize(width: 720, height: 600)
         Settings { SettingsView(model: model) }
     }
 }

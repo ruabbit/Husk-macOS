@@ -80,7 +80,7 @@ import HuskCore
             }
             var excluded = unity; excluded["abis"] = ["arm64-v8a"]; excluded["engine"] = "SDL"; excluded["libraryNames"] = ["libdxvk.so"]
             let dxvk = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: excluded))
-            try check(!dxvk.playable, "sdl-dxvk-does-not-use-java")
+            try check(dxvk.runtime == "sdl", "sdl-dxvk-selects-native-driver")
 
             // Old saved engine labels must not strand Unity 6 on the JNI driver.
             let migrationPaths = LibraryPaths(root: paths.root.appendingPathComponent("LegacyUnity"))

@@ -1,6 +1,6 @@
 # Licensing and distribution
 
-## macOS distribution status (updated 2026-10-12)
+## macOS distribution status (updated 2026-10-13)
 
 **The macOS artifacts are local development candidates. P6 distribution clearance is incomplete.** The earlier iOS decision below does not clear a macOS `.app`, `.zip` or `.dmg` for release. This section describes the current CMake targets, packaging scripts, pinned source licenses and actual packaged dependency closure.
 
@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | `HuskMac` | Husk UI, SharedLibrary and SharedCore | Husk-authored code is GPL-2.0-or-later; no QEMU or StikJIT links in this process |
 | `NativeRunner` | Husk translation layer, ANGLE; MoltenVK when Vulkan is loaded | ANGLE is BSD-3-Clause with additional third-party notices; MoltenVK is Apache-2.0 with its own dependency notices. `dlopen` is still in-process integration, not separate-program aggregation |
+| `WebRunner` | Husk WebAppRuntime bridge, SharedLibrary/SharedCore, system WebKit | Husk code remains GPL-2.0-or-later; WebKit is provided by macOS, no separate WebKit binary or JIT entitlement is bundled |
 | Optional `VMRunner` | Husk VM bridge, QEMU 10.0.12-utm, static virgl/libepoxy, ANGLE and the dylib closure below | QEMU's top-level `LICENSE` specifies GPL version 2 for the emulator as a whole. The combined VM executable and its corresponding source must satisfy that license and every dependency's terms |
 
 The parent communicates with each helper using JSON over pipes. The current VM helper neither links nor loads MoltenVK; the Vulkan translation layer resides in NativeRunner. Storing MoltenVK in the parent bundle's `Frameworks` directory does not imply the parent loads it. These facts support treating the independently executed helpers as an aggregation within one app bundle, but a process boundary alone is not a blanket license exemption. Each executable's complete dependency combination must first be distributable.
@@ -35,7 +36,7 @@ The review candidate's `VMRunner.app/Contents/Resources/dependencies.json` recor
 
 The observed chain is `VMRunner → libqemu-aarch64-softmmu → libssh → libcrypto.3`. It shares one address space. Separating QEMU from NativeRunner does not remove this issue. The checked QEMU top-level license supplies no blanket OpenSSL linking exception; no exception covering this exact combination has been established. Before distributing the VM, disable the unused SSH block backend and rebuild/recheck its closure, or establish an applicable license grant for the exact linked work. Merely omitting `libcrypto` from the bundle would create a broken application.
 
-The graphics package currently copies ANGLE/MoltenVK notices and MoltenVK dependency revisions. The VM builder copies only QEMU, virgl and libepoxy notices. It does **not** yet gather all GLib/PCRE2/libintl/libssh/OpenSSL/slirp/pixman notices and source obligations. Host package versions are partly locked, but the entire transitive dependency source set is not. These are explicit release blockers, not evidence of completed compliance. Keeping both helpers in one `.app` does not remove notice obligations for either.
+The graphics package copies ANGLE/MoltenVK and SPIRV-Cross notices, MoltenVK dependency revisions, the applied `husk-spirv-cross-zero-init-stride.patch` and `moltenvk-build.json` provenance. The modified SPIRV-Cross source must be included in the corresponding-source set for a binary release. The VM builder copies only QEMU, virgl and libepoxy notices. It does **not** yet gather all GLib/PCRE2/libintl/libssh/OpenSSL/slirp/pixman notices and source obligations. Host package versions are partly locked, but the entire transitive dependency source set is not. These are explicit release blockers, not evidence of completed compliance. Keeping both helpers in one `.app` does not remove notice obligations for either.
 
 ### Java runtime resources
 
