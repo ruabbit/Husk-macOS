@@ -14,7 +14,9 @@ Clash 在一次日志修复后的探测中输出 5,913,771 bytes；新的首尾�
 
 资料保护核对：437 个原始文件中 435 个 SHA-256 一致，包含全部 APK、索引及其余保存内容。War 的错误时间标记消失、last_debug 更新，另新增一份引擎日志和两份字体缓存；时间均对应 18:23 主界面会话 7F02AF51（headless=false），区别于 18:14 已结束的后台探测。该会话由独立 supervisor/events 记录确认；没有擅自还原用户会话文件，也不能声称所有文件均未变。自动探测的数据目录与日常资料库独立。
 
-证据复用 `build/logs/current-game-repair-result.json`、`current-game-repair-tests.log`、`current-game-repair-bundle.json`、`current-war-thunder-repair/frame.png`、`current-war-thunder-repair-engine-latest.log` 和 `current-clash-repair/`。主 App SHA-256 为 `01170b6bb984da775950a5731c2b4b21cad742ea919e71ea8c635d4749d5f1c9`，NativeRunner 为 `acb0f33fa5460b28b8b9716f39fb2c390c47975039ac6d802a7f4484828cb365`。旧 2.0 代码的 CI 38374832136 已读回 success；本批代码推送后的 CI 必须另行确认。三款完整运行兼容仍开放。
+证据复用 `build/logs/current-game-repair-result.json`、`current-game-repair-tests.log`、`current-game-repair-bundle.json`、`current-war-thunder-repair/frame.png`、`current-war-thunder-repair-engine-latest.log` 和 `current-clash-repair/`。主 App SHA-256 为 `01170b6bb984da775950a5731c2b4b21cad742ea919e71ea8c635d4749d5f1c9`，NativeRunner 为 `acb0f33fa5460b28b8b9716f39fb2c390c47975039ac6d802a7f4484828cb365`。
+
+修复代码 [9eb9970](https://github.com/ruabbit/Husk-macOS/commit/9eb9970df52c1f6100e1c23dc75e9495a1f2f052) 已正常推送并读回远端一致，main 仍为 8e79a47；保持 codex/macos-p0，无 force push。旧 2.0 代码的 CI 38374832136 已通过，本批 [CI 38386696549](https://github.com/ruabbit/Husk-macOS/actions/runs/38386696549) 已实际启动，记录时 in_progress，不能提前记为通过。三款完整运行兼容仍开放。
 
 ## 2026-10-13 Husk 2.0 候选验证完成
 

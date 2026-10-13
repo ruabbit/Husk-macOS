@@ -10,7 +10,7 @@
 - [x] 针对性回归及隔离样本验证：War 已实际渲染 1280×720 加载页，失焦继续、暂停/恢复通过；Clash 留下退出 101 的证据；Egg 静态核对 ExecuteProgram。
 - [ ] 剩余运行兼容：War 数据检查/自定义 Java updater 与正常关闭回执、Clash 原生初始化 exit(101)、Egg 初始化/PLT。下一步和证据保存在 upstream-parity.md，均未标为完整可玩。
 - [x] 默认 CTest 66/66、18 Mach-O / 406 运行资源包验证、唯一候选原位更新；最终主窗口截图确认三款图标正常。
-- [ ] 提交并正常推送本批修复；三款完整运行验收保持开放。
+- [x] 修复提交 9eb9970 已正常推送并读回远端 SHA；CI 38386696549 已启动，尚未完成。三款完整运行验收保持开放。
 
 诊断基线：Egg 的图标在 density split；War/Clash 的 icon.data 是 ImageIO 无法解码的 adaptive XML。War 在读取 `/system/fonts/%s` 时失败，候选缺少系统字体。Egg 仍在原生构造函数跳到未重定位 PLT。Clash 的 stderr 被前 4 MiB 截断，尚无完整终止证据。原始证据为 `build/logs/current-three-games-audit.json`，修复前候选为 2.0.0/build 3。
 
