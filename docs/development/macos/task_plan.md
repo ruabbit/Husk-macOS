@@ -12,7 +12,7 @@
 - [x] 唯一 build/macos 原位构建 2.0.0/build 3，保留 VM=ON；默认 CTest 61/61，18 Mach-O / 194 Java 资源校验通过。
 - [x] 旧候选由用户正常退出；CUA 单次打开新 Product，PID 68836、首页初始 AX 与商店截图已核对。
 - [ ] 资料库详情/帮助/前台输入等可见验收：CUA 再次 native pipe closed。没有重复启动或假称完整 GUI 通过。
-- [ ] 本轮代码和验证记录提交、正常推送两分支、读回远端 SHA；新 GitHub CI 状态按实际读取。
+- [x] 代码 dfd7f6f 已正常推送，读回确认 main=8e79a47 与 macOS 分支=dfd7f6f；新的 CI 38374832136 已运行，记录时尚在执行。后续仅补文档交付记录。
 
 本轮的代码/后台/包验证已完成，剩余真实应用和旧迁移缺口按 [upstream-parity.md](upstream-parity.md) 保持开放。不得用 fixture 或编译通过替代完整游戏兼容；也不得将 Java WebView 与独立 WebRunner 的存储语义混为一谈。
 

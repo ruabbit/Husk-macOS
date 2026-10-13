@@ -18,7 +18,7 @@ Capacitor/Cordova 使用独立 WebRunner，复用上游 WebAppRuntime，增加�
 
 候选主程序 SHA-256 为 17eb20da8de8bbf5d45d51d52306fa5c356df7ced3543c9dac46a1e76a698431，NativeRunner 为 9e691aac0103d12355f3aac704d8e580d1f5fdd893d30e69f32dd71029bf3add，WebRunner 为 30a4eb4fb232d73cc6ebf869d1fbb2fe509c5a22dca3b839353700527bfe9695。
 
-本地交付门槛已通过；提交、正常推送两分支并读回远端是收尾步骤。此次 GitHub CI 在推送前尚未运行，之前 38193490652 的成功不作为新候选 CI 证据。Java 内嵌 WebView 关闭、Geode 配置/下载接入、真实引擎/实体手柄、Egg 初始化、个人 Play/passkey 登录、VM/P6 继续开放，具体证据和下一步见 upstream-parity.md。
+本地交付门槛已通过，代码提交 [dfd7f6f](https://github.com/ruabbit/Husk-macOS/commit/dfd7f6fa7c4091daf16825cfadbe5dc248ac6809) 已正常推送。远端读回确认 origin/main=8e79a47b3f771eddd005bf338749e01a96443689、origin/codex/macos-p0=dfd7f6fa7c4091daf16825cfadbe5dc248ac6809；保持 codex/macos-p0，没有 force push。新的 [Native macOS CI 38374832136](https://github.com/ruabbit/Husk-macOS/actions/runs/38374832136) 已实际运行，记录时为 in_progress，不能提前写成通过。其后文档交付记录不改变候选代码。Java 内嵌 WebView 关闭、Geode 配置/下载接入、真实引擎/实体手柄、Egg 初始化、个人 Play/passkey 登录、VM/P6 继续开放，具体证据和下一步见 upstream-parity.md。
 
 ## 2026-10-12 上游同步与 Java 运行链路
 
