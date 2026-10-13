@@ -132,7 +132,6 @@ public final class MotionEvent extends InputEvent {
     public final int getEdgeFlags() { return edgeFlags; }
     public final void setEdgeFlags(int f) { edgeFlags = f; }
     public final int getDeviceId() { return deviceId; }
-    public final InputDevice getDevice() { return InputDevice.getDevice(deviceId); }
     public final int getDisplayId() { return 0; }
     public final void offsetLocation(float dx, float dy) { if (dx != 0 || dy != 0) for (int i = 0; i < count; i++) { xs[i] += dx; ys[i] += dy; } }
     public final void setLocation(float x, float y) { offsetLocation(x - xs[0], y - ys[0]); }

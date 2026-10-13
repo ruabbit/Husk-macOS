@@ -2,7 +2,7 @@
 
 核对日期：2026-10-13（Asia/Shanghai）。上游发布标签 **2.0 = e02ac68**；当前 main **8e79a47** 包含该发布和随后社区兼容性改进。已再次 fetch origin、upstream，远端没有本轮初始快照之外的新提交。fork main 从 f0bd526 快进至 8e79a47，再通过 5866498 真实合入 macOS；没有文本冲突或 ours 策略。
 
-本轮补齐此前仅进入源码树的功能，并在唯一 `build/macos/Product/HuskMac.app` 打包。候选版本为 **2.0.0 / build 3**，保留 VM=ON。最终验证、提交与窗口状态以 [progress.md](progress.md) 的最新记录为准。
+本轮补齐此前仅进入源码树的功能，并在唯一 `build/macos/Product/HuskMac.app` 打包。当前候选版本为 **2.0.0 / build 5**，保留 VM=ON。最终验证、提交与窗口状态以 [progress.md](progress.md) 的最新记录为准。
 
 ## 2.0 发布功能
 
@@ -21,7 +21,7 @@
 
 | 功能 | 当前 macOS 接入 | 验证与剩余边界 |
 | --- | --- | --- |
-| Java / Dalvik / Unity 6 | 受控 boot class path、194 个固定资源、源码构建 framework DEX、32 分包、触摸/键盘/IME/手柄、暂停/销毁和 worker/SQLite 检查 | 生产 fixture、真实 DEX、打包会话通过；真实 Unity 6 游戏仍需各自验证 |
+| Java / Dalvik / Unity 6 | 受控 boot class path、固定 Android 资源、源码构建 framework DEX、32 分包、触摸/键盘/IME/手柄、暂停/销毁和 worker/SQLite 检查；InputEvent 父类 getDevice；随包 Vulkan 与 Java/TextureView 合成 | 生产 fixture、真实 DEX、打包会话通过；Hole.io 已取得真实拖动和黑色洞口证据，关闭/保存重开仍未通过；其他游戏逐个验证 |
 | Cocos 无 FMOD、SDL 无 DXVK、Python、Flutter、libGDX、Java、React Native、.NET | 与上游 TLReport.nativeEngine 一致，进入 Java profile | 不因为分类命中就声称插件或真实游戏兼容 |
 | Unity 旧版 | 已有独立驱动、固定画布、输入和确认销毁保留 | 旧 Unity IME 仍未接；旧样本黑屏/崩溃不被本轮 fixture 结果覆盖 |
 | Cocos + FMOD | 编入共享驱动、JNI 和文本栅格化；原生 profile、触摸/按键/手柄、IME hooks、GL 线程暂停和关闭 | 真实 ELF/ANGLE 与生产会话通过。Cocos 没有 renderer destroy，按其 Android nativeOnPause 保存，再 join/检查 worker；FMOD 线程残留会明确失败 |
@@ -55,5 +55,6 @@
    - 日志/静态证据在 `build/logs/current-three-games-audit.json`、`current-icon-repair.log`、`current-war-thunder-repair/`、`current-war-thunder-audio-static.log`、`current-clash-repair/`、`current-egg-init-static.log`、`current-egg-init-relocations.log`、`current-clash-exit-static.log`。自动真实探测静音/不可见，存档位于独立输出目录；三款仍未通过完整运行验收。
 6. Play：个人账号/passkey 仍被 Google 拒绝；只有本人真实登录成功且 Play 会话可用才通过。OBB/PAD、设备配置和已购交付验收仍开放。
 7. VM/P6：VM Minecraft 黑屏与持续 PCM 未通过；QEMU/libssh/OpenSSL 许可、Android 对应源码和发行签名仍按发行门槛处理。
+8. Hole.io（2026-10-13）：InputEvent.getDevice 的父类 JNI 查找与 Java Vulkan 合成已修复，最终 build 5 的后台真实游戏确认拖动、计分、正常黑色洞口以及暂停/恢复。证据在 `build/macos/TestResults/HoleCandidate/`，会话 E86FC7A5。仍需完成可见 AppKit 窗口鼠标拖动验收（CUA 详情导航 native pipe closed）、Unity 进程退出与 SharedPreferences/worker 关闭、保存重开和长期性能。UnityPlayerForActivityOrService 的销毁路径在 mProcessKillRequested 时调用 onUnityPlayerQuitted 后进入 UnityPlayer.kill → Process.killProcess；当前 host 如实保持失败状态。下一步核对该退出请求的真实时序与写入/worker 所有权，补覆盖该行为的 DEX fixture，再运行真实保存重开；不能忽略 killProcess 或直接发 storage-closed。Vulkan 目前同步读回到 Java 合成器，可进一步评估 GPU 共享纹理，但要保留 present 等待和独立 layer 所有权。
 
 检查入口：CMakeLists.txt、Models/NativeLaunch/SessionController、MacNativeDrivers、NativeRunner、WebRunner、WebApp.swift、build_macos_graphics.py；对照上游 TLReport.nativeEngine、TLUnityView.swift、AppWindows.swift、src/app/project.yml 和 Play。后续每日同步须同时交付平台适配、当前候选与相应验证，不能以 Git 祖先或旧测试替代。

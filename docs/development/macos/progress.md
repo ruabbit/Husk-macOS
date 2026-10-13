@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-13 Hole.io 输入与洞口材质修复（2.0.0 / build 5）
+
+Unity 6000.3.2f1 通过 JNI 在父类 `android.view.InputEvent` 查找 `getDevice()`；原实现只在 MotionEvent/KeyEvent 子类提供该方法，真实日志报 NoSuchMethodError，输入被拒绝。方法已移回父类，两个子类继承。真实 Dalvik/JNI 回归在修改前复现相同错误，修改后通过。
+
+Hole.io 2.55.4 的 `Hole/Mask 2.19` 与 `Hole/Master VFX Shader` 只有 GLES 3.1 和 Vulkan 变体，原 Java profile 实际提供 ANGLE GLES 3.0，洞口使用洋红错误材质。Java 启动现已配置随包 MoltenVK，游戏自行选择 Vulkan。Vulkan SurfaceView/TextureView 使用独立 Metal layer，通过缓存的 Metal readback 接入既有 Java 合成器，处理 BGRA/RGBA、行方向、跨队列 present semaphore、swapchain 替换与 ANativeWindow 引用释放。没有修改 APK 或 shader，也没有为了本游戏谎报 GLES 3.1。同步 readback 有额外成本，120 秒后台探测稳定阶段约 58 帧/秒，不作为长期性能保证。新增 GLES 链接失败日志，只有显式 diagnostics 才导出有界 shader 源码。
+
+完整默认 **CTest 67/67（49.27 秒）**，随包 **18 个 Mach-O / 406 个运行资源** 的签名、权限、架构与依赖核对通过。新增真实 MoltenVK 无窗口回归验证非对称像素、颜色通道、上下方向、跨队列等待、swapchain 替换及 Java/TextureView 的释放行为；输入回归与六项 Java 生命周期回归通过。首次调用构建脚本命中了系统 Python 3.9；随后使用本机 Python 3.14.8 完成全量构建和验证。构建只复用 `build/macos`。
+
+最终 Product 的隔离会话 **E86FC7A5-76EF-463D-9264-6CD6856BD6A1** 使用原始 base/split APK、独立数据、静音和无窗口模式，实际渲染 720×1280。`before-drag.png` 中教程及黑色洞口可见；协议拖动后的 `frame.png` 中教程消失，洞移到广告牌旁，计分变为 1/500。首帧、截图、默认失焦继续、暂停和恢复五项通过。关闭仍失败：Unity 销毁路径请求 Process.killProcess，没有 storage-closed，SharedPreferences 关闭和残留 worker 未通过，因此整次会话的 result.json 保留 failed，不能写完整游戏兼容或保存重开通过。此前 120 秒 JavaAppProbe 的退出码同为 72；没有为通过测试伪造生命周期回执。
+
+用户授权结束旧游戏后，CUA 点击旧 Hole.io 窗口关闭按钮；确认 Runner 退出后，重新核对空闲 Husk 无数据/网络句柄，结束无法通过 CUA 退出的残留主程序，再原位打包。新候选通过 CUA 只打开一次，PID 90701，已读到包含十款应用的首页 AX；详情导航、截图随后再次返回 native pipe closed。**新候选的可见窗口鼠标拖动未验收**，后台协议输入不替代该项。没有再启动可见游戏，没有清理或手工改写用户存档。
+
+证据：`build/logs/current-hole-input-before.log`、`current-hole-input-after.log`、`current-hole-vulkan-regression.log`、`current-hole-final-checks.log`、`current-hole-candidate-probe.log`、`build/macos/TestResults/HoleCandidate/` 和 `build/macos/bundle-verification.json`。主程序 SHA-256 为 `ef19a7c3285ef2e353254e1dc44b06146406e817f197c5871eaef861ab6a7229`，NativeRunner 为 `e966fba4cb3926c8da43b98d833e29aad9ed9e180fa58efbef90110b2e6e16f5`。真实样本诊断工具 JavaAppProbe 是显式调用的有时限工具，不加入默认 CTest；拒绝复用已有 data 目录。
+
 ## 2026-10-13 三款游戏修复候选（2.0.0 / build 4）
 
 已修复跨 split 图标和 adaptive XML 被当成图片缓存的问题。实际资料库 10 个图标均自动刷新为 PNG，与隔离解析结果逐字节一致；最终 CUA 主窗口截图确认 Egg、War Thunder、Clash 及其余图标正常。没有改写资料库索引、应用名称或设置。

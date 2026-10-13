@@ -142,6 +142,7 @@ static void (*r_glLinkProgram)(unsigned);
 static void w_glLinkProgram(unsigned prog)
 {
     r_glLinkProgram(prog);
+    gl_report_link_failure(prog);
     if (!g_es31_shim || !a_eglGetProcAddress) return;
     static int (*getloc)(unsigned, const char *); static unsigned (*getblk)(unsigned, const char *);
     static void (*blkbind)(unsigned, unsigned, unsigned), (*uni1i)(int, int), (*useprog)(unsigned), (*getprogiv)(unsigned, unsigned, int *);

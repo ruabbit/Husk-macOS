@@ -1250,6 +1250,10 @@ bool tl_javaapp_start(const tl_javaapp_config *cfg)
     int expected = TL_JAVA_UNLOADED;
     if (!cfg || !cfg->apk_path || !cfg->data_dir || cfg->width <= 0 || cfg->height <= 0 ||
         !atomic_compare_exchange_strong(&A.state, &expected, TL_JAVA_STARTING)) return false;
+    if (cfg->vulkan_library) {
+        void tl_vk_configure(const char *, const char *, int);
+        tl_vk_configure(cfg->vulkan_library, NULL, 0);
+    }
     static const tl_pad_sink sink = { java_pad_key, java_pad_motion };
     tl_pad_set_sink(&sink);
     if (start_app(cfg)) return true;

@@ -553,6 +553,43 @@ static bool ext_hidden(const char *name, size_t n)
     return false;
 }
 
+/* Compile success alone does not make a usable material. In particular ANGLE
+ * can reject a vertex/fragment interface at link time. Preserve the reason
+ * before an engine replaces that program with its error material. */
+static void gl_report_link_failure(unsigned program)
+{
+    if (!a_eglGetProcAddress) return;
+    void (*getiv)(unsigned, unsigned, int *) = a_eglGetProcAddress("glGetProgramiv");
+    void (*getlog)(unsigned, int, int *, char *) = a_eglGetProcAddress("glGetProgramInfoLog");
+    if (!getiv || !getlog) return;
+    int ok = 1; getiv(program, 0x8B82 /* GL_LINK_STATUS */, &ok);
+    if (ok) return;
+    static atomic_int reported;
+    int index = atomic_fetch_add(&reported, 1);
+    if (index >= 8) return;
+    char log[2048] = {0}; int length = 0;
+    getlog(program, sizeof(log)-1, &length, log);
+    for (char *p = log; *p; p++) if (*p == '\n') *p = '|';
+    tl_log_line("gl: program %u failed to link: %s", program, log);
+    const char *dir = getenv("TL_GL_SHADER_DUMP");
+    if (!dir) return;
+    void (*attached)(unsigned, int, int *, unsigned *) = a_eglGetProcAddress("glGetAttachedShaders");
+    void (*shaderiv)(unsigned, unsigned, int *) = a_eglGetProcAddress("glGetShaderiv");
+    void (*source)(unsigned, int, int *, char *) = a_eglGetProcAddress("glGetShaderSource");
+    if (!attached || !shaderiv || !source) return;
+    unsigned shaders[8]; int count = 0; attached(program, 8, &count, shaders);
+    for (int i = 0; i < count; i++) {
+        int size = 0; shaderiv(shaders[i], 0x8B88 /* GL_SHADER_SOURCE_LENGTH */, &size);
+        if (size <= 0 || size > (1 << 20)) continue;
+        char *text = calloc(1, (size_t)size + 1); if (!text) continue;
+        source(shaders[i], size, NULL, text);
+        char path[1024]; snprintf(path, sizeof(path), "%s/program-%d-shader-%d.txt", dir, index, i);
+        FILE *file = fopen(path, "w");
+        if (file) { fprintf(file, "%s\n---- source ----\n%s\n", log, text); fclose(file); }
+        free(text);
+    }
+}
+
 #include "husk-tl-egl-es31.inc"
 
 static const unsigned char *(*r_glGetString)(unsigned);

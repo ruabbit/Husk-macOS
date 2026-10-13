@@ -25,8 +25,21 @@ static void *run(void *unused)
     CHECK(tl_dvm_call_static("javax/net/ssl/SSLContext","getDefault","()Ljavax/net/ssl/SSLContext;",NULL,&result) && result.l);
     a.l=tl_jni_new_string("husk.AppRunner");
     CHECK(tl_dvm_call_static("java/lang/Class","forName","(Ljava/lang/String;)Ljava/lang/Class;",&a,&result) && result.l);
+    /* Unity resolves this on InputEvent, before it knows whether the incoming
+       object is a MotionEvent or KeyEvent. A method only on a subclass fails. */
+    void *env=tl_jni_env(); const void **jni=*(const void ***)env;
+    void *(*method)(void *,void *,const char *,const char *)=(void *)jni[33];
+    void *(*call_object)(void *,void *,void *,const jvalue *)=(void *)jni[36];
+    int (*call_int)(void *,void *,void *,const jvalue *)=(void *)jni[51];
+    void *get_device=method(env,tl_jni_class_object("android/view/InputEvent"),"getDevice","()Landroid/view/InputDevice;");
+    CHECK(get_device && !tl_jni_pending());
+    jvalue touch[]={{.j=100},{.j=110},{.i=0},{.f=80},{.f=180},{.i=0}};
+    CHECK(tl_dvm_call_static("android/view/MotionEvent","obtain","(JJIFFI)Landroid/view/MotionEvent;",touch,&result) && result.l);
+    void *device=call_object(env,result.l,get_device,NULL); CHECK(device && !tl_jni_pending());
+    void *get_id=method(env,tl_jni_class_object("android/view/InputDevice"),"getId","()I");
+    CHECK(get_id && call_int(env,device,get_id,NULL)==1);
     CHECK(!tl_jni_pending());
-    puts("PASS real Dalvik boot, libcore, ICU/time zones, Conscrypt and source-built framework");
+    puts("PASS real Dalvik boot, libcore, ICU/time zones, Conscrypt, framework and InputEvent JNI dispatch");
     return NULL;
 }
 int main(int argc,char **argv)

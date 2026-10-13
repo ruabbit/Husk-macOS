@@ -106,6 +106,13 @@ add_executable(NativeActivityProbe tests/macos/NativeActivityProbe.m ${MAC}/Nati
 target_include_directories(NativeActivityProbe PRIVATE ${MAC}/NativeRunner)
 target_compile_options(NativeActivityProbe PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(NativeActivityProbe PRIVATE NativeRuntime "-framework Foundation")
+add_executable(JavaAppProbe tests/macos/JavaAppProbe.m ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(JavaAppProbe PRIVATE ${MAC}/NativeRunner)
+target_compile_options(JavaAppProbe PRIVATE -fobjc-arc)
+target_link_libraries(JavaAppProbe PRIVATE NativeRuntime)
+add_dependencies(JavaAppProbe JavaRuntimeResources)
+add_custom_command(TARGET JavaAppProbe POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaAppProbe>" VERBATIM)
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
     ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m
@@ -182,6 +189,12 @@ add_executable(MacVulkanLoaderTests tests/macos/VulkanLoader.c ${MAC}/NativeRunn
 target_include_directories(MacVulkanLoaderTests PRIVATE ${HUSK_DEPS}/include ${MAC}/NativeRunner)
 target_link_libraries(MacVulkanLoaderTests PRIVATE NativeRuntime)
 add_test(NAME macos-vulkan-loader COMMAND MacVulkanLoaderTests "${HUSK_PRODUCT}/Contents/Frameworks/MoltenVK.framework/MoltenVK")
+add_executable(MacVulkanCompositorTests tests/macos/VulkanCompositor.m ${NEXT}/husk-tl-vulkan.m)
+target_include_directories(MacVulkanCompositorTests PRIVATE ${HUSK_DEPS}/include ${NEXT})
+target_compile_options(MacVulkanCompositorTests PRIVATE -fobjc-arc)
+target_link_libraries(MacVulkanCompositorTests PRIVATE "-framework Foundation" "-framework QuartzCore" "-framework Metal")
+add_test(NAME macos-vulkan-compositor COMMAND MacVulkanCompositorTests "${HUSK_PRODUCT}/Contents/Frameworks/MoltenVK.framework/MoltenVK")
+set_tests_properties(macos-vulkan-compositor PROPERTIES TIMEOUT 30 ENVIRONMENT "MVK_CONFIG_LOG_LEVEL=1")
 set_tests_properties(macos-vulkan-zero-init PROPERTIES TIMEOUT 30 ENVIRONMENT "MVK_CONFIG_LOG_LEVEL=1")
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/WebTests/capacitor.apk" "${CMAKE_BINARY_DIR}/WebTests/cordova.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_web_cases.py "${CMAKE_BINARY_DIR}/WebTests" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk"

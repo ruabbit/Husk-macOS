@@ -76,7 +76,6 @@ public class KeyEvent extends InputEvent {
     public final int getDeviceId() { return mDeviceId; }
     public final int getFlags() { return mFlags; }
     public final int getScanCode() { return mScanCode; }
-    public final InputDevice getDevice() { return InputDevice.getDevice(mDeviceId); }
     public final String getCharacters() { return chars; }
     public final boolean isShiftPressed() { return (meta & META_SHIFT_ON) != 0; }
     public final boolean isAltPressed() { return (meta & META_ALT_ON) != 0; }

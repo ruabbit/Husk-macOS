@@ -650,7 +650,7 @@ static int androidKey(unsigned code)
             void tl_web_attach(void *,void *,float,bool);tl_web_attach((__bridge void *)self.textInput,(__bridge void *)self.javaWebContainer,1,true);
         }
         if(minecraft){tl_ga_input_host host={hostTextState,hostTextActive,hostCursorLocked,(__bridge void *)self};tl_ga_set_input_host(&host);}
-        if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);}
+        if(diagnostics){setenv("TL_GAME_DIAGNOSTICS","1",1);setenv("TL_DL_TRACE","1",1);setenv("TL_GL_SHADER_DUMP",diagnostics.fileSystemRepresentation,1);}
         NSString *runtimeRoot=[[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"../../Resources/JavaRuntime"] stringByStandardizingPath];
         if(!mac_runtime_configure(runtimeRoot)){[self finish:NO reason:@"Android 系统资源缺失或损坏，请重新构建 Husk。"] ;return;}
         tl_ld_set_verbosity(2);tl_jni_set_trace(0);tl_egl_offscreen_windows(headless);
@@ -673,6 +673,7 @@ static int androidKey(unsigned code)
                     tl_javaapp_config javaConfiguration={.apk_path=configuration.apk_path,.data_dir=configuration.data_dir,
                         .package_name=configuration.package_name,.width=configuration.width,.height=configuration.height,.density=2,
                         .metal_layer=configuration.metal_layer,.angle_egl=configuration.angle_egl,
+                        .vulkan_library=[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"].fileSystemRepresentation,
                         .frame_dir=configuration.frame_dir,.frame_every=configuration.frame_every,.framework_res=fw.fileSystemRepresentation,
                         .show_keyboard=javaKeyboard,.set_clipboard=javaSetClipboard,.get_clipboard=javaGetClipboard};
                     ok=mac_java_start(root,&javaConfiguration);
