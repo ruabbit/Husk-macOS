@@ -1,5 +1,23 @@
 # 审计进度
 
+## 2026-10-14 上游核对与 Geode 候选（2.0.0 / build 6）
+
+本轮从干净的 `1e737fd` 开始，两次 fetch 后，main、origin/main、upstream/main 仍为 `8e79a47`，origin/codex/macos-p0 没有外来新增提交，祖先关系及来源锁一致。没有新合并或冲突。按每日任务要求，继续完成已有平台缺口。
+
+Geode 现已接到 macOS 资料库与独立 Cocos Runner。共享 `GeodeRelease.swift` 复用上游版本索引和 arm64 launcher 选择，iOS 工程引用同步更新；macOS 只对 Geometry Dash 的 Cocos profile 显示每游戏开关、下载状态、取消和检查更新。按 APK 的 versionCode 选择 Geode，5+ 要求独立资源包，4.x 检查内嵌资源；下载前后验证归档路径、大小、arm64 ELF 和 SHA-256，安装通过同卷原子目录交换提交。匹配的完整缓存可离线启动；失败更新保留旧缓存，停用不会删除模组和存档。下载期间阻止同游戏导入/删除/并发启动，正常退出会取消下载并等待清理。
+
+Runner 启动前重新检查受管目录、游戏摘要、版本和文件哈希，随后把 release、launcher、数据目录和版本传给共享 Geode loader。macOS 启用 Geode 后若 JNI 加载失败，启动会失败，不再悄悄运行没有 Geode 的游戏。共享解压原先只比较文件长度，可能留下同大小的旧库/资源；现改为检查写入和关闭结果后原子替换。保留 Cocos 的输入、GL 线程暂停、join/worker 检查与 storage-closed 协议。
+
+最终默认 **CTest 71/71（50.84 秒）**，包校验通过 **18 个 arm64 Mach-O / 406 个运行资源**。新增 4 组测试：离线索引/缓存/失败更新、真实 Android ELF 构造函数与 JNI 注入、JNI_ERR 拒绝启动、资料库—SessionController—打包 Runner 的完整会话；后者验证首帧、输入、暂停/继续、保存退出、单一 storage-closed 及资源落盘。真实 Geode 和模组没有被自建 fixture 代替为通过。iOS 共享 Swift 文件语法解析及 Xcode 工程格式检查通过，未声称完成 iOS 构建或真机验证。
+
+第一次全套为 70/71：旧资料库测试把周期心跳误认成 step 命令的完成回执。失败会话 ADF83624 的日志依次为 input/ticks=24、周期 status/ticks=24、step status/ticks=32，实际失焦继续正常。现在 automation 的 status/step 支持可选请求标识，测试只等待对应回执，并显式插入不相关状态验证隔离；没有更改默认失焦行为。失败证据保存在 `build/logs/geode-test-race-before.log` 和该会话目录。
+
+开工时只有空闲主程序 PID 90701，没有本项目游戏/VM 或打开的游戏、存档、会话及下载临时文件。CUA 重连两次仍报 native pipe closed；随后按已有退出授权发送 `NSRunningApplication.terminate()` 标准退出请求，返回 true，并确认旧进程消失，再原位打包。未强制终止、未绕过活动包保护。最终通过 CUA 按完整 Product 路径只打开一次，PID **55811**，主窗口 AX 实际读到原来的 **10 个应用**。没有启动用户游戏或 VM，没有播放测试音频；本轮所有运行回归使用仓库 fixture 和独立数据。当前资料库没有 Geometry Dash，前台 Geode 开关、实际网络下载、真实游戏/模组和保存重开仍待验证。
+
+代码 [a2a6fee](https://github.com/ruabbit/Husk-macOS/commit/a2a6feebfd710f167b606577127eb86fe172b5cb) 已正常推送并读回一致，main 保持 8e79a47。 本批 [Native macOS CI](https://github.com/ruabbit/Husk-macOS/actions/runs/38496000094) 已实际启动，记录时 in_progress；本地验证不代替远端 CI 成功。自动化 `husk` 已更新并读回 ACTIVE，仍每天 09:00 回到本聊天；删除了过时的“Java/Unity 6 和多个原生引擎未接入”描述，保留真实游戏、WebView 关闭、个人 Play 登录与 VM/P6 的开放项。
+
+证据复用 `build/logs/geode-build.log`、`geode-tests.log`、`geode-full-tests.log`、`geode-bundle.log`、`geode-ios-parse.log` 和 `build/macos/bundle-verification.json`。主程序 SHA-256 为 `718f63f07035c1f189c3a97738f3bc0de3b29390ab8b46a8945dae8bd7c0cd6f`，NativeRunner 为 `1febf2c7be08ece47c912cfaf72ebee60f2bf89153c305e95b38e2d0b2a8beb5`。渲染修复已有 fork PR #1 和上游 draft PR #118，本轮未重复创建或合并这些 PR。
+
 ## 2026-10-13 Hole.io 输入与洞口材质修复（2.0.0 / build 5）
 
 Unity 6000.3.2f1 通过 JNI 在父类 `android.view.InputEvent` 查找 `getDevice()`；原实现只在 MotionEvent/KeyEvent 子类提供该方法，真实日志报 NoSuchMethodError，输入被拒绝。方法已移回父类，两个子类继承。真实 Dalvik/JNI 回归在修改前复现相同错误，修改后通过。

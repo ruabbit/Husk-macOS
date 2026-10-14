@@ -1,8 +1,8 @@
 # 上游功能与 macOS 接入现况
 
-核对日期：2026-10-13（Asia/Shanghai）。上游发布标签 **2.0 = e02ac68**；当前 main **8e79a47** 包含该发布和随后社区兼容性改进。已再次 fetch origin、upstream，远端没有本轮初始快照之外的新提交。fork main 从 f0bd526 快进至 8e79a47，再通过 5866498 真实合入 macOS；没有文本冲突或 ours 策略。
+核对日期：2026-10-14（Asia/Shanghai）。上游发布标签 **2.0 = e02ac68**；当前 main **8e79a47** 包含该发布和随后社区兼容性改进。今日两次 fetch origin、upstream，main 和远端 macOS 分支均无新增提交；无需新合并。之前 fork main 从 f0bd526 快进至 8e79a47，再通过 5866498 真实合入 macOS；祖先关系完整，没有 ours 策略。
 
-本轮补齐此前仅进入源码树的功能，并在唯一 `build/macos/Product/HuskMac.app` 打包。当前候选版本为 **2.0.0 / build 5**，保留 VM=ON。最终验证、提交与窗口状态以 [progress.md](progress.md) 的最新记录为准。
+本轮补上 Geode 的 macOS 下载、设置和启动注入，并在唯一 `build/macos/Product/HuskMac.app` 打包。当前候选版本为 **2.0.0 / build 6**，保留 VM=ON；默认 CTest **71/71**、包内 **18 个 Mach-O / 406 个运行资源** 校验通过。代码 a2a6fee 已推送；当前候选通过 CUA 打开一次，主窗口和进程已核对。具体证据与真实游戏边界见 [progress.md](progress.md)。
 
 ## 2.0 发布功能
 
@@ -33,7 +33,7 @@
 | Capacitor / Cordova / Ionic | 独立无 JIT 权限的 WebRunner，复用上游 WebAppRuntime 桥；APK 资源校验/受限提取、原生窗口/IME、返回、暂停定时器/动画/媒体和输入屏蔽 | 两种引擎的真实 WebKit fixture 通过 localStorage/IndexedDB 退出重开、清除后不复现；本地自定义 scheme 的 document.cookie 为空，不宣称 cookie 或 service worker 兼容 |
 | Java 内嵌 WebView | 既有 AppKit 固定画布、透明合成与 Java Web 桥 | 使用持久化 WebKit 数据的 Java 会话仍拒绝 native storage-closed；本轮独立 WebRunner 的回执没有偷换到 Java 路径 |
 | Minecraft / GameActivity | 既有独立 Runner、固定画布、鼠标修复、存储关闭保留 | 旧的真实样本证据仍有效，但本轮没有启动用户游戏 |
-| Geode | 共享 native 模块已编入 Cocos 的链接依赖 | macOS 的 Geode 下载/配置界面与 launcher 注入尚未接入；保持开放，不能用链接成功替代功能 |
+| Geode | 共用上游版本索引，Geometry Dash 每游戏开关、下载/取消/更新、Geode 4 内嵌资源和 5+ 独立资源；完整缓存可离线启动；原子安装、APK 版本/摘要和缓存 SHA 校验；独立 Cocos Runner 注入 | 离线缓存、Android ELF 构造函数/JNI、同大小更新、输入/暂停/关闭和真实打包会话通过；启用后加载失败会阻止启动，不静默关闭 Geode。真实 Geometry Dash/Geode 模组、实际网络下载和前台开关未验收 |
 | 图形依赖 | 固定 MoltenVK 1.4.2 / SPIRV-Cross，并实际应用上游 zero-init-stride 补丁 | 缓存记录补丁 SHA，打包前拒绝旧缓存，包内附构建记录/补丁；针对随包 MoltenVK 的 workgroup 零初始化 shader 编译回归通过 |
 
 ## Web 存档协议
@@ -45,7 +45,7 @@
 ## 后续开放项
 
 1. Java 内嵌 WebView：将 stable store 与原生 Android 数据目录关联，补 Java 文档销毁与 WebKit 所有权回执、清除数据测试。保留现有拒绝错误保存确认的行为，不能直接复用独立 WebRunner 回执冒充 native 销毁。
-2. Geode：复用上游 GeodeSupport 的版本匹配下载，改接资料库的每应用配置，向 Cocos 传入 release/launcher/resources/version，补文件完整性和关闭验证。
+2. Geode：下载、配置、启动注入和存储关闭回归已进入 build 6。下一步使用独立存档验证真实 Geometry Dash、官方 Geode 发布包和模组，从设置开关、版本匹配下载到交互、保存重开；不要把自建 ELF 的通过当作这些外部程序已兼容。共享 GeodeUtils 的剪贴板、选文件/文件夹、openWebview、restartGame 仍继承上游的空实现/拒绝行为，需要实际使用证据后逐项适配。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
 4. Egg：继续核对 DT_INIT/PLT；已知构造函数 RVA 0x1621794 调用 0x16413c0，槽 0x17636b8 仍为 0x1625d90 且没有该槽重定位。2026-10-13 静态检查确认 DT_INIT=0x17a0000，通过槽 0x1798000 调用导入的 ExecuteProgram；尚不能证明其完成所需初始化。NativeActivity 目前提供合成 Activity，未执行自定义 Application 的 Java 启动；不能直接切换到 Java profile，因为 framework 的 NativeActivity 仍是签名 stub。下一步核对 ExecuteProgram 的输入/输出和 Java Application 初始化契约，再设计对应 bridge/fixture；未复跑 Egg，也没有跳过保护或修改用户 APK。
 5. 三款游戏修复（2026-10-13）：跨 split/adaptive 图标解析、旧缓存升级、全 NativeRunner profile 的 Android 字体/CA 映射、有界 stderr 首尾保留和独立 supervisor.json 已实现。字体来自同一固定镜像，保留 CJK 和系统别名，旧配置的两个缺失名称在 lock 中记录兼容别名。实际资料库十款图标均已刷新，与隔离解码 PNG 一致，包含 Egg、War、Clash。
