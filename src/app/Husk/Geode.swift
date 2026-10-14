@@ -142,42 +142,12 @@ final class GeodeSupport: ObservableObject {
         var errorDescription: String? { message }
     }
 
-    private static func json(_ url: URL) async throws -> [String: Any] {
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 30
-        req.setValue("Husk", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw GeodeError("\(url.host ?? "The server") did not answer (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)).")
-        }
-        return obj
-    }
-
     private static func latestRelease(versionCode: Int) async throws -> (String, URL) {
-        let url = URL(string: "https://api.geode-sdk.org/v1/loader/versions/latest?gd=\(versionCode)&platform=android&prerelease=false")!
-        let obj = try await json(url)
-        let payload = obj["payload"] as? [String: Any] ?? obj
-        guard let version = payload["version"] as? String,
-              let downloads = payload["downloads"] as? [String: Any] else {
-            throw GeodeError("Geode has no release for this version of Geometry Dash.")
-        }
-        let entry = downloads["android64"]
-        let link = (entry as? String) ?? ((entry as? [String: Any])?["url"] as? String)
-        guard let link, let zip = URL(string: link) else { throw GeodeError("Geode's release has no Android build.") }
-        return (version, zip)
+        try await GeodeRelease.latest(versionCode: versionCode)
     }
 
     private static func launcherURL() async throws -> URL {
-        let obj = try await json(URL(string: "https://api.github.com/repos/geode-sdk/android-launcher/releases/latest")!)
-        // The release has a 32-bit build (…-android32.apk) beside the 64-bit one, and lists it first: only the 64-bit one has
-        // the arm64 C++ runtime Geode needs.
-        let assets = obj["assets"] as? [[String: Any]] ?? []
-        let apks = assets.compactMap { $0["browser_download_url"] as? String }.filter { $0.hasSuffix(".apk") }
-        guard let link = apks.first(where: { !$0.contains("android32") && !$0.contains("armeabi") }), let url = URL(string: link) else {
-            throw GeodeError("Geode's launcher release has no 64-bit APK.")
-        }
-        return url
+        try await GeodeRelease.launcherURL()
     }
 
     private static func download(_ url: URL, to dest: URL) async throws {

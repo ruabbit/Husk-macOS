@@ -115,7 +115,7 @@ bool tl_cocos_start(const tl_cocos_config *cfg)
     tl_log_line("cocos: nativeSetApkPath done");
     if (tl_jni_pending()) return false;
     /* Geode, when asked for: last, as its launcher does, so the game is set up when it hooks in. */
-    if (tl_geode_configured() && !tl_geode_load(tl_hle_activity())) tl_log_line("cocos: Geode did not load; the game starts without it");
+    if (tl_geode_configured() && !tl_geode_load(tl_hle_activity())) tl_log_line("cocos: Geode did not load");
     return true;
 }
 

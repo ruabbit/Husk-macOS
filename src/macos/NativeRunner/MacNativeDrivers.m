@@ -6,6 +6,7 @@
 #include "husk-tl-sdl.h"
 #include "husk-tl-gtasa.h"
 #include "husk-tl-vulkan.h"
+#include "husk-tl-geode.h"
 
 _Static_assert((int)TL_DRIVER_IDLE == (int)TL_UNITY_IDLE &&
     (int)TL_DRIVER_RUNNING == (int)TL_UNITY_RUNNING && (int)TL_DRIVER_PAUSED == (int)TL_UNITY_PAUSED &&
@@ -36,7 +37,10 @@ BOOL mac_driver_accepts_scan(NSDictionary *scan) {
     .width=c->width,.height=c->height,.metal_layer=c->metal_layer,.angle_egl=c->angle_egl,\
     .angle_gles=c->angle_gles,.frame_dir=c->frame_dir,.frame_every=c->frame_every
 BOOL mac_driver_start(const tl_unity_config *c, NSString *activity, NSString *vulkan) {
-    if ([selected isEqual:@"cocos"]) { tl_cocos_config cfg={CONFIG_FIELDS}; tl_cocos_text_install(); tl_cocos_register_pad_sink(); return tl_cocos_start(&cfg)&&tl_cocos_run(); }
+    if ([selected isEqual:@"cocos"]) {
+        tl_cocos_config cfg={CONFIG_FIELDS}; tl_cocos_text_install(); tl_cocos_register_pad_sink();
+        return tl_cocos_start(&cfg) && (!tl_geode_configured() || tl_geode_loaded()) && tl_cocos_run();
+    }
     if ([selected isEqual:@"godot"]) { tl_godot_config cfg={CONFIG_FIELDS}; return tl_godot_start(&cfg)&&tl_godot_run(); }
     if ([selected isEqual:@"gamemaker"]) { tl_gm_config cfg={CONFIG_FIELDS}; return tl_gm_start(&cfg)&&tl_gm_run(); }
     tl_ga_config cfg={CONFIG_FIELDS};

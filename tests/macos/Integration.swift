@@ -19,8 +19,14 @@ struct CheckFailure: Error { let message: String }
         func eventually(_ condition: @escaping @MainActor () -> Bool) async throws { try await session.wait(until: condition, timeout: 20) }
         func event(_ command: String, values: [String: Any] = [:], kind: String) async throws {
             let previous = session.events.last?["seq"] as? Int ?? 0
-            session.send(command, values: values)
-            try await eventually { session.events.contains { ($0["seq"] as? Int ?? 0) > previous && $0["event"] as? String == kind } }
+            let request = UUID().uuidString
+            var payload = values
+            if kind == "status" { payload["request"] = request }
+            session.send(command, values: payload)
+            try await eventually { session.events.contains {
+                ($0["seq"] as? Int ?? 0) > previous && $0["event"] as? String == kind &&
+                (kind != "status" || $0["request"] as? String == request)
+            } }
         }
         func game() -> [String: Any] { session.latest["game"] as? [String: Any] ?? [:] }
         do {
@@ -98,6 +104,8 @@ struct CheckFailure: Error { let message: String }
             try check((game()["x"] as? Double ?? 0) == 320, "controller-path-moves-guest-player")
             try await event("input", values: ["source": "focus-lost"], kind: "input")
             let unfocusedTicks = session.latest["ticks"] as? Int ?? 0
+            // An unrelated status can arrive between input and step completion.
+            session.send("status", values: ["request": "unrelated-heartbeat"])
             try await event("step", values: ["frames": 8], kind: "status")
             try check((game()["x"] as? Double ?? 0) == 320, "focus-loss-clears-controller-state")
             try check(session.state == "running" && session.latest["ticks"] as? Int == unfocusedTicks + 8,

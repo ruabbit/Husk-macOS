@@ -11,7 +11,10 @@ import ImageIO
     @Published var selection: String?
     @Published var importing = false
     @Published var playImports = 0
-    var importBusy: Bool { importing || playImports > 0 }
+    @Published var geodeBusyID: String?
+    @Published var geodeStatus: [String: String] = [:]
+    private var geodeTask: Task<Void, Never>?
+    var importBusy: Bool { importing || playImports > 0 || geodeBusyID != nil }
     @Published var showImporter = false
     @Published var error: String?
     @Published var search = ""
@@ -41,13 +44,16 @@ import ImageIO
     }
     var busyGameIDs: Set<String> {
         if vm.active { return Set(games.map(\.id)) }
-        return session.active ? Set([session.gameID].compactMap { $0 }) : []
+        var ids = session.active ? Set([session.gameID].compactMap { $0 }) : []
+        if let geodeBusyID { ids.insert(geodeBusyID) }
+        return ids
     }
     func reload() async {
         do { games = try await repository?.games() ?? []; if selection == nil { selection = games.first?.id } }
         catch { self.error = error.localizedDescription }
     }
     func importURLs(_ urls: [URL]) {
+        guard geodeBusyID == nil else { error = "Geode 正在准备，请稍后导入游戏。"; return }
         guard let repository else { return }
         pendingImports.append(contentsOf: urls)
         guard !importing else { return }
@@ -79,17 +85,60 @@ import ImageIO
     }
     func play(_ game: LibraryGame) {
         guard !importBusy, let repository else { return }
+        if game.settings.geode { prepareGeode(game, launch: true); return }
         Task {
-            do {
-                if session.active { session.stop(); try await session.wait(until: { !self.session.active }, timeout: 35) }
-                let (fresh, apks, checkpoint) = try await repository.prepare(game.id)
-                let runner = fresh.runtime == "web" ? WebStorage.helper(in: Bundle.main.bundleURL) : Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
-                try session.start(executable: runner, game: fresh, apk: apks[0], checkpoint: checkpoint, logs: paths.logs)
-                try await session.wait(until: { self.session.state == "running" || !self.session.active }, timeout: 95)
-                if session.state == "running" { try await repository.update(game.id, played: true); await reload() }
-            } catch { self.error = error.localizedDescription }
+            do { try await launch(game, repository: repository) }
+            catch { self.error = error.localizedDescription }
         }
     }
+    private func launch(_ game: LibraryGame, repository: LibraryRepository) async throws {
+        if session.active { session.stop(); try await session.wait(until: { !self.session.active }, timeout: 35) }
+        try Task.checkCancellation()
+        let (fresh, apks, checkpoint) = try await repository.prepare(game.id)
+        let runner = fresh.runtime == "web" ? WebStorage.helper(in: Bundle.main.bundleURL) : Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
+        try Task.checkCancellation()
+        try session.start(executable: runner, game: fresh, apk: apks[0], checkpoint: checkpoint, logs: paths.logs)
+        try await session.wait(until: { self.session.state == "running" || !self.session.active }, timeout: 95)
+        if session.state == "running" { try await repository.update(game.id, played: true); await reload() }
+    }
+    func prepareGeode(_ game: LibraryGame, launch: Bool = false, checkForUpdates: Bool = false) {
+        guard !importBusy, !vm.active, Geode.supports(game), let repository else { return }
+        guard !session.active || launch else { return }
+        geodeBusyID = game.id
+        geodeStatus[game.id] = "正在准备 Geode…"
+        geodeTask = Task {
+            defer { geodeBusyID = nil; geodeTask = nil }
+            do {
+                let (fresh, apks, _) = try await repository.prepare(game.id)
+                let importedLauncher = games.first { $0.packageName == Geode.launcherPackage }
+                let launcher = importedLauncher.flatMap { item in item.apkNames.first.map { paths.game(item.id).appendingPathComponent($0) } }
+                let record = try await Geode.prepare(game: fresh, apk: apks[0], launcher: launcher, checkForUpdates: checkForUpdates)
+                try Task.checkCancellation()
+                try await repository.update(game.id, geode: true)
+                geodeStatus[game.id] = "Geode \(record.version) 已就绪"
+                await reload()
+                if launch { try await self.launch(game, repository: repository) }
+            } catch is CancellationError { geodeStatus[game.id] = "下载已取消" }
+            catch {
+                if Task.isCancelled { geodeStatus[game.id] = "下载已取消" }
+                else {
+                    geodeStatus[game.id] = "准备失败：\(error.localizedDescription)"
+                    self.error = error.localizedDescription
+                }
+            }
+        }
+    }
+    func setGeode(_ game: LibraryGame, enabled: Bool) {
+        if enabled { prepareGeode(game); return }
+        guard !importBusy, !session.active, let repository else { return }
+        geodeBusyID = game.id
+        geodeTask = Task {
+            defer { geodeBusyID = nil; geodeTask = nil }
+            do { try await repository.update(game.id, geode: false); await reload() }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+    func cancelGeode() { geodeTask?.cancel() }
     func shortcut(_ game: LibraryGame) {
         let panel = NSSavePanel(); panel.allowedContentTypes = [UTType(filenameExtension: "webloc")!]
         panel.nameFieldStringValue = game.title + ".webloc"
@@ -100,7 +149,7 @@ import ImageIO
         catch { self.error = error.localizedDescription }
     }
     func settings(_ game: LibraryGame, muted: Bool? = nil, pause: Bool? = nil, fullScreen: Bool? = nil) {
-        guard let repository else { return }
+        guard geodeBusyID != game.id, let repository else { return }
         Task {
             do {
                 try await repository.update(game.id, muted: muted, pauseWhenInactive: pause, openFullScreen: fullScreen)
@@ -324,6 +373,22 @@ struct GameDetail: View {
                         Toggle("启动时全屏", isOn: Binding(get: { game.settings.openFullScreen }, set: { model.settings(game, fullScreen: $0) })).disabled(running)
                         Toggle("游戏窗口失去焦点时暂停", isOn: Binding(get: { game.settings.pauseWhenInactive }, set: { model.settings(game, pause: $0) }))
                         Text("失焦暂停立即生效；静音在下次启动游戏时生效。").font(.caption).foregroundStyle(.secondary)
+                        if Geode.supports(game) {
+                            Divider()
+                            Toggle("启用 Geode 模组加载器", isOn: Binding(get: { game.settings.geode }, set: { model.setGeode(game, enabled: $0) }))
+                                .disabled(model.session.active || model.vm.active || model.importBusy)
+                            Text(model.geodeStatus[game.id] ?? (game.settings.geode ? "启动时加载 Geode" : "启用时下载与游戏版本匹配的 Geode"))
+                                .font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                if model.geodeBusyID == game.id {
+                                    ProgressView().controlSize(.small)
+                                    Button("取消") { model.cancelGeode() }
+                                } else {
+                                    Button(game.settings.geode ? "检查 Geode 更新" : "下载并启用 Geode") { model.prepareGeode(game, checkForUpdates: true) }
+                                        .disabled(model.session.active || model.vm.active || model.importBusy)
+                                }
+                            }
+                        }
                     }.padding(10)
                 }
                 if model.vmAvailability.installed {
@@ -336,8 +401,8 @@ struct GameDetail: View {
                     Button("创建启动快捷方式…") { model.shortcut(game) }.disabled(!game.playable)
                     Button("在访达中显示文件") { NSWorkspace.shared.activateFileViewerSelecting([model.paths.game(game.id)]) }
                     Spacer()
-                    Button("清除存档…", role: .destructive) { saveConfirmation = true }.disabled(running)
-                    Button("移除游戏…", role: .destructive) { removeConfirmation = true }.disabled(running)
+                    Button("清除存档…", role: .destructive) { saveConfirmation = true }.disabled(running || model.importBusy)
+                    Button("移除游戏…", role: .destructive) { removeConfirmation = true }.disabled(running || model.importBusy)
                 }.controlSize(.small)
             }.padding(32).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
         }
@@ -372,13 +437,13 @@ struct SettingsView: View {
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: LibraryModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model, model.session.active || model.vm.active || model.playStore.hasActiveDownloads || model.playStore.browserLogin.active else { return .terminateNow }
+        guard let model, model.session.active || model.vm.active || model.playStore.hasActiveDownloads || model.playStore.browserLogin.active || model.geodeBusyID != nil else { return .terminateNow }
         let session = model.session
-        session.stop(); model.vm.stop(); model.playStore.stopDownloads(); model.playStore.cancelLogin()
+        session.stop(); model.vm.stop(); model.playStore.stopDownloads(); model.playStore.cancelLogin(); model.cancelGeode()
         Task {
             let deadline = Date().addingTimeInterval(60)
-            while (session.active || model.vm.active || model.playStore.hasActiveDownloads || model.playStore.browserLogin.active) && Date() < deadline { try? await Task.sleep(nanoseconds: 200_000_000) }
-            sender.reply(toApplicationShouldTerminate: !session.active && !model.vm.active && !model.playStore.hasActiveDownloads && !model.playStore.browserLogin.active)
+            while (session.active || model.vm.active || model.playStore.hasActiveDownloads || model.playStore.browserLogin.active || model.geodeBusyID != nil) && Date() < deadline { try? await Task.sleep(nanoseconds: 200_000_000) }
+            sender.reply(toApplicationShouldTerminate: !session.active && !model.vm.active && !model.playStore.hasActiveDownloads && !model.playStore.browserLogin.active && model.geodeBusyID == nil)
         }
         return .terminateLater
     }

@@ -14,6 +14,7 @@
 #include "husk-tl-nativeactivity.h"
 #import "MacJavaRuntime.h"
 #import "MacNativeDrivers.h"
+#import "MacGeode.h"
 #include "husk-tl-vulkan.h"
 #include "husk-tl-gamemaker.h"
 #include "husk-tl-bionic.h"
@@ -35,7 +36,7 @@ static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *
 static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow, fullScreen;
 static int variant, exitStatus;
 static BOOL minecraft, unity, nativeactivity, javaapp, nativeDriver, ue4, portrait;
-static NSString *packageName, *nativeLibrary, *activityClass;
+static NSString *packageName, *nativeLibrary, *activityClass, *geodeDirectory;
 static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity || javaapp || nativeDriver; }
 static NSString *runtimeName(void) { return nativeDriver ? mac_driver_name() : ue4 ? @"ue4" : javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
 static void activityGuestExit(int status) {
@@ -80,6 +81,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property void (*mix)(int16_t *, int);
 @property void (*save)(OrbitSave *);
 - (void)event:(NSString *)kind detail:(NSDictionary *)detail;
+- (void)statusForRequest:(id)request;
 - (void)stop:(NSString *)reason;
 - (void)togglePause:(id)sender;
 - (void)clearInput;
@@ -451,10 +453,17 @@ static int androidKey(unsigned code)
 }
 - (void)status
 {
+    [self statusForRequest:nil];
+}
+- (void)statusForRequest:(id)request
+{
     OrbitSave save={0};if(self.loaded&&!guestRuntime())self.save(&save);
-    [self event:@"status" detail:@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
+    NSMutableDictionary *detail=[@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
         @"runtime":runtimeName(),@"presentedFrames":@(tl_egl_frames_presented()+tl_vk_frames_presented()),@"surfaceWidth":@(surfaceWidth),@"surfaceHeight":@(surfaceHeight),@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(guestRuntime()?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(guestRuntime()?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
-        @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"lastClick":self.lastClick?:@{},@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)}];
+        @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"lastClick":self.lastClick?:@{},@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)} mutableCopy];
+    // Automation status replies must be distinguishable from periodic heartbeats.
+    if(automation&&[request isKindOfClass:NSString.class]&&[request length]<=64)detail[@"request"]=request;
+    [self event:@"status" detail:detail];
 }
 - (void)command:(NSDictionary *)message
 {
@@ -465,7 +474,7 @@ static int androidKey(unsigned code)
     if([command isEqual:@"stop"]) [self stop:@"controller-stop"];
     else if([command isEqual:@"pause"]&&[self.state isEqual:@"running"]) [self togglePause:nil];
     else if([command isEqual:@"resume"]&&[self.state isEqual:@"paused"]) [self togglePause:nil];
-    else if([command isEqual:@"status"]) [self status];
+    else if([command isEqual:@"status"]) [self statusForRequest:message[@"request"]];
     else if([command isEqual:@"window"]&&self.window&&!hiddenWindow&&!headless) {
         NSString *action=message[@"action"];
         if([action isEqual:@"show"]){[self.window deminiaturize:nil];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
@@ -509,7 +518,7 @@ static int androidKey(unsigned code)
     else if(automation&&!guestRuntime()&&[command isEqual:@"step"]) {
         int frames=MAX(0,MIN(600,[message[@"frames"] intValue]));
         for(int i=0;i<frames&&!atomic_load(&finished);i++)[self frame];
-        [self status];
+        [self statusForRequest:message[@"request"]];
     }
     else if(automation&&diagnostics&&[command isEqual:@"capture"]) {
         // Only a basename under the launch-time diagnostic directory is accepted.
@@ -666,7 +675,10 @@ static int androidKey(unsigned code)
                     .angle_egl=self.runtimePaths[3].fileSystemRepresentation,.frame_dir=frames?self.runtimePaths[4].fileSystemRepresentation:NULL,.frame_every=-60};
                 BOOL ok;
                 if(nativeDriver){
-                    ok=mac_driver_start(&configuration,activityClass,[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"]);
+                    NSError *error=nil;
+                    ok=mac_geode_configure(geodeDirectory,apkPath,apkDigest,packageName,mac_driver_name(),data,&error);
+                    if(!ok)tl_log_line("geode: %s",error.localizedDescription.UTF8String);
+                    if(ok)ok=mac_driver_start(&configuration,activityClass,[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"]);
                 }else if(javaapp){
                     NSString *root=runtimeRoot;
                     NSString *fw=[root stringByAppendingPathComponent:@"framework-res.apk"];
@@ -765,6 +777,7 @@ int main(int argc,const char **argv)
             else if(i+1<argc&&[arg isEqual:@"--activity"])activityClass=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--package"])packageName=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--native-library"])nativeLibrary=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--geode-directory"])geodeDirectory=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--session"])sessionID=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--apk"])apkPath=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--split"])[splitPaths addObject:@(argv[++i])];
@@ -784,6 +797,7 @@ int main(int argc,const char **argv)
         if(![[NSUUID alloc] initWithUUIDString:sessionID]||!apkPath||!checkpointPath||variant<0||variant>1)return 64;
         if(splitPaths.count>=TL_LD_MAX_APKS || (!guestRuntime() && splitPaths.count))return 64;
         if(portrait&&!unity&&!nativeactivity&&!javaapp&&!nativeDriver)return 64;
+        if(geodeDirectory&&(!nativeDriver||![mac_driver_name() isEqual:@"cocos"]||![packageName isEqual:@"com.robtopx.geometryjump"]))return 64;
         if(nativeLibrary&&(!nativeactivity||!nativeLibrary.length||nativeLibrary.length>56||[nativeLibrary rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-"] invertedSet]].location!=NSNotFound))return 64;
         if((unity||nativeactivity||javaapp||nativeDriver)&&(!packageName.length||packageName.length>199||[packageName rangeOfCharacterFromSet:

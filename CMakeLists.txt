@@ -48,9 +48,9 @@ add_library(SharedLibrary STATIC
     ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/WebStorage.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
     ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/APKIcon.swift ${MAC}/SharedLibrary/SessionDiagnostics.swift
     ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/NativeLaunch.swift ${MAC}/SharedLibrary/VMController.swift
-    src/app/Husk/ApkMetadata.swift src/app/Husk/BundleUnpacker.swift)
+    src/app/Husk/ApkMetadata.swift src/app/Husk/BundleUnpacker.swift src/app/Husk/GeodeRelease.swift ${MAC}/SharedLibrary/Geode.swift)
 target_link_libraries(SharedLibrary PUBLIC SharedCore "-framework Security" "-framework ImageIO" "-framework UniformTypeIdentifiers")
-target_compile_options(SharedLibrary PRIVATE -I ${MAC}/SharedCore)
+target_compile_options(SharedLibrary PRIVATE -I ${MAC}/SharedCore -enable-testing)
 
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/IconCases/ready
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_icon_cases.py ${CMAKE_BINARY_DIR}/IconCases
@@ -115,7 +115,7 @@ add_custom_command(TARGET JavaAppProbe POST_BUILD COMMAND codesign --force --sig
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaAppProbe>" VERBATIM)
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
-    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m
+    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m "${HUSK_ICON}")
 add_dependencies(NativeRunner MacIcon)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
@@ -225,6 +225,35 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMA
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_cases.py "${CMAKE_BINARY_DIR}/NativeTests"
     DEPENDS tests/macos/prepare_native_cases.py tests/macos/fixture/native_driver.c scripts/build_macos_fixture.py VERBATIM)
 add_custom_target(NativeDriverFixtures DEPENDS "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk")
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/GeodeTests/ready"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_geode_cases.py "${CMAKE_BINARY_DIR}/GeodeTests" "${CMAKE_BINARY_DIR}/NativeTests"
+    DEPENDS tests/macos/prepare_geode_cases.py tests/macos/fixture/geode.c NativeDriverFixtures "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk" VERBATIM)
+add_custom_target(GeodeFixtures DEPENDS "${CMAKE_BINARY_DIR}/GeodeTests/ready")
+add_executable(MacGeodeTests tests/macos/Geode.swift)
+target_compile_options(MacGeodeTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacGeodeTests PRIVATE SharedLibrary)
+add_dependencies(MacGeodeTests GeodeFixtures)
+add_test(NAME macos-geode-cache COMMAND MacGeodeTests "${CMAKE_BINARY_DIR}/GeodeTests")
+set_tests_properties(macos-geode-cache PROPERTIES TIMEOUT 30)
+add_executable(GeodeLifecycleTests tests/macos/GeodeLifecycle.m ${MAC}/NativeRunner/MacGeode.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(GeodeLifecycleTests PRIVATE ${MAC}/NativeRunner)
+target_compile_options(GeodeLifecycleTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
+target_link_libraries(GeodeLifecycleTests PRIVATE NativeRuntime)
+add_dependencies(GeodeLifecycleTests GeodeFixtures)
+add_custom_command(TARGET GeodeLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:GeodeLifecycleTests>" VERBATIM)
+foreach(mode normal jni-error)
+    set(outcome success)
+    if(mode STREQUAL "jni-error")
+        set(outcome failure)
+    endif()
+    add_test(NAME native-geode-${mode} COMMAND GeodeLifecycleTests "${CMAKE_BINARY_DIR}/GeodeTests/${mode}"
+        "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/Geode" ${outcome})
+    set_tests_properties(native-geode-${mode} PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
+endforeach()
+add_dependencies(MacNativeDriverSessionTests GeodeFixtures)
+add_test(NAME macos-geode-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/GeodeTests/normal/game.apk" geode "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(macos-geode-session PROPERTIES TIMEOUT 60)
 add_executable(NativeDriverLifecycleTests tests/macos/NativeDriverLifecycle.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacDiagnostics.c)
 target_compile_options(NativeDriverLifecycleTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_include_directories(NativeDriverLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -359,7 +388,7 @@ add_test(NAME macos-render-surface COMMAND MacRenderSurfaceTests "${HUSK_DEPS}/l
 set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
 add_executable(MacNativeMouseTests tests/macos/NativeMouse.m ${MAC}/NativeRunner/MacRenderView.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m ${MAC}/NativeRunner/MacAudio.m
-    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m)
+    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m)
 target_include_directories(MacNativeMouseTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(MacNativeMouseTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(MacNativeMouseTests PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"

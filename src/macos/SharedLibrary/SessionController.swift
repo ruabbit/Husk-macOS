@@ -69,6 +69,7 @@ final class PipeReader: @unchecked Sendable {
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
+        let geodeArguments = try Geode.arguments(game: game, apk: apk)
         guestManagedStorage = runtime != "orbit"
         self.runtime = runtime
         let id = UUID().uuidString
@@ -90,6 +91,7 @@ final class PipeReader: @unchecked Sendable {
             child.arguments! += NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity" || runtime == "ue4")
         }
         if runtime == "web" { child.arguments! += ["--web-kind", game.engine == "Capacitor" ? "capacitor" : "cordova"] }
+        child.arguments! += geodeArguments
         for name in game.apkNames.dropFirst() {
             child.arguments! += ["--split", apk.deletingLastPathComponent().appendingPathComponent(name).path]
         }

@@ -12,7 +12,13 @@ import SharedLibrary
         do {
             let repository=try LibraryRepository(paths:paths,trustedFixtureHash:"")
             let imported=try await repository.importGame(fixture)
-            try check(imported.runtime==engine,"\(engine) import selects production profile")
+            let profile=engine=="geode" ? "cocos" : engine
+            try check(imported.runtime==profile,"\(engine) import selects production profile")
+            if engine=="geode" {
+                let apk=paths.game(imported.id).appendingPathComponent(imported.apkNames[0])
+                try FileManager.default.copyItem(at:fixture.deletingLastPathComponent().appendingPathComponent("geode"),to:Geode.directory(apk:apk))
+                try await repository.update(imported.id,geode:true)
+            }
             let (game,files,checkpoint)=try await repository.prepare(imported.id)
             try session.start(executable:app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
                 game:game,apk:files[0],checkpoint:checkpoint,logs:paths.logs,headless:true,automation:true)
@@ -35,7 +41,12 @@ import SharedLibrary
             let mask=data.withUnsafeBytes{$0.loadUnaligned(as:UInt32.self)}
             let wrong=data.withUnsafeBytes{$0.loadUnaligned(fromByteOffset:4,as:UInt32.self)}
             try check(mask&127==127 && wrong==0,"real input, pause and stop callbacks on owner thread")
-            if engine != "cocos" { try check(mask&128 != 0,"native destruction acknowledged") }
+            if profile != "cocos" { try check(mask&128 != 0,"native destruction acknowledged") }
+            if engine=="geode" {
+                let data=checkpoint.deletingLastPathComponent().appendingPathComponent("data")
+                try check(try String(contentsOf:data.appendingPathComponent("files/game_version.txt"),encoding:.utf8)=="39","Geode receives game version")
+                try check(try String(contentsOf:data.appendingPathComponent("geode/game/geode/resources/geode.loader/loader.txt"),encoding:.utf8)=="new!","Geode resources extracted in isolated save")
+            }
         } catch {
             if session.active {session.stop();try? await session.wait(until:{!session.active},timeout:35)}
             print("FAIL \(error.localizedDescription); logs: \(paths.logs.path)");exit(1)

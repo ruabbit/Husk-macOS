@@ -367,7 +367,7 @@ public actor LibraryRepository {
     }
 
     public func update(_ id: String, settings: GameSettings? = nil, played: Bool = false,
-                       muted: Bool? = nil, pauseWhenInactive: Bool? = nil, openFullScreen: Bool? = nil) throws {
+                       muted: Bool? = nil, pauseWhenInactive: Bool? = nil, openFullScreen: Bool? = nil, geode: Bool? = nil) throws {
         try locked {
             var index = try readIndex()
             guard let position = index.games.firstIndex(where: { $0.id == id }) else { throw LibraryFailure("游戏已移除。") }
@@ -375,6 +375,10 @@ public actor LibraryRepository {
             if let muted { index.games[position].settings.muted = muted }
             if let pauseWhenInactive { index.games[position].settings.pauseWhenInactive = pauseWhenInactive }
             if let openFullScreen { index.games[position].settings.openFullScreen = openFullScreen }
+            if let geode {
+                guard Geode.supports(index.games[position]) else { throw LibraryFailure("此游戏不能使用 Geode。") }
+                index.games[position].settings.geode = geode
+            }
             if played { index.games[position].lastPlayed = Date() }
             try AtomicFile.write(encoder.encode(index), to: paths.index)
         }

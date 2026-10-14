@@ -10,6 +10,7 @@
  * data folder and its versionCode (0: read it from the game's manifest). */
 void tl_geode_configure(const char *geode_so, const char *launcher_apk, const char *data_dir, int version_code);
 bool tl_geode_configured(void);
+bool tl_geode_loaded(void);
 /* After the game's libraries are loaded and set up, before its first frame. Does nothing when Geode is not configured. */
 bool tl_geode_load(jobj *activity);
 

@@ -5,13 +5,15 @@ public struct GameSettings: Codable, Equatable, Sendable {
     public var muted = false
     public var pauseWhenInactive = false
     public var openFullScreen = false
+    public var geode = false
     public init() {}
-    private enum CodingKeys: String, CodingKey { case muted, pauseWhenInactive, openFullScreen }
+    private enum CodingKeys: String, CodingKey { case muted, pauseWhenInactive, openFullScreen, geode }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         pauseWhenInactive = try c.decodeIfPresent(Bool.self, forKey: .pauseWhenInactive) ?? false
         openFullScreen = try c.decodeIfPresent(Bool.self, forKey: .openFullScreen) ?? false
+        geode = try c.decodeIfPresent(Bool.self, forKey: .geode) ?? false
     }
 }
 

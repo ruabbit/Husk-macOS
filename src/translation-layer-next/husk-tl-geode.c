@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "husk-tl-bionic.h"
 #include "husk-tl-codewrite.h"
@@ -37,7 +38,7 @@ int tl_hle_version_code(void);
 static struct {
     char so[1024], launcher_apk[1024], data[1024];   /* so: Geode.android64.so, or the release zip it comes in */
     int version_code;
-    bool configured;
+    bool configured, loaded;
 } G;
 
 static jvalue vl(void *p) { jvalue v; v.j = 0; v.l = p; return v; }
@@ -54,9 +55,11 @@ void tl_geode_configure(const char *geode_so, const char *launcher_apk, const ch
     snprintf(G.data, sizeof(G.data), "%s", data_dir ? data_dir : "");
     G.version_code = version_code;
     G.configured = G.so[0] != 0;
+    G.loaded = false;
 }
 
 bool tl_geode_configured(void) { return G.configured; }
+bool tl_geode_loaded(void) { return G.loaded; }
 
 /* Where Geode keeps the game's mods, resources and saves: the launcher's "base directory" (its media folder on a phone). */
 static void base_dir(char *out, size_t n) { snprintf(out, n, "%s/geode", G.data); }
@@ -124,20 +127,22 @@ static const tl_jhle k_geode[] = {
 
 /* ------------------------------------------------------------------ loading */
 
-/* Write one zip entry to a file, unless a file of that size is already there. */
+/* Replace loader-owned files atomically. Equal size does not imply equal bytes:
+ * a new release can contain a changed library or resource of the same size. */
 static bool extract(tl_zip *z, const tl_zip_entry *e, const char *dest)
 {
-    struct stat st;
-    if (stat(dest, &st) == 0 && (uint64_t)st.st_size == e->usize) return true;
     const uint8_t *data; size_t len; bool owned; char err[160];
     if (!tl_zip_data(z, e, (size_t)1 << 30, &data, &len, &owned, err, sizeof(err))) { tl_log_line("geode: %s", err); return false; }
     char tmp[1200];
-    snprintf(tmp, sizeof(tmp), "%s.part", dest);
-    FILE *f = fopen(tmp, "wb");
+    if (snprintf(tmp, sizeof(tmp), "%s.part.XXXXXX", dest) >= (int)sizeof(tmp)) { if (owned) free((void *)data); return false; }
+    int fd = mkstemp(tmp);
+    FILE *f = fd >= 0 ? fdopen(fd, "wb") : NULL;
     bool ok = f && fwrite(data, 1, len, f) == len;
-    if (f) fclose(f);
+    if (f) { if (fclose(f)) ok = false; }
+    else if (fd >= 0) close(fd);
     if (owned) free((void *)data);
-    return ok && rename(tmp, dest) == 0;
+    if (ok && rename(tmp, dest) == 0) return true;
+    unlink(tmp); return false;
 }
 
 /*
@@ -155,7 +160,7 @@ static bool unpack_release(const char *zip_path, char *so_out, size_t n)
     base_dir(res, sizeof(res));
     strncat(res, "/game/geode/resources/geode.loader", sizeof(res) - strlen(res) - 1);
     mkdirs(res);
-    bool have_so = false;
+    bool have_so = false, resources_ok = true;
     for (size_t i = 0; i < z.count; i++) {
         const tl_zip_entry *e = &z.entries[i];
         size_t len = strlen(e->name);
@@ -165,7 +170,7 @@ static bool unpack_release(const char *zip_path, char *so_out, size_t n)
             have_so = extract(&z, e, so_out);
         } else if (!strncmp(e->name, "resources/", 10) && !strchr(e->name + 10, '/')) {
             snprintf(dest, sizeof(dest), "%s/%s", res, e->name + 10);
-            extract(&z, e, dest);
+            if (!extract(&z, e, dest)) resources_ok = false;
         }
     }
     tl_zip_close(&z);
@@ -179,23 +184,25 @@ static bool unpack_release(const char *zip_path, char *so_out, size_t n)
     char *slash = strrchr(rzip, '/');
     snprintf(slash ? slash + 1 : rzip, sizeof(rzip) - (size_t)(slash ? slash + 1 - rzip : 0), "geode-resources.zip");
     struct stat rs;
-    if (stat(rzip, &rs) == 0 && tl_zip_open(&z, rzip, err, sizeof(err))) {
+    if (stat(rzip, &rs) == 0 && rs.st_size > 0) {
+        if (!tl_zip_open(&z, rzip, err, sizeof(err))) return false;
         int n = 0;
         for (size_t i = 0; i < z.count; i++) {
             const tl_zip_entry *e = &z.entries[i];
             size_t len = strlen(e->name);
             if (!len || e->name[len - 1] == '/' || strchr(e->name, '/') || strstr(e->name, "..")) continue;
             snprintf(dest, sizeof(dest), "%s/%s", res, e->name);
-            if (extract(&z, e, dest)) n++;
+            if (extract(&z, e, dest)) n++; else resources_ok = false;
         }
         tl_zip_close(&z);
         tl_log_line("geode: %d loader resource file(s) from %s", n, rzip);
     }
-    return have_so;
+    return have_so && resources_ok;
 }
 
 bool tl_geode_load(jobj *activity)
 {
+    G.loaded = false;
     if (!G.configured) return true;
     char base[1024], internal[1024], path[1100];
     base_dir(base, sizeof(base));
@@ -214,7 +221,9 @@ bool tl_geode_load(jobj *activity)
     /* The game's versionCode, which is all Geode goes on to know which game it is in. */
     snprintf(path, sizeof(path), "%s/game_version.txt", internal);
     FILE *f = fopen(path, "w");
-    if (f) { fprintf(f, "%d", G.version_code); fclose(f); }
+    if (!f) return false;
+    bool wrote_version = fprintf(f, "%d", G.version_code) > 0;
+    if (fclose(f) || !wrote_version) return false;
 
     tl_jni_declare(GU, "java/lang/Object");
     tl_jni_register_hle(k_geode);
@@ -240,7 +249,8 @@ bool tl_geode_load(jobj *activity)
     onload_fn onload = (onload_fn)tl_ld_sym(L, "JNI_OnLoad");
     if (!onload) { tl_log_line("geode: no JNI_OnLoad"); return false; }
     int v = onload(tl_jni_vm(), NULL);
-    if (tl_jni_pending()) tl_log_line("geode: JNI_OnLoad left a Java exception pending");
+    if (tl_jni_pending()) { tl_log_line("geode: JNI_OnLoad left a Java exception pending"); return false; }
     tl_log_line("geode: JNI_OnLoad -> %#x; %ld store(s) into code so far", v, tl_codewrite_count());
-    return true;
+    G.loaded = v == 0x10002 || v == 0x10004 || v == 0x10006 || v == 0x10008;
+    return G.loaded;
 }
