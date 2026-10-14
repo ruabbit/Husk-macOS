@@ -1,5 +1,17 @@
 # 审计进度
 
+## 2026-10-14 合并 Hole.io 渲染 PR
+
+按用户授权，将 fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 合入 main，使用普通 merge 并核对预期 head `c87d891b7b36163ef362d0ee8f49d9ab52c09192`。GitHub 读回确认状态为 MERGED，合并提交为 [35f27e9](https://github.com/ruabbit/Husk-macOS/commit/35f27e942bac1de8710a3756bacbdcf42e0bcdf2)。上游 [PR #118](https://github.com/Leviidev/Husk/pull/118) 仍是开放草稿；iOS 真机、帧节奏与性能验证待完成，不要求等待上游接受才合并 fork。该 head 分支继续保留，供上游审查。
+
+本地 main 快进至合并提交，再合入 codex/macos-p0。唯一文本冲突是 Java runtime 的 gamepad/Vulkan include；逐段核对后保留已有受控启动入口、手柄 sink 与正常关闭实现。macOS 已在公开的 tl_javaapp_start 入口配置 Vulkan，自动合并却在内部 start_app 再加一次，故消除重复并保持现有生产文件内容。共享 Vulkan bridge 与 build 6 相同；新增的生产接线只有 iOS 的 TLUnityView 和 husk-tl-unity-app.c，两者均不在 macOS 编译源中。
+
+MacVulkanCompositorTests 改用 PR 的共用回归，删除旧副本。旧测试尝试从同一 queue family 取得两条队列，在 MoltenVK 上实际退回单队列；共用测试明确使用 family 0 和 1，并单独运行 --same-queue，额外覆盖 sRGB 和非 Java 直接显示。PR head 的无窗口真实 MoltenVK 两种模式均通过；整合后的默认 **CTest 72/72（45.41 秒）**，包校验 **18 个 arm64 Mach-O / 406 个运行资源** 通过，iOS Swift 语法解析通过。既有 Geode 代码 a2a6fee 的 [远端 CI](https://github.com/ruabbit/Husk-macOS/actions/runs/38496000094) 已读回 completed/success（hardware job skipped），不代替本次本地完整回归或 iOS 真机验收。
+
+只在既有 build/macos 编译测试目标，未重新打包生产候选。当前 build 6 的主程序及 NativeRunner SHA-256 与来源锁一致，仍分别为 `718f63f07035c1f189c3a97738f3bc0de3b29390ab8b46a8945dae8bd7c0cd6f` 和 `1febf2c7be08ece47c912cfaf72ebee60f2bf89153c305e95b38e2d0b2a8beb5`。仅主程序 PID 55811 处于运行状态；本次 CUA 读取返回 native pipe closed，未据此声称新的前台检查通过。由于 macOS 生产代码没有变化，无需退出或重启现有候选。没有启动用户游戏、修改 APK/存档/Android 磁盘。Hole.io 的可见鼠标拖动、完整销毁/保存重开与性能待办继续保留。
+
+证据复用 `build/logs/current-pr-vulkan-compositor.log`、`current-pr-integration-build.log`、`current-pr-integration-tests.log`、`current-pr-integration-bundle.log` 及 `build/macos/bundle-verification.json`。
+
 ## 2026-10-14 上游核对与 Geode 候选（2.0.0 / build 6）
 
 本轮从干净的 `1e737fd` 开始，两次 fetch 后，main、origin/main、upstream/main 仍为 `8e79a47`，origin/codex/macos-p0 没有外来新增提交，祖先关系及来源锁一致。没有新合并或冲突。按每日任务要求，继续完成已有平台缺口。

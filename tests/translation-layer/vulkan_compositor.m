@@ -17,6 +17,7 @@
 typedef struct { int refs; bool texture; } Window;
 static uint8_t observed[WIDTH * HEIGHT * 4];
 static unsigned java_frames, texture_frames, clears;
+static bool java_compositing = true;
 static void acquire(void *p) { ((Window *)p)->refs++; }
 static void release(void *p) { ((Window *)p)->refs--; }
 void *tl_bionic_find(const char *s) {
@@ -32,7 +33,7 @@ void *tl_nwindow_native(void *p) { (void)p; return NULL; }
 int tl_nwindow_width(void *p) { (void)p; return WIDTH; }
 int tl_nwindow_height(void *p) { (void)p; return HEIGHT; }
 void *tl_nwindow_texture(void *p) { return ((Window *)p)->texture ? p : NULL; }
-bool tl_javaapp_compositing(void) { return true; }
+bool tl_javaapp_compositing(void) { return java_compositing; }
 void tl_javaapp_app_pixels(const void *px, int w, int h) {
     if (!px) { clears++; return; }
     CHECK(w == WIDTH && h == HEIGHT); memcpy(observed,px,sizeof(observed)); java_frames++;
@@ -63,7 +64,7 @@ static VkPhysicalDevice physical;
 static VkQueue queue, render_queue;
 static VkCommandPool pool;
 
-static void present(VkSwapchainKHR swapchain, VkFormat format, bool texture, unsigned seed) {
+static void present(VkSwapchainKHR swapchain, VkFormat format, bool texture, bool composited, unsigned seed) {
     VkFenceCreateInfo fence_info = {.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VkFence fence; VK(vkCreateFence(device,&fence_info,NULL,&fence));
     uint32_t index; VK(vkAcquireNextImageKHR(device,swapchain,1000000000,VK_NULL_HANDLE,fence,&index));
@@ -113,14 +114,15 @@ static void present(VkSwapchainKHR swapchain, VkFormat format, bool texture, uns
         .waitSemaphoreCount=1,.pWaitSemaphores=&rendered};
     VK(vkQueuePresentKHR(queue,&present)); VK(vkDeviceWaitIdle(device));
     CHECK(present.waitSemaphoreCount==1 && present.pWaitSemaphores==&rendered);
-    CHECK(java_frames == before_java + !texture && texture_frames == before_texture + texture);
-    CHECK(!memcmp(expected,observed,sizeof(expected)));
+    CHECK(java_frames == before_java + (composited && !texture));
+    CHECK(texture_frames == before_texture + (composited && texture));
+    if (composited) CHECK(!memcmp(expected,observed,sizeof(expected)));
     vkFreeCommandBuffers(device,pool,1,&command); vkDestroyBuffer(device,buffer,NULL); vkFreeMemory(device,storage,NULL);
     vkDestroyFence(device,fence,NULL); vkDestroySemaphore(device,rendered,NULL);
 }
 
 int main(int argc, char **argv) { @autoreleasepool {
-    if (argc != 2) return 64;
+    if (argc != 2 && !(argc == 3 && !strcmp(argv[2], "--same-queue"))) return 64;
     tl_vk_configure(argv[1],NULL,0);
 #define LOAD(name) name = (PFN_##name)tl_vk_resolve(#name); CHECK(name);
     FUNCTIONS(LOAD)
@@ -132,39 +134,54 @@ int main(int argc, char **argv) { @autoreleasepool {
     uint32_t count = 1; VK(vkEnumeratePhysicalDevices(instance,&count,&physical)); CHECK(count);
     VkQueueFamilyProperties families[32]; count=32; vkGetPhysicalDeviceQueueFamilyProperties(physical,&count,families);
     uint32_t family=0; while (family<count && !(families[family].queueFlags & VK_QUEUE_GRAPHICS_BIT)) family++; CHECK(family<count);
-    float priorities[]={1,1}; unsigned queue_count=families[family].queueCount>1?2:1;
-    VkDeviceQueueCreateInfo queue_info = {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueFamilyIndex=family,.queueCount=queue_count,.pQueuePriorities=priorities};
+    /* MoltenVK exposes one queue per family. Use another graphics family to
+     * exercise the present semaphore wait before Metal reads the rendered image. */
+    uint32_t render_family=family;
+    if (argc==2) for (unsigned i=0;i<count;i++) if (i!=family && (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)) { render_family=i; break; }
+    float priority=1;
+    uint32_t queue_count=render_family==family?1:2, family_indices[]={family,render_family};
+    printf("Testing with %u Vulkan queue(s), present family %u, render family %u\n", queue_count, family, render_family);
+    VkDeviceQueueCreateInfo queue_info[] = {
+        {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueFamilyIndex=family,.queueCount=1,.pQueuePriorities=&priority},
+        {.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueFamilyIndex=render_family,.queueCount=1,.pQueuePriorities=&priority},
+    };
     const char *device_extensions[] = {"VK_KHR_portability_subset","VK_KHR_swapchain"};
-    VkDeviceCreateInfo device_info = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&queue_info,.enabledExtensionCount=2,.ppEnabledExtensionNames=device_extensions};
+    VkDeviceCreateInfo device_info = {.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=queue_count,.pQueueCreateInfos=queue_info,.enabledExtensionCount=2,.ppEnabledExtensionNames=device_extensions};
     VK(vkCreateDevice(physical,&device_info,NULL,&device)); vkGetDeviceQueue(device,family,0,&queue);
-    vkGetDeviceQueue(device,family,queue_count-1,&render_queue);
-    VkCommandPoolCreateInfo pool_info = {.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,.queueFamilyIndex=family}; VK(vkCreateCommandPool(device,&pool_info,NULL,&pool));
-    for (unsigned pass=0;pass<4;pass++) {
+    vkGetDeviceQueue(device,render_family,0,&render_queue);
+    VkCommandPoolCreateInfo pool_info = {.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,.queueFamilyIndex=render_family}; VK(vkCreateCommandPool(device,&pool_info,NULL,&pool));
+    for (unsigned pass=0;pass<5;pass++) {
+        bool composited = pass < 4;
+        java_compositing = composited;
         Window window = {.refs=1,.texture=pass%2};
         @autoreleasepool {
         AndroidSurfaceInfo android = {.sType=VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,.window=&window};
-        VkSurfaceKHR surface; VK(create_surface(instance,&android,NULL,&surface)); CHECK(window.refs==2);
+        VkSurfaceKHR surface; VK(create_surface(instance,&android,NULL,&surface));
         VkSurfaceCapabilitiesKHR cap; VK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical,surface,&cap));
         count=0; VK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&count,NULL)); CHECK(count && count<=256);
         VkSurfaceFormatKHR formats[256]; VK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical,surface,&count,formats));
-        unsigned selected=0; while (selected<count && formats[selected].format!=VK_FORMAT_B8G8R8A8_UNORM) selected++; CHECK(selected<count);
+        VkFormat format = pass==2 || pass==3 ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM;
+        unsigned selected=0; while (selected<count && formats[selected].format!=format) selected++; CHECK(selected<count);
         CHECK(cap.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
         VkSwapchainCreateInfoKHR info = {.sType=VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,.surface=surface,.minImageCount=cap.minImageCount,
             .imageFormat=formats[selected].format,.imageColorSpace=formats[selected].colorSpace,.imageExtent={WIDTH,HEIGHT},.imageArrayLayers=1,
+            .imageSharingMode=queue_count==2?VK_SHARING_MODE_CONCURRENT:VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount=queue_count,.pQueueFamilyIndices=family_indices,
             .imageUsage=VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,.preTransform=cap.currentTransform,
             .compositeAlpha=VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,.presentMode=VK_PRESENT_MODE_FIFO_KHR,.clipped=VK_TRUE};
         VkSwapchainKHR first, replacement; VK(vkCreateSwapchainKHR(device,&info,NULL,&first));
-        present(first,info.imageFormat,window.texture,pass);
+        present(first,info.imageFormat,window.texture,composited,pass);
+        CHECK(window.refs==1+composited);
         info.oldSwapchain=first; VK(vkCreateSwapchainKHR(device,&info,NULL,&replacement));
         unsigned before_clear=clears; vkDestroySwapchainKHR(device,first,NULL); CHECK(clears==before_clear);
-        present(replacement,info.imageFormat,window.texture,pass+40);
-        before_clear=clears; vkDestroySwapchainKHR(device,replacement,NULL); CHECK(clears==before_clear+!window.texture);
+        present(replacement,info.imageFormat,window.texture,composited,pass+40);
+        before_clear=clears; vkDestroySwapchainKHR(device,replacement,NULL); CHECK(clears==before_clear+(composited && !window.texture));
         vkDestroySurfaceKHR(instance,surface,NULL);
         }
         CHECK(window.refs==1);
     }
     CHECK(java_frames==4 && texture_frames==4 && clears==2);
     vkDestroyCommandPool(device,pool,NULL); vkDestroyDevice(device,NULL); vkDestroyInstance(instance,NULL);
-    puts("PASS real Vulkan Java/TextureView pixels, channels, orientation, cross-queue waits, replacement and window lifetime");
+    puts("PASS real Vulkan Java/TextureView pixels, channels, orientation, present waits, replacement, window lifetime and direct presentation");
     return 0;
 } }

@@ -1,8 +1,8 @@
 # 上游功能与 macOS 接入现况
 
-核对日期：2026-10-14（Asia/Shanghai）。上游发布标签 **2.0 = e02ac68**；当前 main **8e79a47** 包含该发布和随后社区兼容性改进。今日两次 fetch origin、upstream，main 和远端 macOS 分支均无新增提交；无需新合并。之前 fork main 从 f0bd526 快进至 8e79a47，再通过 5866498 真实合入 macOS；祖先关系完整，没有 ours 策略。
+核对日期：2026-10-14（Asia/Shanghai）。上游发布标签 **2.0 = e02ac68**；upstream/main 仍为 **8e79a47**，包含该发布和随后社区兼容性改进。fork 的 [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已通过普通 merge 合入 main，提交 **35f27e9**；本轮再合回 macOS。保留已有手柄与生命周期入口中的单次 Vulkan 初始化，避免重复调用。[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 仍为开放草稿，未被当作上游已接受；其来源分支继续保留。
 
-本轮补上 Geode 的 macOS 下载、设置和启动注入，并在唯一 `build/macos/Product/HuskMac.app` 打包。当前候选版本为 **2.0.0 / build 6**，保留 VM=ON；默认 CTest **71/71**、包内 **18 个 Mach-O / 406 个运行资源** 校验通过。代码 a2a6fee 已推送；当前候选通过 CUA 打开一次，主窗口和进程已核对。具体证据与真实游戏边界见 [progress.md](progress.md)。
+Geode 的 macOS 下载、设置和启动注入已在唯一 `build/macos/Product/HuskMac.app` 打包。当前候选版本为 **2.0.0 / build 6**，保留 VM=ON，生产代码仍来自 a2a6fee。合并采用 PR 共用的 Vulkan 回归，替换旧的重复实现，并加入独立的单队列用例；真实跨队列模式使用 family 0 和 1。合并后默认 CTest **72/72**、包内 **18 个 Mach-O / 406 个运行资源** 校验通过。新增的生产代码只涉及未编入 macOS 的 iOS launcher，macOS 运行源码及候选哈希没有改变，故只重新编译测试目标，没有替换或重启运行中的候选。具体证据与真实游戏边界见 [progress.md](progress.md)。
 
 ## 2.0 发布功能
 

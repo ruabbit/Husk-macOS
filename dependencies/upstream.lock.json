@@ -16,7 +16,7 @@
   "candidate": {
     "version": "2.0.0",
     "build": "6",
-    "defaultTests": 71,
+    "defaultTests": 72,
     "bundleMachO": 18,
     "javaResources": 406,
     "sourceRevision": "a2a6feebfd710f167b606577127eb86fe172b5cb",
@@ -27,13 +27,24 @@
     "ci": {
       "run": 38496000094,
       "statusAtDelivery": "in_progress",
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38496000094"
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38496000094",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success"
     }
   },
   "lastCheck": {
     "upstreamNewCommits": 0,
     "originNewCommits": 0,
-    "mainRevision": "8e79a47b3f771eddd005bf338749e01a96443689",
-    "macOSAdaptation": "Geode release selection, per-game settings, checked atomic installation, Cocos injection and packaged lifecycle regression delivered in build 6. See progress.md for real-game and GUI boundaries."
+    "mainRevision": "35f27e942bac1de8710a3756bacbdcf42e0bcdf2",
+    "macOSAdaptation": "Merged fork PR #1 back into macOS, preserving the existing guarded Vulkan startup, gamepad and lifecycle implementation. The shared Vulkan regression now covers cross-family and same-queue modes; default CTest 72/72 and bundle verification pass. macOS production sources and build 6 executable hashes are unchanged; only test targets were rebuilt."
+  },
+  "forkContribution": {
+    "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
+    "status": "merged",
+    "headRevision": "c87d891b7b36163ef362d0ee8f49d9ab52c09192",
+    "mergeRevision": "35f27e942bac1de8710a3756bacbdcf42e0bcdf2",
+    "upstreamPullRequest": "https://github.com/Leviidev/Husk/pull/118",
+    "upstreamStatus": "open-draft",
+    "validation": "Real MoltenVK same-queue and cross-family compositor regressions pass. iOS device validation remains outstanding."
   }
 }
