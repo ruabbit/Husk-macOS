@@ -26,10 +26,12 @@
     "gui": "CUA normally quit idle build 6 and launched the sole build 7 Product once; main window AX showed 10 existing apps and the exact executable path was verified. No user game or VM launched.",
     "ci": {
       "run": 38664636797,
-      "statusAtDelivery": "in_progress",
+      "statusAtDelivery": "completed",
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38664636797",
-      "statusAtLastCheck": "in_progress",
-      "conclusionAtLastCheck": null
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped"
     }
   },
   "lastCheck": {
@@ -63,6 +65,7 @@
       "Pin compatible FEX host JIT hooks and core/submodule sources, then build and verify the real module under existing entitlements.",
       "Verify module worker/storage completion; host pump join and ABI v1 STOPPED alone do not prove it.",
       "Add macOS library/import and independent ConsoleRunner routing, window/input/lifecycle, then validate a real game with isolated save reopen."
-    ]
+    ],
+    "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
   }
 }
