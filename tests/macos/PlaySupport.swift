@@ -19,15 +19,39 @@ private final class MemoryCredentials: PlaySessionStorage {
 private actor FakeService: MacPlayService {
     var refreshes = 0
     var expire = true
+    private var signInPending: CheckedContinuation<Void, Never>?
+    private var signInStarted: CheckedContinuation<Void, Never>?
+    private var searchPending: CheckedContinuation<Void, Never>?
+    private var searchStarted: CheckedContinuation<Void, Never>?
     func signIn(email: String?, token: String?) async throws -> PlaySession {
-        try? await Task.sleep(for: .milliseconds(80))
+        // A deliberately uncancellable service response exercises the store's
+        // generation check without assuming a CI scheduler's response time.
+        await withCheckedContinuation { continuation in
+            signInPending = continuation
+            signInStarted?.resume(); signInStarted = nil
+        }
         return PlaySession(email: "synthetic@example.invalid", bearer: "test", isAnonymous: true)
     }
+    func waitForSignIn() async {
+        if signInPending != nil { return }
+        await withCheckedContinuation { signInStarted = $0 }
+    }
+    func finishSignIn() { signInPending?.resume(); signInPending = nil }
+    func waitForSlowSearch() async {
+        if searchPending != nil { return }
+        await withCheckedContinuation { searchStarted = $0 }
+    }
+    func finishSlowSearch() { searchPending?.resume(); searchPending = nil }
     func refresh(_ session: PlaySession) async throws -> PlaySession { refreshes += 1; return session }
     func browse(_ session: PlaySession) async throws -> [PlayAPI.PlayApp] { [Self.app("browse")] }
     func search(_ query: String, session: PlaySession) async throws -> [PlayAPI.PlayApp] {
         if query == "expired", expire { expire = false; throw PlayError("expired", httpStatus: 401) }
-        if query == "slow" { try? await Task.sleep(for: .milliseconds(90)) }
+        if query == "slow" {
+            await withCheckedContinuation { continuation in
+                searchPending = continuation
+                searchStarted?.resume(); searchStarted = nil
+            }
+        }
         if query == "error" { throw PlayError("Service failure", httpStatus: 503) }
         return [Self.app(query)]
     }
@@ -178,13 +202,20 @@ private final class FixtureHTTP: URLProtocol, @unchecked Sendable {
 
             let service = FakeService(), credentials = MemoryCredentials()
             let store = MacPlayStore(service: service, credentials: credentials)
-            store.connect(); store.signOut()
-            try await Task.sleep(for: .milliseconds(120))
+            let cancelledLogin = store.connect()
+            await service.waitForSignIn()
+            store.signOut()
+            await service.finishSignIn(); await cancelledLogin.value
             try check(store.session == nil && credentials.saved == nil, "late sign-in cannot restore a signed-out account")
-            store.connect(); try await Task.sleep(for: .milliseconds(120))
+            let login = store.connect()
+            await service.waitForSignIn()
+            try check(store.busy && store.session == nil && credentials.saved == nil, "pending login has no persisted session")
+            await service.finishSignIn(); await login.value
             try check(store.session != nil && credentials.saved != nil, "login persists through credential storage")
             let old = Task { await store.load(query: "slow") }
-            try await Task.sleep(for: .milliseconds(10)); await store.load(query: "new"); await old.value
+            await service.waitForSlowSearch()
+            await store.load(query: "new")
+            await service.finishSlowSearch(); await old.value
             try check(store.apps.first?.title == "new" && !store.searching, "late search cannot overwrite newer results")
             await store.load(query: "expired")
             let count = await service.refreshes

@@ -100,6 +100,31 @@ target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv sqlite3 "-fra
     "-framework CoreMedia" "-framework CoreVideo" "-framework Accelerate")
 add_library(NativeRuntime ALIAS GameActivityRuntime)
 
+# The console ABI is staged independently until the real core's teardown and
+# packaging have passed. Test modules are never installed into Product.
+add_library(ConsoleHostRuntime STATIC ${NEXT}/husk-console-host.c ${NEXT}/husk-jit-arena.c)
+target_include_directories(ConsoleHostRuntime PUBLIC ${NEXT})
+target_link_libraries(ConsoleHostRuntime PUBLIC NativeRuntime)
+add_executable(MacConsoleProbe tools/ps4-test.m)
+target_compile_options(MacConsoleProbe PRIVATE -fobjc-arc)
+target_link_libraries(MacConsoleProbe PRIVATE ConsoleHostRuntime)
+add_executable(JITArenaTests tools/jit-arena-test.c ${NEXT}/husk-jit-arena.c)
+add_library(ConsoleModuleFixture SHARED tests/macos/ConsoleModule.c)
+target_include_directories(ConsoleModuleFixture PRIVATE ${NEXT})
+add_executable(ConsoleHostTests tests/macos/ConsoleHost.c)
+target_link_libraries(ConsoleHostTests PRIVATE ConsoleHostRuntime)
+add_dependencies(ConsoleHostTests ConsoleModuleFixture)
+foreach(target MacConsoleProbe JITArenaTests ConsoleHostTests)
+    add_custom_command(TARGET ${target} POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+        --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:${target}>" VERBATIM)
+endforeach()
+add_test(NAME console-jit-arena COMMAND JITArenaTests)
+set_tests_properties(console-jit-arena PROPERTIES TIMEOUT 15)
+foreach(case normal wrong-abi missing-callback stop-pending)
+    add_test(NAME console-host-${case} COMMAND ConsoleHostTests "$<TARGET_FILE:ConsoleModuleFixture>" ${case})
+    set_tests_properties(console-host-${case} PROPERTIES TIMEOUT 15)
+endforeach()
+
 add_executable(MinecraftProbe tests/macos/MinecraftProbe.c)
 target_link_libraries(MinecraftProbe PRIVATE GameActivityRuntime)
 add_executable(NativeActivityProbe tests/macos/NativeActivityProbe.m ${MAC}/NativeRunner/MacDiagnostics.c)

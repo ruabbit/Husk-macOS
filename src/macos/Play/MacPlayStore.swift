@@ -88,10 +88,10 @@ struct GooglePlayService: MacPlayService {
             }
         } catch { if generation == id, !Task.isCancelled { self.error = "恢复 Play 登录失败：\(error.localizedDescription)" } }
     }
-    func connect(email: String? = nil, token: String? = nil) {
+    @discardableResult func connect(email: String? = nil, token: String? = nil) -> Task<Void, Never> {
         loginTask?.cancel(); generation = UUID(); let id = generation
         busy = true; error = nil
-        loginTask = Task {
+        let task = Task {
             defer { if generation == id { busy = false; loginTask = nil } }
             do {
                 let fresh = try await service.signIn(email: email, token: token)
@@ -99,6 +99,8 @@ struct GooglePlayService: MacPlayService {
                 try credentials.save(fresh); session = fresh
             } catch { if generation == id, !Task.isCancelled { self.error = error.localizedDescription } }
         }
+        loginTask = task
+        return task
     }
     func cancelLogin() { browserLogin.cancel(); loginTask?.cancel(); loginTask = nil; busy = false; generation = UUID() }
     func signOut() {
