@@ -1,42 +1,48 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "f0bd526cdf15356cac1d272cfebe6a5ea11ef6fa",
-  "integratedRevision": "8e79a47b3f771eddd005bf338749e01a96443689",
-  "checkedOn": "2026-10-14",
-  "commitCount": 3,
-  "integration": "Merged through fork main without conflicts; upstream ancestry remains complete through 8e79a47. Husk 2.0 macOS UI, Java controllers, community client, native profiles, WebRunner and graphics dependency adaptations are packaged. The 2026-10-14 follow-up delivers Geode in the sole build 6 candidate: default CTest 71/71 and bundle checks (18 Mach-O, 406 runtime resources) pass. Main window and exact Product process verified after one CUA launch. Real-game and platform gaps remain in upstream-parity.md.",
+  "previousRevision": "8e79a47b3f771eddd005bf338749e01a96443689",
+  "integratedRevision": "0695248f491cda877f7969d1f0cc89aeede1482e",
+  "checkedOn": "2026-10-15",
+  "commitCount": 10,
+  "integration": "Merged upstream through fork main 73a6943 and macOS ca91909 without conflicts; both pushed and read back. macOS build 7 is packaged and restarted once with 77 default CTests and bundle checks passing. PS4 host/JIT/controller contracts are compiled and tested separately; real core packaging, product routing and storage completion remain open in upstream-parity.md. Existing Android/Geode functionality is preserved.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "partial-platform-integration",
   "release": {
     "tag": "2.0",
     "revision": "e02ac68f1065e86dd40a371020c1243bbc685b7f"
   },
   "candidate": {
     "version": "2.0.0",
-    "build": "6",
-    "defaultTests": 72,
+    "build": "7",
+    "defaultTests": 77,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": "a2a6feebfd710f167b606577127eb86fe172b5cb",
-    "appSHA256": "718f63f07035c1f189c3a97738f3bc0de3b29390ab8b46a8945dae8bd7c0cd6f",
-    "nativeRunnerSHA256": "1febf2c7be08ece47c912cfaf72ebee60f2bf89153c305e95b38e2d0b2a8beb5",
+    "sourceRevision": "ca91909237b602cd14502fef1135ed7276930721",
+    "appSHA256": "83b36ade7e135ba2912fa0cc90f7035d7e72da977daf40f18e9a381d1d48aac9",
+    "nativeRunnerSHA256": "76530538145ed2e6114a02c22accc4e8f1c3ddc07773a70f6169b451b97faad8",
     "deliveryStatus": "verified-and-pushed",
-    "gui": "CUA launched the sole Product once; main window AX showed 10 existing apps; no user game launched. Geode-specific foreground interactions not verified.",
+    "gui": "CUA normally quit idle build 6 and launched the sole build 7 Product once; main window AX showed 10 existing apps and the exact executable path was verified. No user game or VM launched.",
     "ci": {
-      "run": 38496000094,
+      "run": 38664636797,
       "statusAtDelivery": "in_progress",
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38496000094",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success"
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38664636797",
+      "statusAtLastCheck": "in_progress",
+      "conclusionAtLastCheck": null
     }
   },
   "lastCheck": {
-    "upstreamNewCommits": 0,
+    "upstreamNewCommits": 10,
     "originNewCommits": 0,
-    "mainRevision": "35f27e942bac1de8710a3756bacbdcf42e0bcdf2",
-    "macOSAdaptation": "Merged fork PR #1 back into macOS, preserving the existing guarded Vulkan startup, gamepad and lifecycle implementation. The shared Vulkan regression now covers cross-family and same-queue modes; default CTest 72/72 and bundle verification pass. macOS production sources and build 6 executable hashes are unchanged; only test targets were rebuilt."
+    "mainRevision": "73a694368e65fbea7b11071a2546a6556589510b",
+    "macOSSourceRevision": "ca91909237b602cd14502fef1135ed7276930721",
+    "macOSAdaptation": "Console host/probe and five background ABI/JIT/input/stop regressions added; fixtures/probe are not shipped. Replaced fixed-delay Play test completion with controlled gates. Default CTest 77/77 in 52.93 seconds, bundle verification and shared iOS C syntax checks pass. PS4 product integration remains incomplete.",
+    "previousCI": {
+      "run": 38534659516,
+      "conclusion": "failure",
+      "failure": "macos-play-support: login persists through credential storage; fixed-delay test race repaired and locally verified."
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -46,5 +52,17 @@
     "upstreamPullRequest": "https://github.com/Leviidev/Husk/pull/118",
     "upstreamStatus": "open-draft",
     "validation": "Real MoltenVK same-queue and cross-family compositor regressions pass. iOS device validation remains outstanding."
+  },
+  "ps4Integration": {
+    "status": "host-contracts-only",
+    "coreRepository": "https://github.com/Leviidev/AetherPS4",
+    "coreRevision": "d953592114581cf3e5bdb20229769ec2f69b2359",
+    "fexSnapshotRevision": "220ab1e6d5aec14e43428f97c75530fc0113ce08",
+    "sourceInspection": "The public FEX AllocatorHooks.h lacks SetJITHostHooks checked by core CMake. The author-local husk-fex source in the upstream build script is not a reproducible pin. No actual PS4 module was built or packaged.",
+    "remaining": [
+      "Pin compatible FEX host JIT hooks and core/submodule sources, then build and verify the real module under existing entitlements.",
+      "Verify module worker/storage completion; host pump join and ABI v1 STOPPED alone do not prove it.",
+      "Add macOS library/import and independent ConsoleRunner routing, window/input/lifecycle, then validate a real game with isolated save reopen."
+    ]
   }
 }

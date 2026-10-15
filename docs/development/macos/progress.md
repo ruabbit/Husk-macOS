@@ -1,5 +1,23 @@
 # 审计进度
 
+## 2026-10-15 上游 PS4 宿主与 build 7
+
+从干净的 `codex/macos-p0=6818ad3` 开始，核对 origin/upstream、未完成操作及本项目进程后 fetch 两个远端。origin 没有外来新增提交；上游 `8e79a47..0695248` 共 10 个提交、25 个路径，主要是 PS4 Console ABI/host、JIT arena、手柄快照和 iOS 资料库/界面，iOS build 升至 119。发布标签仍为 2.0。本轮 Android 引擎分发、TLUnityView、Store/PlayAPI 和图形依赖无实质新功能；既有 Java/原生/Web/Geode 链路继续参与全套回归。
+
+先在 main 普通合并上游，得到 [73a6943](https://github.com/ruabbit/Husk-macOS/commit/73a694368e65fbea7b11071a2546a6556589510b)，再合回 macOS 并完成适配，得到 [ca91909](https://github.com/ruabbit/Husk-macOS/commit/ca91909237b602cd14502fef1135ed7276930721)。两次合并无文本冲突，保留已有历史与平台改动。已普通原子推送两个分支，`ls-remote` 读回上述完整 SHA 一致，没有 force push。
+
+ConsoleHostRuntime、MacConsoleProbe 和 5 组后台回归已进入 macOS CMake，CI 的无窗口核心测试集也包含 console 测试。JIT 使用独立 RW/RX 映射和现有 Hardened Runtime 权限，修复大小溢出、环境参数和部分/跨分配释放；真实 arm64 代码在执行别名上运行，VM region 检查确认没有 RWX view。宿主先校验模块 ABI/platform/回调，再创建 JIT；控制器合并支持模拟与数字扳机，暂停释放输入、立即恢复重发持有状态、断连释放，停止后拒绝新输入并允许回收宿主 pump 线程。probe 现在要求模块报告终止并成功回收宿主线程，停止超时不能再返回成功。测试模块不含模拟器/游戏/音频，帧数恒为 0；模块、probe 和测试 fixture 没有打包入 Product。
+
+PS4 仍是开放的平台接入项。公开核心 `Leviidev/AetherPS4@d953592` 有 macOS Husk 模块入口；公开 FEX `220ab1e` 的 `AllocatorHooks.h` 没有核心检测的 `SetJITHostHooks`。未将会退回独立分配 JIT 的配置当作宿主预算协议通过，也未把作者本地路径当成可复现依赖。核心模块线程 detach，主循环返回后即置 STOPPED；新 `husk_console_join()` 只回收宿主线程，不是模块 worker/存档完成回执。下一步的固定来源、FEX hooks、依赖打包、独立 ConsoleRunner/资料库/窗口/输入和真正关闭协议逐项记录在 [upstream-parity.md](upstream-parity.md)。本轮未运行真实 PS4 游戏。
+
+核对远端发现上一轮 [CI 38534659516](https://github.com/ruabbit/Husk-macOS/actions/runs/38534659516) 实际失败于 `macos-play-support` 的 “login persists through credential storage”：测试用 120 ms 等待模拟服务的 80 ms 延时，负载下并不可靠。本轮改用受控 continuation 与返回的 login Task，验证未完成登录、取消后迟到响应和旧搜索响应隔离；产品登录的 generation/cancellation 语义保留。不能据此宣称个人 Google/passkey 已成功登录。新代码 [CI 38664636797](https://github.com/ruabbit/Husk-macOS/actions/runs/38664636797) 已启动，交付时为 in_progress，尚未记作远端通过。
+
+唯一候选原位更新为 **2.0.0 / build 7**，VM=ON，依赖缓存保留。默认 **CTest 77/77（52.93 秒）**，包检查 **18 个 arm64 Mach-O / 406 个运行资源** 全部通过；共享 console/JIT/gamepad C 文件的 iOS SDK 语法检查通过，不能替代 iOS 构建或真机。日志复用 `build/logs/current-upstream-build.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-console-ios-syntax.log`；包报告为 `build/macos/bundle-verification.json`。
+
+开工时只有空闲 Husk PID 55811，没有本项目游戏或 VM。CUA 先报 native pipe closed 并请求手动退出；连接随后恢复，经 CUA 发送 ⌘Q 并确认进程消失，无需用户继续处理该问题。完成构建验证后仅通过 CUA 启动一次 Product，主窗口 AX 显示原有 10 个应用，新 PID 73158 的可执行路径与唯一候选一致。主程序 SHA-256 为 `83b36ade7e135ba2912fa0cc90f7035d7e72da977daf40f18e9a381d1d48aac9`，NativeRunner 为 `76530538145ed2e6114a02c22accc4e8f1c3ddc07773a70f6169b451b97faad8`。未启动用户游戏、播放测试音频或修改 APK/存档/Android 磁盘。真实 Geode、Hole.io 正常销毁/保存重开、Java 内嵌 WebView、旧 Unity IME、实体手柄、Play 与 VM/P6 待办均保留。
+
+fork PR #1 已合并；上游 PR #118 本次核对仍为开放草稿、无评论/review。PR #82 的 PR 与 issue 接口均返回 404，仅记录无法确认其当前远端状态，已采用的单例修复保留。
+
 ## 2026-10-14 合并 Hole.io 渲染 PR
 
 按用户授权，将 fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 合入 main，使用普通 merge 并核对预期 head `c87d891b7b36163ef362d0ee8f49d9ab52c09192`。GitHub 读回确认状态为 MERGED，合并提交为 [35f27e9](https://github.com/ruabbit/Husk-macOS/commit/35f27e942bac1de8710a3756bacbdcf42e0bcdf2)。上游 [PR #118](https://github.com/Leviidev/Husk/pull/118) 仍是开放草稿；iOS 真机、帧节奏与性能验证待完成，不要求等待上游接受才合并 fork。该 head 分支继续保留，供上游审查。
