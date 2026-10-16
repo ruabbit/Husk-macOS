@@ -1,10 +1,10 @@
 # 原生 macOS 开发版
 
-当前候选为 **Husk 2.0.0 / build 3**，已合入上游 2.0（e02ac68）及 main 的后续更新（8e79a47）。首页、资料库、Store、内置帮助、圣诞装饰和窗口控制已适配 macOS。下载进度位于 Store 面板；应用详情支持下次启动全屏和导出启动快捷方式。
+当前候选为 **Husk 2.0.0 / build 8**，已合入上游 2.0（e02ac68）及 main 的后续更新（4c03823，iOS build 120）。首页、资料库、Store、内置帮助、圣诞装饰和窗口控制已适配 macOS。下载进度位于 Store 面板；应用详情支持下次启动全屏和导出启动快捷方式。
 
 运行入口包含 Orbit、Minecraft、Unity、NativeActivity、Java / Unity 6，以及新增 Cocos + FMOD、Godot、GameMaker、SDL + DXVK、Unreal、Rockstar 和 Capacitor/Cordova。原生游戏在独立 NativeRunner 执行；Web 应用使用独立 WebRunner 复用上游桥接。手柄进入 Java AppRunner 的同线程输入队列，支持设备/轴/按钮和断连、失焦、暂停释放。旧导入按当前组件重新判定，无需重新下载，保留原有设置和存档。
 
-这些入口具备构建和后台 fixture 证据，不能替代每款真实应用的兼容验收。Java 内嵌 WebView 关闭、Geode 配置、个人 Play 登录和 VM/P6 仍有明确开放项。当前候选测试、推送与前台状态见 [开发记录](development/macos/progress.md)，逐项接入和证据见 [上游现况](development/macos/upstream-parity.md)，来源见 [同步锁](../dependencies/upstream.lock.json)。
+这些入口具备构建和后台 fixture 证据，不能替代每款真实应用的兼容验收。Java 内嵌 WebView 的存储/关闭/清除及 Geode 配置已接入，真实插件和游戏仍需逐个验证。销毁时迟到的 Java 插件调用、个人 Play 登录、PS4 产品链路和 VM/P6 仍有明确开放项。当前候选测试、推送与前台状态见 [开发记录](development/macos/progress.md)，逐项接入和证据见 [上游现况](development/macos/upstream-parity.md)，来源见 [同步锁](../dependencies/upstream.lock.json)。
 
 ## 构建与运行
 
@@ -46,6 +46,7 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 | `Saves/<id>/checkpoint.json` | 与游戏文件分开的存档 |
 | `Saves/<id>/data` | 原生/Java 引擎管理的游戏数据和设置；其 checkpoint 记录正常关闭回执 |
 | `Saves/<id>/web-store.json`、`web-assets` | 独立 Web 应用的 WebKit 数据库 UUID 和提取资源缓存；实际网页数据库由系统 WebKit 保管 |
+| `Saves/<id>/java-web-store.json` | Java 内嵌 WebView 的独立 UUID；旧存档记录原包级关联，实际数据库仍归 WebKit 管理 |
 | `Logs/<session UUID>` | Runner 状态事件及独立 stderr |
 | `Staging`、`Trash` | 导入/移除事务暂存；不包含原始用户文件 |
 
@@ -57,7 +58,7 @@ Orbit Garden 的目标是收集八颗星星并避开横穿中线的红色障碍�
 
 Unity 根据 launcher Activity 的 manifest 方向选择固定画布：横屏 1280×720、竖屏 720×1280；窗口缩放和输入换算共用同一图层变换。鼠标左键点击/拖动映射触摸，键盘按键和手柄交给引擎。`⌘P` 暂停/继续，`⌘Q` 或关闭窗口等待 nativeDone 与线程结束后退出。默认失焦继续，失焦释放输入。Unity 软键盘/IME 尚未接入。
 
-2026-10-10 在真实 Play 安装的 Subway Surf 中确认竖屏年龄界面和滑块拖动，并通过暂停、恢复、正常关闭回执与进程回收。Fruit Ninja 的 20 秒检查仍为黑屏；Hole.io 已进入新版 Unity 初始化，但首帧前有空指针崩溃，尚未兼容。默认 CTest 22/22、签名和依赖闭包检查通过；游戏检查均静音、无窗口，使用独立测试数据，尚未验收完整玩法和实体输入设备。
+2026-10-10 在真实 Play 安装的 Subway Surf 中确认竖屏年龄界面和滑块拖动，并通过暂停、恢复、正常关闭回执与进程回收。当时 Fruit Ninja 的 20 秒检查为黑屏，Hole.io 在首帧前失败；这是早期 Unity driver 的历史记录。后续 Hole.io 已转 Java / Unity 6 路径并在 build 5 验证真实拖动和黑色洞口，正常销毁/保存重开仍开放；最新逐项证据见 [上游现况](development/macos/upstream-parity.md)。游戏检查均静音、无窗口，使用独立测试数据，不代替完整玩法和实体输入设备验收。
 
 需要复查现有资料库的 Unity APK 时，显式运行下列后台入口。它只读 APK，将游戏数据写到指定测试目录；`GAME_ID` 来自资料库索引，输出目录必须位于日常资料库之外。
 
@@ -71,9 +72,9 @@ build/macos/MacUnitySession build/macos/Product/HuskMac.app \
 
 资料库和 Runner 复用上游引擎分发规则：Unity 6、无 FMOD 的 Cocos、无 DXVK 的 SDL、Python、Flutter、libGDX 和普通 Java 等进入独立 Java Runner。旧 Unity 导入会只读复扫，避免新版本继续走旧 JNI driver；列出资料库不重写索引、设置或存档。纯 Java 不要求带有 arm64 原生库；只带其他 CPU 原生库的 APK 仍不支持。
 
-已接入固定画布、鼠标触摸、键盘和 IME 提交桥接，失焦默认继续；暂停等 Activity 回调完成，退出等 AppMain/GL/混合器及 guest workers 回收、preferences 写入和 SQLite 正常关闭，再发 storage-closed。未提交事务、异常销毁、残留线程及未确认的 WebKit 持久化会报告关闭失败，保留现有数据。Java 手柄和前台 IME 尚未完整验收。WebView 容器已接，但 WebKit 持久化关闭协议与独立 Web profile 仍未完成。
+已接入固定画布、鼠标触摸、键盘和 IME 提交桥接，失焦默认继续；暂停等 Activity 回调完成，退出等 AppMain/GL/混合器及 guest workers 回收、preferences 写入和 SQLite 正常关闭，再发 storage-closed。未提交事务、异常销毁、残留线程及未确认的 WebKit 关闭会报告失败，保留现有数据。Java 手柄后台真实 DEX 回归已通过，实体手柄和前台 IME 尚需验收。内嵌 WebView 使用独立存档 UUID，等待真实文档卸载、网络/cookie 回调和框架 worker 退出，组合回执分别记录 Android 销毁与 WebKit 托管；未使用 WebKit 时显式标记 unused。WebKit 管理实际数据库，回执不是全局 fsync 承诺。独立 WebRunner 的持久化路径也已接入。
 
-默认回归使用真实编译 DEX 的独立 Activity，经正式资料库/SessionController/打包 Runner 验证首帧、实际触摸/键盘回调、失焦、暂停/恢复、最终 preferences 和回收；这不是 Unity 6、Flutter 或其他真实应用的兼容结论。本轮没有再次启动已知失败的 Egg / Hole.io。
+默认回归使用真实编译 DEX 的独立 Activity，经正式资料库/SessionController/打包 Runner 验证首帧、触摸/键盘/手柄回调、失焦、暂停/恢复、最终 preferences 和回收。新增 WebView 回归验证 localStorage、IndexedDB、最终 cookie、进程重开、同包多资料库隔离与清除存档，拒绝 Android 销毁失败、UUID 改变或销毁后的 Java 插件调用。旧存档沿用原包级 WebKit UUID；清除后启用独立 UUID，旧共享字节保留以保护其他资料库的关联。详见 [Web 存档协议](development/macos/upstream-parity.md#web-存档协议)。这些结果不是 Unity 6、Flutter 或其他真实应用的兼容结论。
 
 ## NativeActivity 运行
 

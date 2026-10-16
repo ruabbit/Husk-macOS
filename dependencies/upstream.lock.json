@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "8e79a47b3f771eddd005bf338749e01a96443689",
-  "integratedRevision": "0695248f491cda877f7969d1f0cc89aeede1482e",
-  "checkedOn": "2026-10-15",
-  "commitCount": 10,
-  "integration": "Merged upstream through fork main 73a6943 and macOS ca91909 without conflicts; both pushed and read back. macOS build 7 is packaged and restarted once with 77 default CTests and bundle checks passing. PS4 host/JIT/controller contracts are compiled and tested separately; real core packaging, product routing and storage completion remain open in upstream-parity.md. Existing Android/Geode functionality is preserved.",
+  "previousRevision": "0695248f491cda877f7969d1f0cc89aeede1482e",
+  "integratedRevision": "4c03823ba1ca529e9d8ab28d8ec4b1a3547661ff",
+  "checkedOn": "2026-10-16",
+  "commitCount": 1,
+  "integration": "Merged the one upstream iOS build-number update through fork main b377a45 and macOS b551a50 without conflicts; both normally pushed and remote SHAs confirmed. Delivered Java WebView save identity, legacy binding preservation, asynchronous document detach, WebKit ownership and deletion in build 8. Framework worker and idle preferences-writer teardown are verified. Real games, late pagehide Java plugins and PS4 product delivery remain open in upstream-parity.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
   "deliveryStatus": "partial-platform-integration",
@@ -15,35 +15,34 @@
   },
   "candidate": {
     "version": "2.0.0",
-    "build": "7",
-    "defaultTests": 77,
+    "build": "8",
+    "defaultTests": 83,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": "ca91909237b602cd14502fef1135ed7276930721",
-    "appSHA256": "83b36ade7e135ba2912fa0cc90f7035d7e72da977daf40f18e9a381d1d48aac9",
-    "nativeRunnerSHA256": "76530538145ed2e6114a02c22accc4e8f1c3ddc07773a70f6169b451b97faad8",
+    "sourceRevision": "b551a5062cfc9f3df1e352cd5fd51a1ea940f158",
+    "appSHA256": "a5947bcdaa8e8a4a227a8a8e7e740d8507a60748e26b53951740d3db85f6222e",
+    "nativeRunnerSHA256": "257bf6b7e3c19bd834ba16a4dac9963c9aea9e2a0b9859491a969c132628893e",
     "deliveryStatus": "verified-and-pushed",
-    "gui": "CUA normally quit idle build 6 and launched the sole build 7 Product once; main window AX showed 10 existing apps and the exact executable path was verified. No user game or VM launched.",
+    "gui": "CUA normally quit idle Husk before packaging and launched the sole build 8 Product once. Main window AX showed the original 10 apps; exact Product process PID 86539 was verified. No user game or VM launched.",
     "ci": {
-      "run": 38664636797,
+      "run": 38835337776,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38835337776",
       "statusAtDelivery": "completed",
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38664636797",
       "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
       "conclusionAtDelivery": "success",
+      "conclusionAtLastCheck": "success",
       "hardware": "skipped"
     }
   },
   "lastCheck": {
-    "upstreamNewCommits": 10,
+    "upstreamNewCommits": 1,
     "originNewCommits": 0,
-    "mainRevision": "73a694368e65fbea7b11071a2546a6556589510b",
-    "macOSSourceRevision": "ca91909237b602cd14502fef1135ed7276930721",
-    "macOSAdaptation": "Console host/probe and five background ABI/JIT/input/stop regressions added; fixtures/probe are not shipped. Replaced fixed-delay Play test completion with controlled gates. Default CTest 77/77 in 52.93 seconds, bundle verification and shared iOS C syntax checks pass. PS4 product integration remains incomplete.",
+    "mainRevision": "b377a459de381f3e10dd1b1e66a03cd6db0ec1fc",
+    "macOSSourceRevision": "b551a5062cfc9f3df1e352cd5fd51a1ea940f158",
+    "macOSAdaptation": "Java WebView stable save identities and legacy bindings; real document detach, pending handler/network/cookie drains, separate Android and WebKit receipts, helper-owned removal. Default CTest 83/83 in 68.96 seconds; additional original legacy-UUID assertion passed; bundle 18 Mach-O / 406 resources and shared iOS ObjC syntax pass. No real game compatibility claim.",
     "previousCI": {
-      "run": 38534659516,
-      "conclusion": "failure",
-      "failure": "macos-play-support: login persists through credential storage; fixed-delay test race repaired and locally verified."
+      "run": 38664636797,
+      "conclusion": "success"
     }
   },
   "forkContribution": {
@@ -67,5 +66,16 @@
       "Add macOS library/import and independent ConsoleRunner routing, window/input/lifecycle, then validate a real game with isolated save reopen."
     ],
     "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
+  },
+  "javaWebIntegration": {
+    "status": "packaged-fixture-verified",
+    "marker": "Saves/<id>/java-web-store.json",
+    "receipt": "Native lifecycle=destroyed plus web.lifecycle=detached and web.storage=webkit-managed; explicit unused when no WebKit data store was opened.",
+    "legacyPolicy": "Existing native data without a marker retains the old package UUID. Clearing that save drops its binding and uses a fresh UUID on next launch; shared legacy WebKit bytes are retained to protect other libraries.",
+    "remaining": [
+      "Real application/plugin and HTTP-page persistence; no fsync claim for system WebKit databases.",
+      "Java plugin calls during pagehide after Android destruction are rejected; a pre-destroy web-close phase remains to be implemented.",
+      "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit failure recovery and cancellation timeouts remain unverified."
+    ]
   }
 }

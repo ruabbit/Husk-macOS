@@ -1,5 +1,27 @@
 # 审计进度
 
+## 2026-10-16 上游 build 120 与 Java WebView 存档（build 8）
+
+从干净的 `codex/macos-p0=ba5ec17` 开始，核对工作区、origin/upstream、未完成操作和本项目进程后 fetch。origin 没有外来新提交；上游 `0695248..4c03823` 只有 `Build 120`，将 iOS 构建号 119 改为 120，发布标签仍为 2.0。对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake、Models、NativeLaunch、SessionController、NativeRunner、Store/PlayAPI 与图形依赖，本轮没有新增上游运行时功能，继续交付已记录的平台缺口。保留手柄、输入/窗口/失焦策略、Geode 和既有引擎接线。
+
+先普通合并到 main [b377a45](https://github.com/ruabbit/Husk-macOS/commit/b377a459de381f3e10dd1b1e66a03cd6db0ec1fc)，再合回 macOS 并完成适配，得到 [b551a50](https://github.com/ruabbit/Husk-macOS/commit/b551a5062cfc9f3df1e352cd5fd51a1ea940f158)。两次合并无文本冲突，没有使用 ours 策略、stash 或清理用户工作。两个分支已正常原子推送并用 `ls-remote` 读回完整 SHA，未 force push。上游在最终读取时仍为 4c03823。
+
+Java 内嵌 WebView 现通过 `java-web-store.json` 与 Android 存档绑定。新存档使用独立 UUID，升级前已有 Android data 的存档保留原来的包级 UUID 并标记 legacyPackage，避免丢失旧关联。清除独立存档先调用同一 NativeRunner bundle 的 WebKit 删除 API，成功才删除存档目录；失败保留 marker 与 Android 数据。旧包级数据可能仍被其他资料库共享，因此清除旧存档只解除当前关联，保留共享 WebKit 字节，下次启动创建独立 UUID。测试冻结旧实现对 `org.husk.webstorage` 的 UUID `C7020BE8-5B59-43B2-8BF2-5A72363F9E96`，核对升级后相同标识、真实重开及删除后的 store 枚举。
+
+原 WebView.destroy() 留下的 WKWebView—configuration—scheme handler 引用环已解除。待回复导航/对话框/资源请求使用带类型的记录，关闭时按类型结束，取消并等待网络回调，阻止迟到 cookie 写入；真实空白文档导航触发一次 pagehide，停媒体并等待 cookie 写入及数据记录回调。Android 销毁与 WebKit 托管独立验证：前者必须完成 AppMain/GL/worker/preferences/SQLite，后者写 web 子回执，未使用 WebKit 时显式 unused。监督器检查启动时、当前磁盘及事件/存档中的 UUID，再等进程回收。WebKit 部分不冒充数据库 fsync。
+
+测试暴露两项需要修复的退出行为。首轮 Java WebView 的 IO worker 没有结束，因为上游 Thread.interrupt0 仍为空；现在 WebView 框架线程池使用有界空闲等待，shutdown 后仍要求实际任务结束。第二项是已经空闲的 SharedPreferences writer 无法被 shutdown 的中断唤醒；现在在串行写队列内排入 shutdown，使 worker 在任务末尾观察关闭状态，保留 awaitTermination 和写入失败检查。新增 preferences-idle 回归覆盖这一时序，未声称任意 guest 线程中断已支持。
+
+完整测试首轮为 81/82：卸载期间 WebKit 自动压掉 prompt，迟到的 Java 插件保存调用没有执行却未被宿主看见。共享 JS 桥现显式报告关闭后调用并拒绝完成回执；新增用例先验证真实 JavaScriptInterface 可保存，再确认 Android 已成功销毁，而卸载后的插件调用使组合回执失败。该路径当前仍不兼容，需要后续设计 Android 销毁前的受控 Web 关闭阶段，不能把拒绝失败写成插件已支持。
+
+最终默认 **CTest 83/83（68.96 秒）**，覆盖五组新增 Java WebView 打包会话（持久化/同包隔离/删除、legacy 关联、Android 销毁失败、标识不匹配、迟到插件调用）及一组 idle preferences 生命周期。额外补入旧 UUID 常量核对后，该 legacy 回归单独再通过（6.85 秒），产品代码未再改变。包检查通过 **18 个 arm64 Mach-O / 406 个运行资源**；共享 Objective-C Web bridge 的 iOS 17 SDK 语法检查通过，只有原有 javaScriptEnabled 弃用警告，不代表 iOS 构建或真机通过。本轮 [CI 38835337776](https://github.com/ruabbit/Husk-macOS/actions/runs/38835337776) 已读回 **completed / success**，head 正是 b551a50：应用/helpers 构建、包检查、共享核心及 Hardened Runtime loader 检查通过；hardware job 按配置 skipped。远端 CI 的核心子集不替代本机 83 项完整运行回归，证据在 `current-upstream-ci.json` 和 `current-upstream-ci.log`。
+
+唯一候选原位更新为 **2.0.0 / build 8**，保留 VM=ON 及三套既有依赖/Java 缓存。打包前 CUA 正常退出空闲 Husk，确认 Product 主程序消失且没有游戏/VM。完成验证后通过 CUA 按完整 Product 路径只启动一次，PID **86539**，主窗口 AX 显示原有 **10 个应用**。主程序 SHA-256 `a5947bcdaa8e8a4a227a8a8e7e740d8507a60748e26b53951740d3db85f6222e`；NativeRunner `257bf6b7e3c19bd834ba16a4dac9963c9aea9e2a0b9859491a969c132628893e`。没有启动用户游戏、播放测试音频、主动制造系统崩溃或修改用户 APK/存档/Android 磁盘。
+
+证据复用 `build/logs/current-upstream-build.log`、`current-java-web-build.log`、`current-upstream-ctest.log`、`current-java-web-legacy.log`、`current-upstream-bundle.log`、`current-java-web-ios-syntax.log` 与 `build/macos/bundle-verification.json`。最终真实 DEX 数据示例为 TestResults 下的 JavaWeb-6958406A（持久化）、JavaWeb-97166CBD（legacy）和 JavaWeb-5A7A0A41（Android 已销毁但拒绝迟到插件）。先前失败记录保留在 JavaWeb-DB516298（worker）和 JavaWeb-F91DECDE（漏报卸载桥接），没有反复运行已知失败的用户游戏。
+
+fork PR #1 已合并；上游 #118 仍为开放草稿，无评论/review；#82 接口返回 404。真实 Geometry Dash/Geode、Hole.io 正常销毁/保存重开、Egg/Clash/War、旧 Unity IME、实体手柄、个人 Play 登录、PS4 产品链路及 VM/P6 继续开放，详见 [upstream-parity.md](upstream-parity.md)。
+
 ## 2026-10-15 上游 PS4 宿主与 build 7
 
 从干净的 `codex/macos-p0=6818ad3` 开始，核对 origin/upstream、未完成操作及本项目进程后 fetch 两个远端。origin 没有外来新增提交；上游 `8e79a47..0695248` 共 10 个提交、25 个路径，主要是 PS4 Console ABI/host、JIT arena、手柄快照和 iOS 资料库/界面，iOS build 升至 119。发布标签仍为 2.0。本轮 Android 引擎分发、TLUnityView、Store/PlayAPI 和图形依赖无实质新功能；既有 Java/原生/Web/Geode 链路继续参与全套回归。

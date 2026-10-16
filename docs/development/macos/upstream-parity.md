@@ -1,10 +1,10 @@
 # 上游功能与 macOS 接入现况
 
-核对日期：2026-10-15（Asia/Shanghai）。上游发布标签仍为 **2.0 = e02ac68**；upstream/main 从 **8e79a47** 更新到 **0695248**，10 个提交主要增加 PS4 宿主、JIT arena、控制器快照及 iOS PS4 资料库/界面，iOS build 升至 119。经 fork main 的 **73a6943** 合回 macOS **ca91909**，两次合并无文本冲突，均已正常推送并读回远端 SHA。新增 PS4 功能仅完成下述宿主层适配，尚未交付 macOS PS4 游戏支持。Android 引擎、Store/PlayAPI 和图形依赖本轮无实质新增功能。
+核对日期：2026-10-16（Asia/Shanghai）。上游发布标签仍为 **2.0 = e02ac68**；upstream/main 本轮从 **0695248** 到 **4c03823**，只有 `Build 120` 一个提交，修改 iOS 构建号 119→120。先经 fork main **b377a45** 合回 macOS，均无文本冲突。重新核对 TLReport.nativeEngine、TLUnityView、project.yml、CMake/资料库/Runner 分发、Store 与图形依赖；本轮上游没有新运行时功能。既有 2.0、手柄、Geode 和 PS4 宿主接线保留，PS4 产品链路仍开放。
 
-当前唯一候选为 **2.0.0 / build 7**，源码 **ca91909**，保留 VM=ON、已有 Geode 与各 Android profile。默认 CTest **77/77（52.93 秒）**、包内 **18 个 Mach-O / 406 个运行资源** 校验通过；共享 console/JIT/gamepad C 文件的 iOS 语法检查通过。CUA 恢复后正常退出空闲旧候选，完成原位打包，只启动一次新候选；主窗口和 Product 进程已核对，未启动用户游戏或 VM。此前远端 CI **38534659516** 实际失败于 Play 测试的固定延时假设，本轮改用受控响应和 Task 完成信号。本轮代码的 [CI 38664636797](https://github.com/ruabbit/Husk-macOS/actions/runs/38664636797) 已读回 **completed / success**：应用构建、包检查与包含 console/Play 的核心回归通过，hardware job 按配置跳过。具体证据见 [progress.md](progress.md)。
+本轮继续交付 Java 内嵌 WebView：存档绑定、旧数据关联保留、文档异步卸载、待回复回调/网络请求回收、cookie 写入等待、独立 WebKit 托管回执与清除存档已接入 NativeRunner 和监督器。WebView 的 IO/桥接 worker 与 SharedPreferences 空闲 writer 退出也已补齐。**2.0.0 / build 8** 在唯一 `build/macos` 构建，默认 **CTest 83/83（68.96 秒）** 通过。包内 **18 个 Mach-O / 406 个运行资源** 校验通过，CUA 已重开一次 build 8 并核对原有 10 个应用；代码提交 **b551a50** 与 main **b377a45** 已推送并读回。完整交付记录见 [progress.md](progress.md)。本轮测试均为真实 DEX fixture 的后台独立存档；没有把它们写成真实游戏兼容。
 
-fork 的 [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并，渲染修复仍保留。[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 本次核对仍为开放草稿，没有评论或 review；iOS 真机验证仍未完成。
+fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 本次核对仍为开放草稿，没有评论/review，iOS 真机验证仍缺。PR #82 接口继续返回 404，不能确认其远端状态；已采用的单例修复保留。本轮代码的 [CI 38835337776](https://github.com/ruabbit/Husk-macOS/actions/runs/38835337776) 已完成并成功，hardware job 按配置跳过；不替代实体设备或真实游戏验收。
 
 ## 2.0 发布功能
 
@@ -33,7 +33,7 @@ fork 的 [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并，渲�
 | Unreal | UE4 profile 复用真实 NativeActivity/UE JNI 驱动，配置 Vulkan，解析 manifest 与分包 | 含 libUE4 的 Android ELF fixture 走完整打包路径，回调/输入/保存退出通过；真实 Unreal 游戏未验收 |
 | NativeActivity | 既有库名/方向/alias、分包、触摸/键盘/手柄与关闭协议保留 | Egg 仍在 libegginc.so 构造函数的未重定位 PLT 跳转失败；没有重复运行未修复样本。PR #82 单例修复已本地采用；本次 PR/issue 接口均返回 404，无法确认远端当前状态 |
 | Capacitor / Cordova / Ionic | 独立无 JIT 权限的 WebRunner，复用上游 WebAppRuntime 桥；APK 资源校验/受限提取、原生窗口/IME、返回、暂停定时器/动画/媒体和输入屏蔽 | 两种引擎的真实 WebKit fixture 通过 localStorage/IndexedDB 退出重开、清除后不复现；本地自定义 scheme 的 document.cookie 为空，不宣称 cookie 或 service worker 兼容 |
-| Java 内嵌 WebView | 既有 AppKit 固定画布、透明合成与 Java Web 桥 | 使用持久化 WebKit 数据的 Java 会话仍拒绝 native storage-closed；本轮独立 WebRunner 的回执没有偷换到 Java 路径 |
+| Java 内嵌 WebView | 保留固定画布/透明合成/Java Web 桥；按存档绑定 WebKit UUID，完整卸载文档与回收 IO/桥接 worker，等待 cookie 写入与 WebKit 回调，组合 Android 销毁和 WebKit 托管回执 | 真实 DEX + 打包 NativeRunner 验证 localStorage/IndexedDB/最终 cookie/进程重开、旧 UUID 关联、同包隔离、删除/失败保留；Android 销毁失败、标识改变、卸载时迟到 Java 插件调用均拒绝成功回执。真实应用另验 |
 | Minecraft / GameActivity | 既有独立 Runner、固定画布、鼠标修复、存储关闭保留 | 旧的真实样本证据仍有效，但本轮没有启动用户游戏 |
 | Geode | 共用上游版本索引，Geometry Dash 每游戏开关、下载/取消/更新、Geode 4 内嵌资源和 5+ 独立资源；完整缓存可离线启动；原子安装、APK 版本/摘要和缓存 SHA 校验；独立 Cocos Runner 注入 | 离线缓存、Android ELF 构造函数/JNI、同大小更新、输入/暂停/关闭和真实打包会话通过；启用后加载失败会阻止启动，不静默关闭 Geode。真实 Geometry Dash/Geode 模组、实际网络下载和前台开关未验收 |
 | 图形依赖 | 固定 MoltenVK 1.4.2 / SPIRV-Cross，并实际应用上游 zero-init-stride 补丁 | 缓存记录补丁 SHA，打包前拒绝旧缓存，包内附构建记录/补丁；针对随包 MoltenVK 的 workgroup 零初始化 shader 编译回归通过 |
@@ -45,9 +45,15 @@ fork 的 [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并，渲�
 
 用户清除存档时，先在同一个 WebRunner bundle 中删除该 UUID 的数据存储，成功才删除标识与资源缓存。失败保留标识；删除过程中禁止同应用重新 prepare。单独移除应用继续保留存档。测试验证进程重开和实际删除，而不只校验 JSON 回执。曾发现静态删除 API 在未初始化 WebKit 的辅助进程中崩溃，已增加独立非持久化 WebView 初始化，并通过删除/重建回归；未反复运行未修复版本。
 
+Java 内嵌 WebView 使用 `Saves/<id>/java-web-store.json`，数据归 NativeRunner 的 WebKit bundle 所有。新存档使用独立 UUID；升级前已有 Android `data` 的存档沿用原来的包名 UUID，并记录 `legacyPackage`，避免换标识后失去旧数据。旧包级存储可能被其他资料库共用，因此清除这类存档只解除当前关联并删除 Android 数据，保留旧 WebKit 共享字节；下一次启动分配独立新 UUID。普通独立存档通过 NativeRunner 删除该 UUID，成功才移除存档目录，失败保留目录与标识。测试核对旧哈希的固定 UUID、进程重开与真正删除后的 store 枚举结果。
+
+Java 关闭先等待 Activity/框架 worker/preferences/SQLite，WebView 自身销毁同时开始异步文档卸载：结清待回复对话框/导航/资源请求，停止媒体，通过真实空白导航触发一次 pagehide，释放 WKWebView 的 scheme-handler 引用环，等待网络取消完成及 cookie 写入，再读取 cookie/data records。只有 Android 销毁与 WebKit 两部分都完成，才写带 `web` 子回执的 `storage-closed`；未使用 WebKit 的会话显式写 `unused`。监督器核对启动时、磁盘上及事件中的 UUID。WebKit 部分仍是 `webkit-managed`，不是数据库 fsync 或断电持久性承诺。
+
+真实 JavaScript 插件在运行时可写入 preferences，但销毁后 pagehide 再调用插件仍不支持：WebKit 会压掉卸载期间的 prompt，因此共享 JS 桥在调用前明确报告拒绝，避免丢失保存调用却返回成功。`macos-java-web-late-bridge` 单独确认 Android 已成功销毁，再拒绝组合回执。上游通用 `Thread.interrupt0` 仍为空；本轮只让框架自己的 WebView 线程池采用有界空闲等待，并从 SharedPreferences 串行 writer 内发起 shutdown，等待真实退出，没有宣称任意 guest worker 的中断已实现。
+
 ## 后续开放项
 
-1. Java 内嵌 WebView：将 stable store 与原生 Android 数据目录关联，补 Java 文档销毁与 WebKit 所有权回执、清除数据测试。保留现有拒绝错误保存确认的行为，不能直接复用独立 WebRunner 回执冒充 native 销毁。
+1. Java 内嵌 WebView：基础存储/关闭/删除已完成上述 build 8 接入与 fixture 验证。下一步以真实应用验证插件、HTTP 页面和完整保存重开；需要 pagehide 调用 Java 插件的应用，应设计 Android 销毁前的受控 Web 关闭阶段，明确停止接收新任务及回执顺序，再接入，当前继续拒绝这类完成回执。通用 Java Thread.interrupt/等待唤醒语义仍开放，不能取消 guest worker 检查或仅延长超时。macOS 14 实机、网络取消超时和系统 WebKit 异常恢复也尚未实测。
 2. Geode：下载、配置、启动注入和存储关闭回归已进入 build 6。下一步使用独立存档验证真实 Geometry Dash、官方 Geode 发布包和模组，从设置开关、版本匹配下载到交互、保存重开；不要把自建 ELF 的通过当作这些外部程序已兼容。共享 GeodeUtils 的剪贴板、选文件/文件夹、openWebview、restartGame 仍继承上游的空实现/拒绝行为，需要实际使用证据后逐项适配。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
 4. Egg：继续核对 DT_INIT/PLT；已知构造函数 RVA 0x1621794 调用 0x16413c0，槽 0x17636b8 仍为 0x1625d90 且没有该槽重定位。2026-10-13 静态检查确认 DT_INIT=0x17a0000，通过槽 0x1798000 调用导入的 ExecuteProgram；尚不能证明其完成所需初始化。NativeActivity 目前提供合成 Activity，未执行自定义 Application 的 Java 启动；不能直接切换到 Java profile，因为 framework 的 NativeActivity 仍是签名 stub。下一步核对 ExecuteProgram 的输入/输出和 Java Application 初始化契约，再设计对应 bridge/fixture；未复跑 Egg，也没有跳过保护或修改用户 APK。
