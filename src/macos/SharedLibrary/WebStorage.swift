@@ -6,6 +6,49 @@ import HuskCore
 /// WebKit owns its database files. Saves contains the stable, private store ID;
 /// removal must run in WebRunner, whose bundle owns that WebKit data directory.
 public enum WebStorage {
+    public struct JavaStore: Codable, Equatable, Sendable {
+        public let id: UUID
+        public let legacyPackage: String?
+        public func accepts(_ receipt: [String: Any]) -> Bool {
+            guard receipt["store"] as? String == id.uuidString else { return false }
+            let lifecycle = receipt["lifecycle"] as? String, storage = receipt["storage"] as? String
+            return (lifecycle == "detached" && storage == "webkit-managed") || (lifecycle == "unused" && storage == "unused")
+        }
+    }
+    public static func javaHelper(in app: URL) -> URL {
+        app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
+    }
+    public static func readJavaStore(in save: URL) throws -> JavaStore {
+        try JSONDecoder().decode(JavaStore.self, from: Data(contentsOf: save.appendingPathComponent("java-web-store.json")))
+    }
+    public static func javaStore(in save: URL, package: String) throws -> JavaStore {
+        let file = save.appendingPathComponent("java-web-store.json")
+        if FileManager.default.fileExists(atPath: file.path) { return try readJavaStore(in: save) }
+        // Pre-build-8 saves used a package-wide WebKit UUID. Keep that binding:
+        // changing it would strand existing website data. Fresh saves get an
+        // independent identity even when another library has the same package.
+        let legacy = FileManager.default.fileExists(atPath: save.appendingPathComponent("data").path)
+        var id = UUID()
+        if legacy {
+            var h1: UInt64 = 1469598103934665603, h2: UInt64 = 1099511628211 ^ 0x9e3779b97f4a7c15
+            for byte in package.utf8 { h1 = (h1 ^ UInt64(byte)) &* 1099511628211; h2 = ((h2 ^ UInt64(byte)) &* 0x100000001b3) &+ 7 }
+            var bytes = (0..<8).map { UInt8(truncatingIfNeeded: h1 >> ($0 * 8)) } + (0..<8).map { UInt8(truncatingIfNeeded: h2 >> ($0 * 8)) }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80
+            id = UUID(uuid: (bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],bytes[8],bytes[9],bytes[10],bytes[11],bytes[12],bytes[13],bytes[14],bytes[15]))
+        }
+        let store = JavaStore(id: id, legacyPackage: legacy ? package : nil)
+        try AtomicFile.write(JSONEncoder().encode(store), to: file)
+        return store
+    }
+    public static func removeJava(in save: URL, helper: URL) async throws {
+        guard FileManager.default.fileExists(atPath: save.appendingPathComponent("java-web-store.json").path) else { return }
+        let store = try readJavaStore(in: save)
+        // A legacy package store may still belong to another library/save.
+        // Clearing this save drops its binding; its next launch gets a new UUID.
+        // Never delete shared legacy bytes on behalf of just one save.
+        guard store.legacyPackage == nil else { return }
+        try await removeStore(store.id, helper: helper, option: "--delete-web-store")
+    }
     public static func helper(in app: URL) -> URL {
         app.appendingPathComponent("Contents/Helpers/WebRunner.app/Contents/MacOS/WebRunner")
     }
@@ -22,9 +65,12 @@ public enum WebStorage {
         let file = save.appendingPathComponent("web-store.json")
         guard FileManager.default.fileExists(atPath: file.path) else { return }
         let id = try JSONDecoder().decode(UUID.self, from: Data(contentsOf: file))
+        try await removeStore(id, helper: helper, option: "--delete-store")
+    }
+    private static func removeStore(_ id: UUID, helper: URL, option: String) async throws {
         let process = Process()
         process.executableURL = helper
-        process.arguments = ["--delete-store", id.uuidString]
+        process.arguments = [option, id.uuidString]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()

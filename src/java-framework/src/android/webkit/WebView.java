@@ -34,7 +34,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -60,8 +62,17 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
 
     private static final HashMap<Integer, WebView> sViews = new HashMap<>();
     private static int sNextId = 1;
-    private static final ExecutorService sIo = Executors.newFixedThreadPool(4, r -> { Thread t = new Thread(r, "Chrome_IOThread"); t.setDaemon(true); return t; });
-    private static final ExecutorService sBridge = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "JavaBridge"); t.setDaemon(true); return t; });
+    private static ExecutorService workers(int count, String name) {
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(count, count, 200, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(), r -> { Thread t = new Thread(r, name); t.setDaemon(true); return t; });
+        // Husk's Thread.interrupt0 is still a stub. Bounded idle waits allow our
+        // own framework workers to observe shutdown without claiming support
+        // for interrupting arbitrary guest code or abandoning an active job.
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
+    private static final ExecutorService sIo = workers(4, "Chrome_IOThread");
+    private static final ExecutorService sBridge = workers(1, "JavaBridge");
 
     private final int mId;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
@@ -349,6 +360,24 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
         mDestroyed = true;
         synchronized (sViews) { sViews.remove(mId); }
         husk.Web.destroy(mId);
+    }
+
+    /** @hide The independent host must join its framework-owned IO/bridge
+     * workers as well as the app's Activity before acknowledging destruction. */
+    public static void finishForHost() {
+        ArrayList<WebView> views;
+        synchronized (sViews) { views = new ArrayList<>(sViews.values()); }
+        for (WebView view : views) view.destroy();
+        sIo.shutdown();
+        sBridge.shutdown();
+        try {
+            if (!sIo.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS) ||
+                !sBridge.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS))
+                throw new IllegalStateException("WebView workers did not finish");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while closing WebView workers", e);
+        }
     }
 
     // ---- addJavascriptInterface: prompt() bridge

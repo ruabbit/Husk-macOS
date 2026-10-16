@@ -61,6 +61,7 @@ final class PipeReader: @unchecked Sendable {
     private var startDate = Date()
     private var guestManagedStorage = false
     private var runtime: String?
+    private var javaWebStore: WebStorage.JavaStore?
 
     public init() { signal(SIGPIPE, SIG_IGN) }
 
@@ -70,6 +71,9 @@ final class PipeReader: @unchecked Sendable {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
         let geodeArguments = try Geode.arguments(game: game, apk: apk)
+        let nativeArguments = runtime != "orbit" && runtime != "minecraft"
+            ? NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity" || runtime == "ue4") : []
+        javaWebStore = runtime == "java" ? try WebStorage.javaStore(in: checkpoint.deletingLastPathComponent(), package: nativeArguments[1]) : nil
         guestManagedStorage = runtime != "orbit"
         self.runtime = runtime
         let id = UUID().uuidString
@@ -87,9 +91,8 @@ final class PipeReader: @unchecked Sendable {
         child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
-        if runtime != "orbit" && runtime != "minecraft" {
-            child.arguments! += NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity" || runtime == "ue4")
-        }
+        child.arguments! += nativeArguments
+        if let javaWebStore { child.arguments! += ["--java-web-store", javaWebStore.id.uuidString] }
         if runtime == "web" { child.arguments! += ["--web-kind", game.engine == "Capacitor" ? "capacitor" : "cordova"] }
         child.arguments! += geodeArguments
         for name in game.apkNames.dropFirst() {
@@ -207,6 +210,14 @@ final class PipeReader: @unchecked Sendable {
                           let identity = try? Data(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent("web-store.json")),
                           (try? JSONDecoder().decode(UUID.self, from: identity))?.uuidString == store else {
                         fail("Web 存档标识不匹配。"); return
+                    }
+                }
+                if runtime == "java" {
+                    guard let javaWebStore,
+                          let web = saved["web"] as? [String: Any], javaWebStore.accepts(web),
+                          let eventWeb = event["web"] as? [String: Any], NSDictionary(dictionary: web).isEqual(to: eventWeb),
+                          (try? WebStorage.readJavaStore(in: checkpoint.deletingLastPathComponent())) == javaWebStore else {
+                        fail("Java WebView 未完成存储托管确认，或存档标识不匹配。"); return
                     }
                 }
                 checkpointReceived = true

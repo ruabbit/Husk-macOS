@@ -399,11 +399,12 @@ public actor LibraryRepository {
         }
     }
 
-    public func deleteSave(_ id: String, webHelper: URL? = nil) async throws {
+    public func deleteSave(_ id: String, webHelper: URL? = nil, javaHelper: URL? = nil) async throws {
         guard Self.validID(id) else { throw LibraryFailure("无效的游戏标识。") }
         guard deletingSaves.insert(id).inserted else { throw LibraryFailure("正在清除该应用的存档。") }
         defer { deletingSaves.remove(id) }
         try await WebStorage.remove(in: paths.save(id), helper: webHelper ?? WebStorage.helper(in: Bundle.main.bundleURL))
+        try await WebStorage.removeJava(in: paths.save(id), helper: javaHelper ?? WebStorage.javaHelper(in: Bundle.main.bundleURL))
         try locked {
             guard Self.validID(id) else { throw LibraryFailure("无效的游戏标识。") }
             if fm.fileExists(atPath: paths.save(id).path) { try fm.removeItem(at: paths.save(id)) }

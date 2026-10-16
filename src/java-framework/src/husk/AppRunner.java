@@ -224,6 +224,7 @@ public final class AppRunner {
         if (sEnding) return;
         sEnding = true;
         while (!sStack.isEmpty()) finishNow(top(), false);
+        android.webkit.WebView.finishForHost();
         Services.finishForHost();
         android.content.HuskSharedPreferences.finishForHost();
         Looper.setInputSink(null);

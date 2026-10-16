@@ -46,6 +46,9 @@ import SharedLibrary
             session.stop(); try await session.wait(until: { !session.active }, timeout: 35)
             try check(session.state == "exited" && session.error == nil, session.error ?? "storage-close-and-process-reaped")
             try check(session.events.filter { $0["event"] as? String == "storage-closed" }.count == 1, "one-storage-close-receipt")
+            let web = session.events.first { $0["event"] as? String == "storage-closed" }?["web"] as? [String: Any] ?? [:]
+            let store = try WebStorage.readJavaStore(in: checkpoint.deletingLastPathComponent())
+            try check(web["lifecycle"] as? String == "unused" && store.accepts(web), "unused-WebKit-is-explicit-and-bound-to-save")
             let prefs = try String(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent("data/shared_prefs/lifecycle.xml"), encoding: .utf8)
             try check(prefs.contains("i destroyed 1") && prefs.contains("i events 63"), "real-input-callbacks-and-final-preferences-persisted")
             try check(prefs.contains("i controller_events 255") && prefs.contains("i controller_held 0"), "real-controller-device-axes-disconnect-focus-and-pause-callbacks")

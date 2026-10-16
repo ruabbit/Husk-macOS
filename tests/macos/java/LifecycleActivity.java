@@ -87,6 +87,7 @@ public final class LifecycleActivity extends Activity {
         events |= 32;
         getSharedPreferences("lifecycle", 0).edit().putInt("destroyed", 1).putInt("events", wrongThread ? -1 : events).apply();
         getSharedPreferences("lifecycle", 0).edit().putInt("controller_events", controllerResult()).putInt("controller_held", heldButtons).apply();
+        if ("preferences-idle".equals(System.getenv("HUSK_JAVA_CASE"))) delay();
         if ("live-thread".equals(System.getenv("HUSK_JAVA_CASE"))) {
             Thread t = new Thread(() -> { try { Thread.sleep(10000); } catch (InterruptedException e) {} }, "unfinished-fixture-worker");
             t.setDaemon(true); t.start();

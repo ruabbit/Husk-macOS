@@ -3,6 +3,7 @@
 #import <GameController/GameController.h>
 #import <Security/SecTask.h>
 #import <CommonCrypto/CommonDigest.h>
+#import <WebKit/WebKit.h>
 #import "MacGraphics.h"
 #import "MacAudio.h"
 #include "MacInput.h"
@@ -13,6 +14,7 @@
 #include "husk-tl-unity.h"
 #include "husk-tl-nativeactivity.h"
 #import "MacJavaRuntime.h"
+#import "husk-tl-dvm-web-host.h"
 #import "MacNativeDrivers.h"
 #import "MacGeode.h"
 #include "husk-tl-vulkan.h"
@@ -37,6 +39,7 @@ static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow, fullSc
 static int variant, exitStatus;
 static BOOL minecraft, unity, nativeactivity, javaapp, nativeDriver, ue4, portrait;
 static NSString *packageName, *nativeLibrary, *activityClass, *geodeDirectory;
+static NSUUID *javaWebStore;
 static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity || javaapp || nativeDriver; }
 static NSString *runtimeName(void) { return nativeDriver ? mac_driver_name() : ue4 ? @"ue4" : javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
 static void activityGuestExit(int status) {
@@ -61,6 +64,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property NSUInteger sequence, ticks;
 @property NSUInteger keyEvents, pointerEvents, controllerEvents;
 @property NSDictionary *lastClick;
+@property NSDictionary *javaWebReceipt;
 @property BOOL loaded, changingPause, lifecycleDestroyed;
 @property BOOL requestedPause;
 @property NSView *javaWebContainer;
@@ -74,6 +78,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (void)updateCursorCapture;
 - (void)releaseCursor;
 - (void)gameStopped:(BOOL)ok;
+- (void)completeGameStop:(BOOL)ok;
 - (void)guestKey:(unsigned)code down:(BOOL)down repeat:(BOOL)repeat;
 @property int (*initialize)(int, const OrbitSave *);
 @property void (*step)(const OrbitInput *);
@@ -289,7 +294,9 @@ static int androidKey(unsigned code)
         if(!self.lifecycleDestroyed)return NO;
         // The receipt describes the completed native lifecycle. The game's
         // own databases and preferences live in the adjacent data directory.
-        object=@{@"schema":@1,@"session":sessionID,@"runtime":runtimeName(),@"lifecycle":@"destroyed"};
+        NSMutableDictionary *receipt=[@{@"schema":@1,@"session":sessionID,@"runtime":runtimeName(),@"lifecycle":@"destroyed"} mutableCopy];
+        if(javaapp){if(!self.javaWebReceipt)return NO;receipt[@"web"]=self.javaWebReceipt;}
+        object=receipt;
     } else { OrbitSave save;self.save(&save);object=@{@"schema":@1,@"session":sessionID,@"game":saveDictionary(save)}; }
     NSData *data=[NSJSONSerialization dataWithJSONObject:object options:NSJSONWritingSortedKeys error:NULL];
     NSString *temporary=[checkpointPath stringByAppendingFormat:@".%d.tmp",getpid()];
@@ -329,10 +336,22 @@ static int androidKey(unsigned code)
 - (void)gameStopped:(BOOL)ok
 {
     if(atomic_load(&finished))return;
-    if(javaapp){bool tl_web_close_for_host(void);ok=tl_web_close_for_host()&&ok;javaHost=nil;}
+    if(javaapp){
+        if(ok)[self event:@"native-lifecycle" detail:@{@"lifecycle":@"destroyed"}];
+        tl_web_close_for_host(^(BOOL detached,NSDictionary *receipt){
+            if(atomic_load(&finished))return;
+            self.javaWebReceipt=detached?receipt:nil;javaHost=nil;
+            [self completeGameStop:ok&&detached];
+        });return;
+    }
+    [self completeGameStop:ok];
+}
+- (void)completeGameStop:(BOOL)ok
+{
+    if(atomic_load(&finished))return;
     self.lifecycleDestroyed=ok;
     if(!ok||![self checkpoint]){[self finish:NO reason:@"游戏未能完成正常关闭；已有游戏数据保留。"];return;}
-    [self event:@"storage-closed" detail:@{@"lifecycle":@"destroyed"}];
+    [self event:@"storage-closed" detail:javaapp?@{@"lifecycle":@"destroyed",@"web":self.javaWebReceipt}:@{@"lifecycle":@"destroyed"}];
     [self finish:YES reason:javaapp?@"java-destroyed":unity?@"unity-destroyed":@"activity-destroyed"];
 }
 - (void)guestKey:(unsigned)code down:(BOOL)down repeat:(BOOL)repeat
@@ -475,6 +494,11 @@ static int androidKey(unsigned code)
     else if([command isEqual:@"pause"]&&[self.state isEqual:@"running"]) [self togglePause:nil];
     else if([command isEqual:@"resume"]&&[self.state isEqual:@"paused"]) [self togglePause:nil];
     else if([command isEqual:@"status"]) [self statusForRequest:message[@"request"]];
+    else if(automation&&javaapp&&[command isEqual:@"evaluate"]&&[self.state isEqual:@"running"]&&[message[@"script"] isKindOfClass:NSString.class]) {
+        tl_web_evaluate_for_host([message[@"view"] intValue],message[@"script"],^(id value,NSError *error){
+            if(!atomic_load(&finished))[self event:@"evaluation" detail:@{@"request":message[@"request"]?:@"",@"value":value?:NSNull.null,@"error":error.localizedDescription?:@""}];
+        });
+    }
     else if([command isEqual:@"window"]&&self.window&&!hiddenWindow&&!headless) {
         NSString *action=message[@"action"];
         if([action isEqual:@"show"]){[self.window deminiaturize:nil];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];}
@@ -649,6 +673,7 @@ static int androidKey(unsigned code)
         }
         if(javaapp){
             javaHost=self;
+            if(!tl_web_set_host_store(javaWebStore)){[self finish:NO reason:@"Java Web 存档标识无效。"];return;}
             self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])tl_javaapp_text(text.UTF8String);};
             self.textInput.textCommand=^(unsigned code){
                 if(code==51)tl_javaapp_text_delete();else if(code==36)tl_javaapp_text_action();
@@ -763,6 +788,23 @@ static int androidKey(unsigned code)
 int main(int argc,const char **argv)
 {
     @autoreleasepool {
+        if(argc==3&&(!strcmp(argv[1],"--delete-web-store")||!strcmp(argv[1],"--has-web-store"))){
+            NSUUID *identifier=[[NSUUID alloc] initWithUUIDString:@(argv[2])];
+            if(!identifier||[identifier.UUIDString isEqual:@"00000000-0000-0000-0000-000000000000"])return 64;
+            [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];[NSApp finishLaunching];
+            // WebKit's static IO API needs its main-loop infrastructure, but
+            // must not open the persistent store that is about to be removed.
+            WKWebViewConfiguration *config=[WKWebViewConfiguration new];config.websiteDataStore=WKWebsiteDataStore.nonPersistentDataStore;
+            WKWebView *bootstrap=[[WKWebView alloc] initWithFrame:NSZeroRect configuration:config];
+            __block int result=1;__block BOOL done=NO;
+            void (^complete)(int)=^(int status){result=status;done=YES;CFRunLoopStop(CFRunLoopGetMain());(void)bootstrap;};
+            if(!strcmp(argv[1],"--delete-web-store"))
+                [WKWebsiteDataStore removeDataStoreForIdentifier:identifier completionHandler:^(NSError *error){complete(error?1:0);}];
+            else [WKWebsiteDataStore fetchAllDataStoreIdentifiers:^(NSArray<NSUUID *> *ids){complete([ids containsObject:identifier]?0:3);}];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,12*NSEC_PER_SEC),dispatch_get_main_queue(),^{if(!done)complete(1);});
+            if(!done)CFRunLoopRun();
+            return result;
+        }
         splitPaths=[NSMutableArray new];
         for(int i=1;i<argc;i++) {
             NSString *arg=@(argv[i]);
@@ -783,6 +825,7 @@ int main(int argc,const char **argv)
             else if(i+1<argc&&[arg isEqual:@"--split"])[splitPaths addObject:@(argv[++i])];
             else if(i+1<argc&&[arg isEqual:@"--apk-sha256"])apkDigest=@(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--checkpoint"])checkpointPath=@(argv[++i]);
+            else if(i+1<argc&&[arg isEqual:@"--java-web-store"])javaWebStore=[[NSUUID alloc] initWithUUIDString:@(argv[++i])];
             else if(i+1<argc&&[arg isEqual:@"--runtime"]){
                 NSString *runtime=@(argv[++i]); nativeDriver=mac_driver_select(runtime);
                 if(!nativeDriver&&![@[@"orbit",@"minecraft",@"unity",@"nativeactivity",@"java",@"ue4"] containsObject:runtime])return 64;
@@ -795,6 +838,7 @@ int main(int argc,const char **argv)
             else {fprintf(stderr,"unknown or incomplete option\n");return 64;}
         }
         if(![[NSUUID alloc] initWithUUIDString:sessionID]||!apkPath||!checkpointPath||variant<0||variant>1)return 64;
+        if(javaapp&&(!javaWebStore||[javaWebStore.UUIDString isEqual:@"00000000-0000-0000-0000-000000000000"]))return 64;
         if(splitPaths.count>=TL_LD_MAX_APKS || (!guestRuntime() && splitPaths.count))return 64;
         if(portrait&&!unity&&!nativeactivity&&!javaapp&&!nativeDriver)return 64;
         if(geodeDirectory&&(!nativeDriver||![mac_driver_name() isEqual:@"cocos"]||![packageName isEqual:@"com.robtopx.geometryjump"]))return 64;

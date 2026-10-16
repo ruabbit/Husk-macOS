@@ -90,7 +90,12 @@ public final class HuskSharedPreferences implements SharedPreferences {
     public static void flushAll() { try { WRITER.submit(() -> {}).get(2, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception e) {} }
     /** A process-close receipt must wait for apply() and report failed writes. */
     public static void finishForHost() {
-        WRITER.shutdown();
+        // Shut down from the serial writer itself, after queued writes. Husk's
+        // interrupt0 cannot wake an idle ThreadPoolExecutor worker; shutting
+        // down while this task owns the worker lets getTask observe the state
+        // directly. No write is discarded and awaitTermination still gates the
+        // host's storage receipt.
+        WRITER.execute(() -> WRITER.shutdown());
         try {
             if (!WRITER.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS) || WRITE_FAILED.get())
                 throw new IllegalStateException("SharedPreferences did not close successfully");

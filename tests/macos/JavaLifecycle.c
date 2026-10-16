@@ -65,7 +65,7 @@ static void *run(void *unused)
         }
         CHECK(result.i==1);
     }
-    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||controller;
+    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||controller;
     CHECK(ok==success);CHECK(tl_javaapp_get_state()==(success?TL_JAVA_DESTROYED:TL_JAVA_FAILED));
     if(success){
         if(controller)CHECK(controller_result()==255);
