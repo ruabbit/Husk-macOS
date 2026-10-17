@@ -1,5 +1,17 @@
 # 审计进度
 
+## 2026-10-18 Egg 启动桥与 build 10
+
+用户授权按调查建议修复；基线 eaf9911，工作区初始干净，仍在 codex/macos-p0。通用 NativeActivity profile 已改为真实 Java Application → attachBaseContext/自定义 ClassLoader → providers/Application.onCreate → Java Activity → NDK 入口；UE4 专用路径保留。补 framework NativeActivity、ContextImpl/LoadedApk 的加载器状态、Class.forName 指定加载器派发、同线程窗口/输入/暂停/失败清理及原生销毁确认。SessionController 同时校验 Java Web 存储关闭回执。
+
+实测发现宿主空格目录的 APK 资源 URL 被游戏直接截取为 `%20` 路径，新增精确 Android 安装路径映射；资源、DEX 和原始 APK 读取一致，未复制/修改用户文件。签名 base/split 的实际资料库/Runner 会话在含空格目录通过。新增 6 项回归，覆盖显式 JNI 先于依赖库构造函数、自定义加载器反射安装、provider 次序、NDK 生命周期/输入、guest finish、缺 destroy 和 Java/原生 onCreate 失败。旧诊断测试的临时存档目录也按调用契约补齐。
+
+最终默认 **CTest 96/96，82.91 秒**；包检查 **18 个 arm64 Mach-O / 406 个 Java 资源** 通过。保留 VM=ON 和既有缓存，唯一候选原位更新为 **3.0.0 / build 10**。用户确认 ⌘Q 后已验证旧进程退出；完成验证后 CUA 恢复，仅按完整 Product 路径启动一次，主窗口 AX 显示 **11 个应用**，PID **89011** 对应当前候选。主程序 SHA-256 `3e06f8d165a801ab0dd36653c551317ac25dfb550b53efc43b30ba381454aeb5`；NativeRunner `9acc7371fa0ba65edab4e9cf75443febbf27b6292a6896d4a93f4a09615246f2`。
+
+真实 Egg 每次仅在相关修复后用隔离数据、静音、无可见窗口复测：先发现缺 mPackageInfo，再发现资源路径问题，最终越过两项并成功记录 PairIP JNI_OnLoad。最新阻塞明确为 **KeyStore 缺加密密钥，Play 的 IAntiTamperKeyTransferService 绑定失败**。当前是游戏自带 Google Play 错误页，未进入游戏原生入口；最终 probe exit 0、1813 帧和 Java runtime destroyed 只证明错误页生命周期，不是原生初始化、玩法或存档重开。用户 APK 四份摘要前后一致，未触碰用户存档、Android 磁盘或其他项目的 UTM。
+
+证据在 `build/logs/current-egg-build.log`、`current-egg-ctest.log`、`current-egg-bundle.json`、`current-egg-repair.log`、`current-egg-repair-result.json`，逐步失败与下一步见 [Egg 报告](2026-10-18_reverse-egg-startup-report.md)。修复和提交仅在自己的 fork。Egg 的实际 Play 服务/密钥环境继续开放，不再按“尚缺 Java NativeActivity 桥”重复处理。
+
 ## 2026-10-18 Egg 启动调查与贡献范围
 
 用户要求调查 Egg 崩溃，并明确以后所有修复仅在自己的 `ruabbit/Husk-macOS` 仓库完成。上游 PR #118 已关闭，fork PR #1 保持已合并；每日 `husk` 自动化已读回确认包含该范围，保留上游只读同步，不重开或更新上游 PR/issue。

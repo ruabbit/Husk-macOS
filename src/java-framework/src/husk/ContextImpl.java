@@ -12,6 +12,13 @@ import java.util.HashMap;
 
 /** The app's base context: one for the process, as ContextImpl is on Android (activities and the application wrap it). */
 public final class ContextImpl extends Context {
+    private static android.app.LoadedApk sPackageInfo;
+    public final android.app.LoadedApk mPackageInfo = packageInfo();
+    private ClassLoader mClassLoader;
+    private static synchronized android.app.LoadedApk packageInfo() {
+        if (sPackageInfo == null) sPackageInfo = new android.app.LoadedApk(AppRunner.classLoader());
+        return sPackageInfo;
+    }
     private static ContextImpl sApp;
     private static Context sApplication;
     private static final HashMap<String, Object> sServices = new HashMap<>();
@@ -60,7 +67,7 @@ public final class ContextImpl extends Context {
         }
         return mTheme;
     }
-    @Override public ClassLoader getClassLoader() { return AppRunner.classLoader(); }
+    @Override public ClassLoader getClassLoader() { return mClassLoader != null ? mClassLoader : mPackageInfo.getClassLoader(); }
     @Override public String getPackageName() { return Native.packageName(); }
     @Override public ApplicationInfo getApplicationInfo() { return ApplicationInfo.self(); }
     @Override public String getPackageResourcePath() { return getApplicationInfo().sourceDir; }

@@ -1,6 +1,6 @@
 # Egg, Inc. 启动崩溃调查
 
-2026-10-18，基于当前安装的 APK、已有真实会话日志和本仓库源码。此次只调查，没有启动游戏、修改 APK/存档、替换候选或修改运行时代码。
+2026-10-18，基于当前安装的 APK、已有真实会话日志和本仓库源码。下文前半部分保留修改前的只读调查；当日获授权后的实现和真实复测见末尾“启动链路修复与复测”。
 
 Egg 在 `libegginc.so` 的第一个原生构造函数中，通过未填好的 PLT/GOT 槽跳到未映射地址，触发 SIGSEGV。当前 NativeActivity 驱动省略 APK 的 Java Application 启动；进一步静态分析确认，游戏的前置 `ExecuteProgram` 需要由 PairIP `JNI_OnLoad` 建立的 JavaVM 和就绪状态。这个启动缺口是下一步修复重点。**无效跳转已经由真实日志确认；补齐启动流程能否使初始化成功，仍需受控验证，不能据此声称游戏已修复。**
 
@@ -94,3 +94,43 @@ Husk 当前路径存在可直接从源码确认的缺口：
 复核可直接读取以上 JSON/日志；重新做二进制检查时，从资料库只读打开四个 APK，依据 PT_LOAD 将上述 RVA 映射到文件偏移，枚举 PT_DYNAMIC 的 DT_RELA/DT_JMPREL 和 `.init_array`。只在临时目录解出两份 ELF 供反汇编，结束后删除临时文件，无须启动游戏或额外保存 APK 副本。
 
 后续修复、提交和 PR 仅在 `ruabbit/Husk-macOS` 完成。上游仍可只读核对和同步；上游 PR #118 已于 2026-10-18 按用户要求关闭，不再重开或更新。
+
+
+## 启动链路修复与复测
+
+修复已进入 macOS 的 `nativeactivity` profile 和 3.0.0 / build 10。它先执行真实 Application、attachBaseContext、自定义 ClassLoader、providers 和 Java Activity，再由新的 framework NativeActivity 调用 NDK 入口。`Class.forName` 现在经过指定加载器；ContextImpl/LoadedApk 保留应用通过反射安装的加载器。UE4 的既有专用驱动保留。
+
+NDK 回调在 Java 主线程执行，使用实际 Activity/JNIEnv/JavaVM；Surface、触摸、键盘、手柄、暂停、恢复、finish 和失败清理进入同一生命周期。正常关闭须同时满足 Java 销毁、原生 onDestroy、线程/SQLite 静止以及 WebKit 关闭回执，未完成原生销毁不能输出成功的 storage-closed。
+
+实测暴露的另一处缺口是 APK 路径：宿主目录包含空格，而游戏从 `jar:file:...!/AndroidManifest.xml` 直接截取路径。原先的 `%20` 文件名打不开。Java 现在看到 `/data/app/<package>/base.apk` 与分包路径，I/O 仅将注册的精确路径映射回原文件；ClassLoader、DEX 和 JAR 资源使用同一映射。没有重命名、修改或复制用户 APK，也没有对普通文件路径做无条件 URL 解码。
+
+验证分为三个层次：
+
+| 层次 | 结果 |
+| --- | --- |
+| 真实 DEX + Android ELF 回归 | 显式 bootstrap JNI 先于依赖它的游戏库构造函数；自定义加载器/provider/Application/Activity 次序正确；触摸、键盘、手柄、同线程销毁、guest finish 及两种 onCreate 失败清理通过；缺 onDestroy 时拒绝成功回执 |
+| 打包会话和默认回归 | 带 v3 签名的 base/split 集合通过实际资料库导入和 NativeRunner 启动；含空格的安装目录验证 APK 资源映射，暂停/恢复和最终 preferences 写入通过。默认 CTest **96/96，82.91 秒**；包检查 **18 个 arm64 Mach-O / 406 个 Java 资源** 通过 |
+| 当前真实 Egg APK | 相关修复后用隔离数据、静音、无可见窗口复测。自定义 ClassLoader 成功安装；`libpairipcore.so JNI_OnLoad -> 0x10006`；Android 安装路径成功打开；随后因没有加密密钥而失败，未进入游戏 NativeActivity/原生渲染 |
+
+真实样本的递进失败分别为：首次桥接缺 `ContextImpl.mPackageInfo`；补齐反射安装状态后缺可打开的 APK 资源路径；补齐 Android 安装路径后得到：
+
+```text
+Custom ClassLoader attached successfully.
+jni: libpairipcore.so JNI_OnLoad -> 0x10006
+java.lang.IllegalStateException: Failed to decrypt VM program.
+caused by java/lang/IllegalStateException: Encryption key not found in keystore.
+com.pairip.vmencryption.KeyImportException: Failed to bind to encryption key transfer service.
+```
+
+DEX 中 `KeyImportActiveClient.importEncryptionKey` 明确向 Play Store 包绑定 action `com.android.vending.securedatatransfer.IAntiTamperKeyTransferService`。本仓库 `husk.PlayStore.bind()` 仅提供 Age Signals，未实现这项服务，也没有完整 Play Store/密钥下发环境。当前 Store 下载功能、浏览器账号登录、游戏内 Binder 服务是不同链路；修好浏览器登录不能直接证明这项服务可用。
+
+最终 probe 在 37.038 秒正常回收，日志为 `presented=1813 destroyed=1`，退出码 0。**这些帧属于 Java 错误页；它只证明这段 Java 生命周期关闭，不能作为游戏首帧、原生 onDestroy、存档重开或兼容性通过。** 正确启动路径没有再触发旧崩溃，但尚未到达原先故障的游戏库构造函数，因此其最终初始化结果仍未知。四个 APK 的复测前后摘要一致；用户存档和 Android 磁盘未改动。
+
+本轮证据复用 `build/logs/`：
+
+- `current-egg-ctest.log`、`current-egg-build.log`、`current-egg-bundle.json`：最终完整测试、构建与包校验。
+- `current-egg-repair.log`、`current-egg-repair-result.json`：最终真实运行，JSON 明确 `gamePlayable=false`、`nativeActivityOnCreateReached=false`。
+- `current-egg-missing-packageinfo.log`、`current-egg-resource-path.log`：相关修复前的两种不同失败；后者的 `current-egg-package-loader/frames/latest.png` 保存游戏自带 Google Play 错误页面。最终截图采样处于重绘中，不能当作完整画面验收。
+- `current-egg-vmrunner-path.json`、`current-egg-key-service.json`：资源 URL 截取与实际绑定服务的 DEX 证据。
+
+下一步是核对合法 Play 安装所需的密钥下发、Android KeyStore 持久化和 Binder 服务环境，或在有完整 Play 环境的隔离 Android VM 中验证同一版本；不得通过返回假密钥、跳过保护、修改 APK 或补猜测的 PLT 地址来关闭此问题。在相关环境尚未接通前，不重复运行这个样本。

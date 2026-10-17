@@ -27,6 +27,7 @@ import Darwin
             guard ok else { throw LibraryFailure(message) }; print("PASS \(message)")
         }
         do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             for title in ["flood", "short"] {
                 let object: [String: Any] = ["id": String(repeating: "a", count: 64), "title": title, "importedAt": 0,
                     "sourceName": "test.apk", "apkNames": ["test.apk"], "digest": "test", "engine": "NativeActivity",

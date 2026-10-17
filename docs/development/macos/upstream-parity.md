@@ -1,12 +1,14 @@
 # 上游功能与 macOS 接入现况
 
-核对日期：2026-10-17（Asia/Shanghai）。upstream/main 从 **4c03823** 到 **a3407fc**，11 个提交、19 个路径；源码版本号已改为 **3.0.0**，远端尚无 3.0 tag，最新发布标签仍为 **2.0 = e02ac68**。origin 两分支没有外来新提交；上游先普通合并到 fork main **fa9aa3f**，再合回 macOS，无文本冲突。
+上游核对日期：2026-10-17（Asia/Shanghai）；Egg 运行链路更新于 2026-10-18。upstream/main 从 **4c03823** 到 **a3407fc**，11 个提交、19 个路径；源码版本号已改为 **3.0.0**，远端尚无 3.0 tag，最新发布标签仍为 **2.0 = e02ac68**。origin 两分支没有外来新提交；上游先普通合并到 fork main **fa9aa3f**，再合回 macOS，无文本冲突。
 
 本轮共享 loader 的运行时/应用库隔离、Java 配置密度及框架图像回退、TextView 递归修复、Picture/RenderNode/绘图缓存释放，已编入 macOS NativeRunner 和重新构建的 framework DEX。新增 7 项回归验证 APK/解包库、两种加载顺序、真实 Conscrypt 与应用 libcrypto 共存及 Java 绘图/资源行为。上游共享 JIT 分区和 TrollStore/JIT 提示属于 iOS；macOS 保留独立 NativeRunner/VMRunner 与权限模型。P0 classic harness 因新增 tl_jit_reserve_bottom 漏链接的问题已复现并修正，真实 ELF 执行通过。
 
-**3.0.0 / build 9** 在唯一 `build/macos` 原位构建，VM=ON；默认 **CTest 90/90（70.58 秒）**，包内 **18 个 Mach-O / 406 个 Java 资源** 校验通过。CUA 单次打开当前候选，主窗口显示原有 10 个应用，Product PID **53326** 已核对。源码 **c24f0ca** 和 main **fa9aa3f** 已正常原子推送并读回一致；[CI 38990038463](https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463) 已完成并成功，构建/包检查、26 项 hosted 核心测试和 P0 memory/core 通过，hardware job 跳过。详见 [progress.md](progress.md)。旧的 2.0/手柄/Geode/窗口/Store/图形接线均已复核；不能将此次版本更新写成 PS4、真实游戏或 Play 登录验收。
+**2026-10-17 的 3.0.0 / build 9** 在唯一 `build/macos` 原位构建，VM=ON；默认 **CTest 90/90（70.58 秒）**，包内 **18 个 Mach-O / 406 个 Java 资源** 校验通过。CUA 单次打开当前候选，主窗口显示原有 10 个应用，Product PID **53326** 已核对。源码 **c24f0ca** 和 main **fa9aa3f** 已正常原子推送并读回一致；[CI 38990038463](https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463) 已完成并成功，构建/包检查、26 项 hosted 核心测试和 P0 memory/core 通过，hardware job 跳过。详见 [progress.md](progress.md)。旧的 2.0/手柄/Geode/窗口/Store/图形接线均已复核；不能将此次版本更新写成 PS4、真实游戏或 Play 登录验收。
 
 fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 于 2026-10-18 按用户要求关闭，未合并。自该日起，修复、适配、提交与 PR 只在 `ruabbit/Husk-macOS` 完成；上游继续只读核对和同步，不新建、重开或更新上游 PR/issue，也不发表评论，除非用户重新明确授权。PR #82 上次接口返回 404，已采用的单例修复保留。
+
+2026-10-18 的当前候选为 **3.0.0 / build 10**。NativeActivity 已补真实 Java Application/ClassLoader/JNI/NDK 启动桥及 Android 安装路径映射；默认 **CTest 96/96（82.91 秒）**、18 个 Mach-O / 406 个 Java 资源校验通过。CUA 单次启动 Product，PID **89011**，主窗口显示当前资料库 **11 个应用**。真实 Egg 已进入 Java 密钥导入错误路径，尚未进入游戏原生入口，详见下方开放项和 [启动报告](2026-10-18_reverse-egg-startup-report.md)。
 
 ## 3.0 本轮变更
 
@@ -44,7 +46,7 @@ fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 P
 | SDL + DXVK | launcher Activity 与分包传递、MoltenVK 配置、SDL/UI 线程生命周期、触摸/按键/手柄、文本 hooks | nativeSendQuit → SDLMain 完成/join → nativeQuit，再检查 worker；正常及缺 destroy 测试通过 |
 | Rockstar | 原生 profile、触摸/手柄，Escape 映射 Android Back；同线程暂停、从 DEX 核对无参销毁函数后关闭 | 真实 ELF 与生产会话通过；上游的 Social Club/影片等兼容限制保留，未验证真实 GTA |
 | Unreal | UE4 profile 复用真实 NativeActivity/UE JNI 驱动，配置 Vulkan，解析 manifest 与分包 | 含 libUE4 的 Android ELF fixture 走完整打包路径，回调/输入/保存退出通过；真实 Unreal 游戏未验收 |
-| NativeActivity | 既有库名/方向/alias、分包、触摸/键盘/手柄与关闭协议保留 | Egg 仍在 libegginc.so 构造函数的未重定位 PLT 跳转失败；没有重复运行未修复样本。PR #82 单例修复已本地采用；本次 PR/issue 接口均返回 404，无法确认远端当前状态 |
+| NativeActivity | 库名/方向/alias、分包、真实 Java Application/ClassLoader/JNI→NDK 桥、触摸/键盘/手柄；同线程失败清理及 Java/原生双侧关闭 | DEX/ELF 和签名分包的生产会话回归通过。Egg 已安装自定义加载器并完成 PairIP JNI_OnLoad，但缺 Play 加密密钥/传输服务，未进入游戏原生入口；不能声称旧 PLT 初始化或真实游戏已通过 |
 | Capacitor / Cordova / Ionic | 独立无 JIT 权限的 WebRunner，复用上游 WebAppRuntime 桥；APK 资源校验/受限提取、原生窗口/IME、返回、暂停定时器/动画/媒体和输入屏蔽 | 两种引擎的真实 WebKit fixture 通过 localStorage/IndexedDB 退出重开、清除后不复现；本地自定义 scheme 的 document.cookie 为空，不宣称 cookie 或 service worker 兼容 |
 | Java 内嵌 WebView | 保留固定画布/透明合成/Java Web 桥；按存档绑定 WebKit UUID，完整卸载文档与回收 IO/桥接 worker，等待 cookie 写入与 WebKit 回调，组合 Android 销毁和 WebKit 托管回执 | 真实 DEX + 打包 NativeRunner 验证 localStorage/IndexedDB/最终 cookie/进程重开、旧 UUID 关联、同包隔离、删除/失败保留；Android 销毁失败、标识改变、卸载时迟到 Java 插件调用均拒绝成功回执。真实应用另验 |
 | Minecraft / GameActivity | 既有独立 Runner、固定画布、鼠标修复、存储关闭保留 | 旧的真实样本证据仍有效，但本轮没有启动用户游戏 |
@@ -69,7 +71,7 @@ Java 关闭先等待 Activity/框架 worker/preferences/SQLite，WebView 自身�
 1. Java 内嵌 WebView：基础存储/关闭/删除已完成上述 build 8 接入与 fixture 验证。下一步以真实应用验证插件、HTTP 页面和完整保存重开。2026-10-17 复核确认：WebKit 会在真实卸载时压掉 prompt，因此仅将现有 tl_web_close_for_host 提前到 tl_javaapp_stop 之前仍不能支持 pagehide 的同步 Java 桥。需要先设计受控的卸载前保存阶段，保持 AppMain/bridge 消息循环可用，保证页面生命周期只交付一次、停止新导航/普通任务、排空已接收的插件任务，然后销毁 Android、回收 WebKit 并组合回执。现有失败检查不能删除；该实现继续开放。通用 Java Thread.interrupt/等待唤醒语义仍开放，不能取消 guest worker 检查或仅延长超时。macOS 14 实机、网络取消超时和系统 WebKit 异常恢复也尚未实测。
 2. Geode：下载、配置、启动注入和存储关闭回归已进入 build 6。下一步使用独立存档验证真实 Geometry Dash、官方 Geode 发布包和模组，从设置开关、版本匹配下载到交互、保存重开；不要把自建 ELF 的通过当作这些外部程序已兼容。共享 GeodeUtils 的剪贴板、选文件/文件夹、openWebview、restartGame 仍继承上游的空实现/拒绝行为，需要实际使用证据后逐项适配。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
-4. Egg：2026-10-18 已有真实会话仍在约 0.625 秒后退出 139；第一个构造函数 RVA 0x1621794 调用 PLT 0x16413c0，槽 0x17636b8 仍为原始 0x1625d90。重新核对 136,362 条 RELA/JMPREL，无该槽及后续两个槽的重定位，未声明 APS2/RELR。DT_INIT 经正常重定位的 ExecuteProgram 导入初始化；进一步静态核对确认 ExecuteProgram 需要 JNI 环境和就绪状态，而 JavaVM 及就绪字节在 PairIP JNI_OnLoad 中建立。NativeActivity 目前只建 DEX 索引和合成 Activity，未运行自定义 Application/类加载器，失败日志无 JNI_OnLoad 完成。下一步先补有明确初始化顺序的 Java Application/NativeActivity bridge 与 fixture，再受控验证 ExecuteProgram 前后和首帧；直接切 Java profile 仍不成立，因为 framework NativeActivity 是签名 stub。此次未重跑游戏、未改 APK/存档，修复仍开放。详见 [Egg 启动调查](2026-10-18_reverse-egg-startup-report.md)。
+4. Egg：2026-10-18 已完成 Application/自定义 ClassLoader/provider/JNI/NativeActivity 桥、ContextImpl/LoadedApk 反射状态及 Android APK 安装路径映射。真实样本已记录 `Custom ClassLoader attached successfully`、`libpairipcore.so JNI_OnLoad -> 0x10006` 和成功打开 base.apk；最新阻塞为 `Encryption key not found in keystore`、绑定 `com.android.vending.securedatatransfer.IAntiTamperKeyTransferService` 失败。已出现游戏自带 Google Play 错误页，未进入游戏 ANativeActivity_onCreate，原先构造函数/PLT 的最终结果仍未知。最终 probe exit 0 与 Java 错误页正常关闭不能当作游戏通过。下一步核对合法安装的密钥下发、KeyStore 持久化及实际 Play Binder 环境，或完整 Play VM；不得用假密钥/保护绕过/猜测地址补丁，不在缺少相关修复时重跑。详见 [Egg 启动调查与修复](2026-10-18_reverse-egg-startup-report.md)。
 5. 三款游戏修复（2026-10-13）：跨 split/adaptive 图标解析、旧缓存升级、全 NativeRunner profile 的 Android 字体/CA 映射、有界 stderr 首尾保留和独立 supervisor.json 已实现。字体来自同一固定镜像，保留 CJK 和系统别名，旧配置的两个缺失名称在 lock 中记录兼容别名。实际资料库十款图标均已刷新，与隔离解码 PNG 一致，包含 Egg、War、Clash。
    - War Thunder：字体修复后成功生成三种 CJK 字体子集；随后补 `libvulkan.so.1` 映射和通用 NativeActivity 的 MoltenVK 配置。第二次探测的 RVA 0x5875dc4 空缓冲区崩溃进一步定位到 OpenSL 回调：宿主停止/清空操作没有等待正在读取的缓冲区和回调，游戏随后清空缓冲区。已修复排空/队列代际，补通用 NativeActivity 的 FMOD Java HLE。受控生命周期测试通过，第三次探测实际创建 Vulkan 设备/swapchain 并渲染 1280×720 的 Checking the data 加载页，5 项首帧/截图/失焦/暂停/恢复检查通过。
    - War 仍开放：20 秒观察没有进入主菜单，自定义 DagorUpdater 的 getFreeDiskSpace/isInstanceCreated 等方法仍返回未实现结果，需要接真实 Java 启动/更新器路径。停止后进程 exit 0，但没有 storage-closed，仍按失败处理；须追踪原生销毁末尾的进程退出与生命周期确认，不能把 exit 0 或 application destroyed 文本当成存档成功。最新会话 F55D0587，实测截图 `current-war-thunder-repair/frame.png`，解码引擎日志 `current-war-thunder-repair-engine-latest.log`。此次没有证明完整玩法或保存重开。

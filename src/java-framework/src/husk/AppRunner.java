@@ -56,12 +56,20 @@ public final class AppRunner {
         ContextImpl base = ContextImpl.app();
         String appCls = applicationClass != null ? applicationClass : Manifest.applicationClass;
         Application app;
-        try { app = appCls != null ? (Application) Class.forName(appCls).newInstance() : new Application(); }
+        try { app = appCls != null ? (Application) Class.forName(appCls, true, classLoader()).newInstance() : new Application(); }
         catch (ClassNotFoundException e) { android.util.Log.w("Husk", "no application class " + appCls); app = new Application(); }
         sApp = app;
         Application.huskSet(app);
         ContextImpl.setApplication(app);
         app.huskAttach(base);
+        // attachBaseContext may install a loader for additional application DEX.
+        // Providers and activities must use the application's resulting loader.
+        ClassLoader attachedLoader = app.getClassLoader();
+        if (attachedLoader != null) {
+            sLoader = attachedLoader;
+            Native.setAppClassLoader(sLoader);
+            Thread.currentThread().setContextClassLoader(sLoader);
+        }
         installProviders(app);
         Looper.setInputSink(AppRunner::deliver);
         applyInsets();
@@ -94,7 +102,7 @@ public final class AppRunner {
         for (Manifest.Component p : ordered) {
             if (!p.enabled) continue;
             try {
-                ContentProvider cp = (ContentProvider) Class.forName(p.name).newInstance();
+                ContentProvider cp = (ContentProvider) Class.forName(p.name, true, classLoader()).newInstance();
                 ProviderInfo info = new ProviderInfo();
                 info.name = p.name; info.authority = p.authorities; info.packageName = Native.packageName(); info.exported = p.exported; info.metaData = p.metaData; info.grantUriPermissions = p.grantUriPermissions;
                 info.applicationInfo = app.getApplicationInfo();
@@ -116,7 +124,7 @@ public final class AppRunner {
     static Activity launch(String cls, Intent intent, Activity caller, int request, Manifest.Component info) throws Exception {
         android.util.Log.d("Husk", "launch " + cls);
         Activity prev = top();
-        Activity a = (Activity) Class.forName(cls).newInstance();
+        Activity a = (Activity) Class.forName(cls, true, classLoader()).newInstance();
         ContextImpl base = ContextImpl.forActivity();
         a.huskAttach(base, sApp, intent, info, caller, request);
         if (prev != null && prev.isResumedHusk()) prev.huskPause();

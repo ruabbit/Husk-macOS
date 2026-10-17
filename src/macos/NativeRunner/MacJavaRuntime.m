@@ -11,7 +11,7 @@ BOOL mac_java_accepts_scan(NSDictionary *scan)
     if(![scan[@"ok"] boolValue]||![scan[@"hasManifest"] boolValue]||![abis isKindOfClass:NSArray.class]||
         (abis.count&&![abis containsObject:@"arm64-v8a"]))return NO;
     if(!abis.count)return [scan[@"dexCount"] intValue]>0 && (!scan[@"webKind"]||scan[@"webKind"]==NSNull.null);
-    if([engine isEqual:@"Unity 6"])return YES;
+    if([engine isEqual:@"Unity 6"]||[engine isEqual:@"NativeActivity"])return YES;
     if([engine isEqual:@"Cocos"]){for(NSDictionary *library in libraries)if([library[@"name"] isEqual:@"libfmod.so"])return NO;return YES;}
     if([engine isEqual:@"SDL"]){for(NSDictionary *library in libraries)if([library[@"name"] hasPrefix:@"libdxvk"])return NO;return YES;}
     if([@[@"Python",@"Flutter",@"libGDX",@"Java",@"React Native",@".NET / Xamarin"] containsObject:engine?:@""])return YES;

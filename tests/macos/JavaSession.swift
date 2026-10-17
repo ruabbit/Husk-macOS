@@ -5,9 +5,10 @@ import SharedLibrary
 @main struct JavaSession {
     @MainActor static func main() async {
         let args = CommandLine.arguments
-        guard args.count == 4 else { exit(64) }
+        guard args.count == 4 || (args.count == 5 && args[4] == "nativeactivity") else { exit(64) }
+        let nativeActivity = args.count == 5
         let app = URL(fileURLWithPath: args[1]), fixture = URL(fileURLWithPath: args[2])
-        let paths = LibraryPaths(root: URL(fileURLWithPath: args[3]).appendingPathComponent("Java-\(UUID().uuidString)"))
+        let paths = LibraryPaths(root: URL(fileURLWithPath: args[3]).appendingPathComponent("Java Session-\(UUID().uuidString)"))
         let session = SessionController()
         func check(_ condition: Bool, _ message: String) throws {
             if !condition { throw LibraryFailure(message) }; print("PASS \(message)")
@@ -15,7 +16,7 @@ import SharedLibrary
         do {
             let repository = try LibraryRepository(paths: paths, trustedFixtureHash: "")
             let imported = try await repository.importGame(fixture)
-            try check(imported.runtime == "java", "real-dex-import-selects-java")
+            try check(imported.runtime == (nativeActivity ? "nativeactivity" : "java"), "real-dex-import-selects-runtime")
             try await repository.update(imported.id, muted: true, pauseWhenInactive: false)
             let (game, files, checkpoint) = try await repository.prepare(imported.id)
             let runner = app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
@@ -49,9 +50,11 @@ import SharedLibrary
             let web = session.events.first { $0["event"] as? String == "storage-closed" }?["web"] as? [String: Any] ?? [:]
             let store = try WebStorage.readJavaStore(in: checkpoint.deletingLastPathComponent())
             try check(web["lifecycle"] as? String == "unused" && store.accepts(web), "unused-WebKit-is-explicit-and-bound-to-save")
-            let prefs = try String(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent("data/shared_prefs/lifecycle.xml"), encoding: .utf8)
-            try check(prefs.contains("i destroyed 1") && prefs.contains("i events 63"), "real-input-callbacks-and-final-preferences-persisted")
-            try check(prefs.contains("i controller_events 255") && prefs.contains("i controller_held 0"), "real-controller-device-axes-disconnect-focus-and-pause-callbacks")
+            let prefs = try String(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent(nativeActivity ? "data/shared_prefs/nativeboot.xml" : "data/shared_prefs/lifecycle.xml"), encoding: .utf8)
+            try check(prefs.contains("i destroyed 1") && prefs.contains(nativeActivity ? "i events 262143" : "i events 63"), "real-input-callbacks-and-final-preferences-persisted")
+            if !nativeActivity {
+                try check(prefs.contains("i controller_events 255") && prefs.contains("i controller_held 0"), "real-controller-device-axes-disconnect-focus-and-pause-callbacks")
+            }
             print("PASS packaged Java session: \(paths.root.path)")
         } catch {
             if session.active { session.stop(); try? await session.wait(until: { !session.active }, timeout: 35) }

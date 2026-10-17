@@ -73,7 +73,7 @@ final class PipeReader: @unchecked Sendable {
         let geodeArguments = try Geode.arguments(game: game, apk: apk)
         let nativeArguments = runtime != "orbit" && runtime != "minecraft"
             ? NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity" || runtime == "ue4") : []
-        javaWebStore = runtime == "java" ? try WebStorage.javaStore(in: checkpoint.deletingLastPathComponent(), package: nativeArguments[1]) : nil
+        javaWebStore = (runtime == "java" || runtime == "nativeactivity") ? try WebStorage.javaStore(in: checkpoint.deletingLastPathComponent(), package: nativeArguments[1]) : nil
         guestManagedStorage = runtime != "orbit"
         self.runtime = runtime
         let id = UUID().uuidString
@@ -212,7 +212,7 @@ final class PipeReader: @unchecked Sendable {
                         fail("Web 存档标识不匹配。"); return
                     }
                 }
-                if runtime == "java" {
+                if runtime == "java" || runtime == "nativeactivity" {
                     guard let javaWebStore,
                           let web = saved["web"] as? [String: Any], javaWebStore.accepts(web),
                           let eventWeb = event["web"] as? [String: Any], NSDictionary(dictionary: web).isEqual(to: eventWeb),

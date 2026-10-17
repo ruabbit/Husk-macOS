@@ -37,11 +37,11 @@ static NSMutableArray<NSString *> *splitPaths;
 static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *diagnostics;
 static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow, fullScreen;
 static int variant, exitStatus;
-static BOOL minecraft, unity, nativeactivity, javaapp, nativeDriver, ue4, portrait;
+static BOOL minecraft, unity, nativeactivity, javaapp, javaNativeActivity, nativeDriver, ue4, portrait;
 static NSString *packageName, *nativeLibrary, *activityClass, *geodeDirectory;
 static NSUUID *javaWebStore;
 static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity || javaapp || nativeDriver; }
-static NSString *runtimeName(void) { return nativeDriver ? mac_driver_name() : ue4 ? @"ue4" : javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
+static NSString *runtimeName(void) { return nativeDriver ? mac_driver_name() : ue4 ? @"ue4" : javaNativeActivity ? @"nativeactivity" : javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
 static void activityGuestExit(int status) {
     tl_log_line("%s: guest requested process exit %d before lifecycle acknowledgement",runtimeName().UTF8String,status);
     // The isolated process has no completed destroy receipt. Exit normally so
@@ -581,7 +581,7 @@ static int androidKey(unsigned code)
         if (!raw) return NO;
         NSData *data=[NSData dataWithBytes:raw length:strlen(raw)];husk_tl_free(raw);
         NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
-        if(javaapp)return mac_java_accepts_scan(scan);
+        if(javaapp)return mac_java_accepts_scan(scan) && (!javaNativeActivity || [scan[@"engine"] isEqual:@"NativeActivity"]);
         if(nativeDriver)return mac_driver_accepts_scan(scan);
         return [scan isKindOfClass:NSDictionary.class] && [scan[@"ok"] boolValue] &&
             [scan[@"hasManifest"] boolValue] && [scan[@"engine"] isKindOfClass:NSString.class] &&
@@ -830,7 +830,8 @@ int main(int argc,const char **argv)
                 NSString *runtime=@(argv[++i]); nativeDriver=mac_driver_select(runtime);
                 if(!nativeDriver&&![@[@"orbit",@"minecraft",@"unity",@"nativeactivity",@"java",@"ue4"] containsObject:runtime])return 64;
                 minecraft=[runtime isEqual:@"minecraft"];unity=[runtime isEqual:@"unity"];ue4=[runtime isEqual:@"ue4"];
-                nativeactivity=ue4||[runtime isEqual:@"nativeactivity"];javaapp=[runtime isEqual:@"java"];
+                javaNativeActivity=[runtime isEqual:@"nativeactivity"];
+                nativeactivity=ue4;javaapp=javaNativeActivity||[runtime isEqual:@"java"];
             }
             else if(i+1<argc&&[arg isEqual:@"--variant"])variant=atoi(argv[++i]);
             else if(i+1<argc&&[arg isEqual:@"--title"])gameTitle=@(argv[++i]);
@@ -842,7 +843,7 @@ int main(int argc,const char **argv)
         if(splitPaths.count>=TL_LD_MAX_APKS || (!guestRuntime() && splitPaths.count))return 64;
         if(portrait&&!unity&&!nativeactivity&&!javaapp&&!nativeDriver)return 64;
         if(geodeDirectory&&(!nativeDriver||![mac_driver_name() isEqual:@"cocos"]||![packageName isEqual:@"com.robtopx.geometryjump"]))return 64;
-        if(nativeLibrary&&(!nativeactivity||!nativeLibrary.length||nativeLibrary.length>56||[nativeLibrary rangeOfCharacterFromSet:
+        if(nativeLibrary&&((!nativeactivity&&!javaNativeActivity)||!nativeLibrary.length||nativeLibrary.length>56||[nativeLibrary rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-"] invertedSet]].location!=NSNotFound))return 64;
         if((unity||nativeactivity||javaapp||nativeDriver)&&(!packageName.length||packageName.length>199||[packageName rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._"] invertedSet]].location!=NSNotFound))return 64;

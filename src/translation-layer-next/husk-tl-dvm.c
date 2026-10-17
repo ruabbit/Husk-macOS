@@ -147,9 +147,11 @@ static bool dex_add(const uint8_t *b, size_t size, const char *label)
 /* Every jar and APK on the class path, for VMClassLoader.getBootClassPathEntries: libcore serves classpath resources
    (Class.getResourceAsStream) from these, as Android's boot class loader does from its jars. */
 static char *g_cp[64]; static int g_ncp;
-int tl_dvm_class_path(const char **out, int max) { int n = g_ncp < max ? g_ncp : max; for (int i = 0; i < n; i++) out[i] = g_cp[i]; return n; }
+int tl_dvm_class_path(const char **out, int max) { int n = g_ncp < max ? g_ncp : max; for (int i = 0; i < n; i++) out[i] = tl_path_guest_apk(g_cp[i]); return n; }
 static bool open_path(const char *path)
 {
+    char resolved[1024];
+    path = tl_path_resolve(path, resolved, sizeof(resolved));
     { size_t pl = strlen(path); if (pl > 4 && strcmp(path + pl - 4, ".dex") && g_ncp < 64) { bool dup = false; for (int i = 0; i < g_ncp && !dup; i++) dup = !strcmp(g_cp[i], path); if (!dup) g_cp[g_ncp++] = strdup(path); } }
     size_t l = strlen(path);
     if (l > 4 && !strcmp(path + l - 4, ".dex")) {
@@ -2119,6 +2121,8 @@ static bool DexFile_open(jobj *self, const jvalue *a, jvalue *ret)
     (void)self;
     const char *path = tl_jni_string(a[0].l);
     if (!path) return dvm_throw("java/lang/NullPointerException", "path");
+    char resolved[1024];
+    path = tl_path_resolve(path, resolved, sizeof(resolved));
     pthread_mutex_lock(&g_open_lock);
     int first = -1, count = 0;
     for (int i = 0; i < g_nopened; i++) if (!strcmp(g_opened[i].path, path)) { first = g_opened[i].first; count = g_opened[i].count; break; }

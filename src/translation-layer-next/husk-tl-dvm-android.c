@@ -9,6 +9,7 @@
 #define _DARWIN_C_SOURCE
 #include "husk-tl-dvm-javaapp.h"
 #include "husk-tl-dvm-gl.h"
+#include "husk-tl-dvm-nativeactivity.h"
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -391,6 +392,7 @@ NAT(N_looperPoll)
 {
     (void)self; (void)a;
     ret->j = 0;
+    tl_dvm_nativeactivity_poll();
     void *(*cur)(void) = tl_bionic_find("ALooper_forThread");
     int (*poll_all)(int, int *, int *, void **) = tl_bionic_find("ALooper_pollAll");
     if (cur && poll_all && cur()) { poll_all(0, NULL, NULL, NULL); ret->z = true; }
@@ -400,11 +402,11 @@ NAT(N_splitPaths)
 {
     (void)self; (void)a;
     int n = 0;
-    while (n < 16 && tl_ld_queued_split(n)) n++;
+    while (n < TL_LD_MAX_APKS - 1 && tl_ld_queued_split(n)) n++;
     jobj *arr = tl_jni_new_obj_array(tl_jni_class("java/lang/String"), (uint32_t)n);
     arr->cls = tl_jni_class("[Ljava/lang/String;");
     arr->refs = 1u << 30;
-    for (int i = 0; i < n; i++) arr->oarr.v[i] = jstr(tl_ld_queued_split(i));
+    for (int i = 0; i < n; i++) arr->oarr.v[i] = jstr(tl_path_guest_apk(tl_ld_queued_split(i)));
     *ret = L(arr);
     return true;
 }
@@ -446,7 +448,7 @@ NAT(N_apkFileLength)
     *ret = J(e ? (int64_t)e->usize : -1);
     return true;
 }
-NAT(N_apkPath) { (void)self; (void)a; *ret = L(jstr(A.apk)); return true; }
+NAT(N_apkPath) { (void)self; (void)a; *ret = L(jstr(tl_path_guest_apk(A.apk))); return true; }
 
 /* ---- the host keyboard, clipboard, share sheet, orientation, insets */
 static void text_push(const char *kind, const char *utf8)
@@ -572,6 +574,7 @@ dvm_native_fn tl_web_native(const char *name, const char *sig);
 bool tl_web_any_visible(void);
 dvm_native_fn dvm_android_native(const char *cls, const char *name, const char *sig)
 {
+    if (!strcmp(cls, "android/app/NativeActivity")) return tl_dvm_nativeactivity_native(name, sig);
     if (!strcmp(cls, "husk/Sqlite")) return tl_sqlite_native(name, sig);
     if (!strcmp(cls, "husk/MediaCodecNative")) return tl_media_native(name, sig);
     if (!strcmp(cls, "husk/Web")) return tl_web_native(name, sig);
@@ -1182,6 +1185,7 @@ static void *app_main(void *arg)
         char buf[800];
         tl_log_line("javaapp: the app's main thread ended with %s", tl_dvm_describe_pending(buf, sizeof(buf)) ? buf : "?");
         log_pending_stack();
+        tl_dvm_nativeactivity_abort();
         atomic_store(&A.state, TL_JAVA_FAILED);
     }
     if (!atomic_load(&A.destroy_ack)) atomic_store(&A.state, TL_JAVA_FAILED);
@@ -1219,6 +1223,7 @@ static bool start_app(const tl_javaapp_config *cfg)
         return false;
     }
     if (cfg->package_name && cfg->package_name[0]) snprintf(A.pkg, sizeof(A.pkg), "%s", cfg->package_name);
+    if (!tl_path_install_apks(cfg->apk_path, A.pkg)) return false;
     tl_log_line("javaapp: %s, launcher %s, application %s", A.pkg, A.activity, A.application[0] ? A.application : "(none)");
     tl_nwindow_configure(cfg->width, cfg->height, cfg->metal_layer);
     if (cfg->angle_egl && !tl_egl_init(cfg->angle_egl, cfg->angle_gles, cfg->frame_dir, cfg->frame_every)) return false;
@@ -1303,7 +1308,7 @@ bool tl_javaapp_stop(void)
     bool tl_guest_threads_quiescent(void);
     bool quiescent = tl_guest_threads_quiescent();
     bool tl_dvm_sqlite_shutdown(void);
-    bool ok = quiescent && atomic_load(&A.destroy_ack) && atomic_load(&A.state) != TL_JAVA_FAILED && tl_dvm_sqlite_shutdown();
+    bool ok = quiescent && tl_dvm_nativeactivity_closed() && atomic_load(&A.destroy_ack) && atomic_load(&A.state) != TL_JAVA_FAILED && tl_dvm_sqlite_shutdown();
     atomic_store(&A.state, ok ? TL_JAVA_DESTROYED : TL_JAVA_FAILED);
     return ok;
 }

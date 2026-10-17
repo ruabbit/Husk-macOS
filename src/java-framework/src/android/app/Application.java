@@ -39,7 +39,10 @@ public class Application extends android.content.ContextWrapper implements andro
     private final ArrayList<ComponentCallbacks> mComponentCallbacks = new ArrayList<>();
     public Application() { super(null); }
     /** Husk's driver: the app's one Application, attached to the base context before its providers and onCreate. */
-    public final void huskAttach(Context base) { attachBaseContext(base); }
+    public final void huskAttach(Context base) {
+        if (base instanceof husk.ContextImpl) mLoadedApk = ((husk.ContextImpl) base).mPackageInfo;
+        attachBaseContext(base);
+    }
     public static void huskSet(Application a) { sApp = a; }
     public static Application huskGet() { if (sApp == null) { sApp = new Application(); sApp.huskAttach(husk.ContextImpl.app()); } return sApp; }
     public ArrayList<ActivityLifecycleCallbacks> huskLifecycleCallbacks() { return mCallbacks; }

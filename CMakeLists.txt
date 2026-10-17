@@ -86,7 +86,7 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-dvm-gles20.c ${NEXT}/husk-tl-dvm-gles30.c
     ${NEXT}/husk-tl-dvm-gles31.c ${NEXT}/husk-tl-dvm-gles32.c
     ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-unity.c ${NEXT}/husk-tl-gamepad.c
-    ${NEXT}/husk-tl-nativeactivity.c ${NEXT}/husk-tl-jni-ue4.c
+    ${NEXT}/husk-tl-nativeactivity.c ${NEXT}/husk-tl-dvm-nativeactivity.c ${NEXT}/husk-tl-jni-ue4.c
     ${NEXT}/husk-tl-cocos.c ${NEXT}/husk-tl-jni-cocos.c ${NEXT}/husk-tl-cocos-text.c
     ${NEXT}/husk-tl-godot.c ${NEXT}/husk-tl-jni-godot.c ${NEXT}/husk-tl-gamemaker.c
     ${NEXT}/husk-tl-sdl.c ${NEXT}/husk-tl-sdl-apps.c ${NEXT}/husk-tl-gtasa.c
@@ -365,11 +365,30 @@ foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
 endforeach()
 add_executable(MacJavaSessionTests tests/macos/JavaSession.swift)
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_bootstrap.py "${CMAKE_BINARY_DIR}/NativeBootstrap"
+    DEPENDS tests/macos/prepare_native_bootstrap.py tests/macos/java/nativeactivity/Bootstrap.java tests/macos/java/nativeactivity/Provider.java
+        tests/macos/java/nativeactivity/Game.java tests/macos/fixture/native_bootstrap.c tests/macos/fixture/java_nativeactivity.c
+        ${NEXT}/husk-tl-nativeactivity-abi.h VERBATIM)
+add_custom_target(NativeBootstrapFixture DEPENDS "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks")
+add_executable(JavaNativeActivityTests tests/macos/JavaNativeActivity.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(JavaNativeActivityTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(JavaNativeActivityTests PRIVATE NativeRuntime)
+add_dependencies(JavaNativeActivityTests JavaRuntimeResources NativeBootstrapFixture)
+add_custom_command(TARGET JavaNativeActivityTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaNativeActivityTests>" VERBATIM)
+foreach(case normal guest-finish missing-destroy native-create-failed java-create-failed)
+    add_test(NAME java-nativeactivity-${case} COMMAND JavaNativeActivityTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk"
+        "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/NativeBootstrap" ${case})
+    set_tests_properties(java-nativeactivity-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
+endforeach()
 target_compile_options(MacJavaSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacJavaSessionTests PRIVATE SharedLibrary)
-add_dependencies(MacJavaSessionTests PackageMac JavaLifecycleFixture)
+add_dependencies(MacJavaSessionTests PackageMac JavaLifecycleFixture NativeBootstrapFixture)
 add_test(NAME macos-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults")
 set_tests_properties(macos-java-session PROPERTIES TIMEOUT 95)
+add_test(NAME macos-java-nativeactivity-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity)
+set_tests_properties(macos-java-nativeactivity-session PROPERTIES TIMEOUT 95)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaWebTests" web
     DEPENDS tests/macos/prepare_java_case.py tests/macos/java/WebStorageActivity.java tests/macos/java/storage.html scripts/build_java_framework.py VERBATIM)

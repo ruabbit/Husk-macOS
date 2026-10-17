@@ -955,6 +955,24 @@ NAT(Class_classForName)
     (void)self;
     const char *n = tl_jni_string(a[0].l);
     if (!n) return npe("className");
+    /* Class.forName(name, initialize, loader) must enter that loader. Resolving
+       directly from the global DEX index skips custom loaders' initialization
+       and prevents them from defining classes from additional DEX files. */
+    tl_jclass *loader_class = a[2].l ? dvm_object_class(a[2].l) : NULL;
+    // BootClassLoader is the Java representation of the VM's null loader.
+    // Calling its Java implementation during System.<clinit> recurses through
+    // VMClassLoader's resource initialization before System properties exist.
+    if (loader_class && strcmp(loader_class->name, "java/lang/BootClassLoader") && n[0] != '[') {
+        jvalue name = a[0];
+        jvalue loaded = tl_jni_call(a[2].l, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;", &name);
+        if (tl_jni_pending()) return false;
+        jobj *mirror = loaded.l;
+        if (!mirror || mirror->kind != TL_K_CLASS) return dvm_throw("java/lang/ClassNotFoundException", "%s", n);
+        dvm_class *cls = dvm_class_of(mirror->klass.jc);
+        if (a[1].z && cls && !dvm_ensure_init(cls)) return false;
+        *ret = loaded;
+        return true;
+    }
     char jn[512]; snprintf(jn, sizeof(jn), "%s", n);
     for (char *p = jn; *p; p++) if (*p == '.') *p = '/';
     tl_jclass *jc = dvm_class_named(jn);

@@ -36,35 +36,7 @@ extern void (*tl_native_activity_finish_hook)(void *activity);
 
 #define CLS "com/epicgames/ue4/GameActivity"
 
-/* android/native_activity.h */
-typedef struct ANativeActivity ANativeActivity;
-typedef struct ANativeActivityCallbacks {
-    void (*onStart)(ANativeActivity *);
-    void (*onResume)(ANativeActivity *);
-    void *(*onSaveInstanceState)(ANativeActivity *, size_t *);
-    void (*onPause)(ANativeActivity *);
-    void (*onStop)(ANativeActivity *);
-    void (*onDestroy)(ANativeActivity *);
-    void (*onWindowFocusChanged)(ANativeActivity *, int);
-    void (*onNativeWindowCreated)(ANativeActivity *, void *);
-    void (*onNativeWindowResized)(ANativeActivity *, void *);
-    void (*onNativeWindowRedrawNeeded)(ANativeActivity *, void *);
-    void (*onNativeWindowDestroyed)(ANativeActivity *, void *);
-    void (*onInputQueueCreated)(ANativeActivity *, void *);
-    void (*onInputQueueDestroyed)(ANativeActivity *, void *);
-    void (*onContentRectChanged)(ANativeActivity *, const void *);
-    void (*onConfigurationChanged)(ANativeActivity *);
-    void (*onLowMemory)(ANativeActivity *);
-} ANativeActivityCallbacks;
-struct ANativeActivity {
-    ANativeActivityCallbacks *callbacks;
-    void *vm, *env;
-    void *clazz;
-    const char *internalDataPath, *externalDataPath;
-    int32_t sdkVersion;
-    void *instance, *assetManager;
-    const char *obbPath;
-};
+#include "husk-tl-nativeactivity-abi.h"
 
 static struct {
     tl_ga_config cfg;
