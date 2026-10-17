@@ -1,5 +1,13 @@
 # 审计进度
 
+## 2026-10-18 Egg 启动调查与贡献范围
+
+用户要求调查 Egg 崩溃，并明确以后所有修复仅在自己的 `ruabbit/Husk-macOS` 仓库完成。上游 PR #118 已关闭，fork PR #1 保持已合并；每日 `husk` 自动化已读回确认包含该范围，保留上游只读同步，不重开或更新上游 PR/issue。
+
+当前资料库目标为 Egg, Inc.（`com.auxbrain.egginc`，versionCode 111359）。四个 APK 的摘要与导入索引一致；2026-10-18 01:33 的已有真实会话 `3468A3D8-88FF-43B6-9B12-4CDF84823C8D` 在约 0.625 秒后退出 139，没有首帧。重新检查 ELF 确认首个构造函数通过未绑定槽 0x17636b8 跳到 0x1625d90；136,362 条标准重定位中无该槽和相邻两个槽的条目。独立 LLVM 反汇编进一步确认 ExecuteProgram 所需 JNI 环境/就绪状态依赖 PairIP JNI_OnLoad 建立的 JavaVM；NativeActivity 驱动没有运行 APK 的自定义 Application/类加载器，现有日志只有 PairIP 构造函数完成。启动顺序缺口已具体定位，但初始化成功、首帧和正常存档尚未验证。
+
+此次只调查和记录，未启动游戏、未改 APK/存档、未替换或重启候选、未改运行时代码。源码基线 a0700fe；取证使用原始 APK、现有日志和源码，临时 ELF 反汇编后即回收。证据为 `build/logs/current-egg-diagnosis.json`、`current-egg-jni-init.log` 及既有 startup audit。下一步为 Application/类加载器/JNI/NativeActivity 顺序 fixture 与桥接，再验证前置初始化；不能只改 runtime 标签或跳转地址。完整结论见 [调查报告](2026-10-18_reverse-egg-startup-report.md)。
+
 ## 2026-10-17 上游 3.0 运行时修复与 build 9
 
 从干净的 `codex/macos-p0=8fa4003` 开始，确认远端地址、单一工作区、没有未完成 Git 操作或本项目构建/游戏/VM。主程序已退出；系统中其他项目的 UTM/QEMU 不属于 Husk，未触碰。fetch origin/upstream 后，origin 两分支无外来提交，上游 `4c03823..a3407fc` 有 11 个提交、19 个路径。源码版本为 3.0.0，远端没有 3.0 tag，最新发布 tag 仍为 2.0。先普通 merge 到 main **fa9aa3fa349c53d6e00ce5e14f99528c4fba600c**，再合回 macOS，无文本冲突；未使用 ours、stash、重置或清理用户工作。

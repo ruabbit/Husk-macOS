@@ -52,7 +52,9 @@
     "headRevision": "c87d891b7b36163ef362d0ee8f49d9ab52c09192",
     "mergeRevision": "35f27e942bac1de8710a3756bacbdcf42e0bcdf2",
     "upstreamPullRequest": "https://github.com/Leviidev/Husk/pull/118",
-    "upstreamStatus": "open-draft",
+    "upstreamStatus": "closed-unmerged",
+    "upstreamClosedOn": "2026-10-18",
+    "contributionPolicy": "All fixes, adaptations, commits and PRs stay in ruabbit/Husk-macOS. Continue read-only upstream inspection and synchronization; do not create, reopen, update or comment on upstream PRs/issues without renewed user authorization.",
     "validation": "Real MoltenVK same-queue and cross-family compositor regressions pass. iOS device validation remains outstanding."
   },
   "ps4Integration": {
