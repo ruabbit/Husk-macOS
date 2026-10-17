@@ -14,7 +14,7 @@
 
 本轮 WebView 关闭顺序复核已补入 upstream-parity.md：真实 unload 中 prompt 被压制，单纯提前宿主 close 无效，需保持 Java 桥可用的卸载前保存阶段和单次生命周期交付。该实现及真实游戏保存重开、旧 Unity IME、实体手柄、Geode 真模组、个人 Play 登录、PS4 产品链路、VM/P6 继续开放。fork PR #1 已合并；上游 #118 仍开放草稿无 review；#82 接口仍 404。
 
-证据复用 `build/logs/current-upstream-build.log`、`current-upstream-new-regressions.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-classic-build.log`、`current-upstream-classic-test.log`、`current-upstream-ios-syntax.log`、`current-upstream-ios-jit-syntax.log` 及 `build/macos/bundle-verification.json`。本地交付验证已完成，提交、推送、远端 SHA 和本轮 hosted CI 待收尾。
+证据复用 `build/logs/current-upstream-build.log`、`current-upstream-new-regressions.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-classic-build.log`、`current-upstream-classic-test.log`、`current-upstream-ios-syntax.log`、`current-upstream-ios-jit-syntax.log` 及 `build/macos/bundle-verification.json`。代码 [c24f0ca](https://github.com/ruabbit/Husk-macOS/commit/c24f0ca8c8d9e774449a5a95f16ecfdf0d916b27) 和 main [fa9aa3f](https://github.com/ruabbit/Husk-macOS/commit/fa9aa3fa349c53d6e00ce5e14f99528c4fba600c) 已正常原子推送，两个完整 SHA 读回一致。对应 [CI 38990038463](https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463) 已读回 **completed / success**，build-and-core 用时 5 分 11 秒：应用/helpers 构建、包校验、26 项 hosted 核心测试（含本轮 6 项库隔离/Conscrypt 用例）、P0 memory/core 和共享 iOS 语法检查均通过。hardware job 按配置 skipped，不能替代本机完整 90 项回归或实体设备验收；JSON/完整日志保存为 `current-upstream-ci.json` 和 `current-upstream-ci.log`。最后仅提交交付记录，保留在 codex/macos-p0。
 
 ## 2026-10-16 上游 build 120 与 Java WebView 存档（build 8）
 

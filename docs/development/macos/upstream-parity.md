@@ -4,7 +4,7 @@
 
 本轮共享 loader 的运行时/应用库隔离、Java 配置密度及框架图像回退、TextView 递归修复、Picture/RenderNode/绘图缓存释放，已编入 macOS NativeRunner 和重新构建的 framework DEX。新增 7 项回归验证 APK/解包库、两种加载顺序、真实 Conscrypt 与应用 libcrypto 共存及 Java 绘图/资源行为。上游共享 JIT 分区和 TrollStore/JIT 提示属于 iOS；macOS 保留独立 NativeRunner/VMRunner 与权限模型。P0 classic harness 因新增 tl_jit_reserve_bottom 漏链接的问题已复现并修正，真实 ELF 执行通过。
 
-**3.0.0 / build 9** 在唯一 `build/macos` 原位构建，VM=ON；默认 **CTest 90/90（70.58 秒）**，包内 **18 个 Mach-O / 406 个 Java 资源** 校验通过。CUA 单次打开当前候选，主窗口显示原有 10 个应用，Product PID **53326** 已核对。提交、推送及本轮 hosted CI 尚待收尾，详见 [progress.md](progress.md)。旧的 2.0/手柄/Geode/窗口/Store/图形接线均已复核；不能将此次版本更新写成 PS4、真实游戏或 Play 登录验收。
+**3.0.0 / build 9** 在唯一 `build/macos` 原位构建，VM=ON；默认 **CTest 90/90（70.58 秒）**，包内 **18 个 Mach-O / 406 个 Java 资源** 校验通过。CUA 单次打开当前候选，主窗口显示原有 10 个应用，Product PID **53326** 已核对。源码 **c24f0ca** 和 main **fa9aa3f** 已正常原子推送并读回一致；[CI 38990038463](https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463) 已完成并成功，构建/包检查、26 项 hosted 核心测试和 P0 memory/core 通过，hardware job 跳过。详见 [progress.md](progress.md)。旧的 2.0/手柄/Geode/窗口/Store/图形接线均已复核；不能将此次版本更新写成 PS4、真实游戏或 Play 登录验收。
 
 fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 仍为开放草稿，没有评论/review。PR #82 接口返回 404，已采用的单例修复保留；没有重复建 PR。
 

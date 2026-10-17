@@ -5,7 +5,7 @@
   "integratedRevision": "a3407fc7fc275efa6c7d346d3d61ef6c7367a470",
   "checkedOn": "2026-10-17",
   "commitCount": 11,
-  "integration": "Merged upstream 3.0 runtime changes through fork main fa9aa3f without conflicts. The macOS NativeRunner and rebuilt framework DEX include runtime/app ELF namespaces, resource-density fallbacks, TextView recursion and bitmap-cache fixes. Seven new regressions and the complete 90-test suite pass; the legacy P0 harness now links the shared JIT reservation implementation. Candidate build 9 is packaged and launched once; commit/push and hosted CI pending. Open platform work remains in upstream-parity.md.",
+  "integration": "Merged upstream 3.0 runtime changes through fork main fa9aa3f without conflicts. The macOS NativeRunner and rebuilt framework DEX include runtime/app ELF namespaces, resource-density fallbacks, TextView recursion and bitmap-cache fixes. Seven new regressions and the complete 90-test suite pass; the legacy P0 harness now links the shared JIT reservation implementation. Candidate build 9 is packaged and launched once. Source c24f0ca and main fa9aa3f were atomically pushed and remote SHAs read back; hosted CI 38990038463 completed successfully. Open platform work remains in upstream-parity.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
   "deliveryStatus": "partial-platform-integration",
@@ -19,17 +19,27 @@
     "defaultTests": 90,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": null,
+    "sourceRevision": "c24f0ca8c8d9e774449a5a95f16ecfdf0d916b27",
     "appSHA256": "29408f26de18ad99321223bafaa3ac3c349ca2e0093cef64613652c505c8dfd7",
     "nativeRunnerSHA256": "205aa11ad5119b8e095da72eed428765b51bbdd61a06cba28feaae365442c4f7",
-    "deliveryStatus": "verified-local-push-pending",
-    "gui": "Husk was already exited. CUA launched the sole build 9 Product once; main window AX showed the original 10 apps, exact Product PID 53326 confirmed. No user game or VM launched."
+    "deliveryStatus": "verified-and-pushed",
+    "gui": "Husk was already exited. CUA launched the sole build 9 Product once; main window AX showed the original 10 apps, exact Product PID 53326 confirmed. No user game or VM launched.",
+    "ci": {
+      "run": 38990038463,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463",
+      "statusAtDelivery": "completed",
+      "statusAtLastCheck": "completed",
+      "conclusionAtDelivery": "success",
+      "conclusionAtLastCheck": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 26
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 11,
     "originNewCommits": 0,
     "mainRevision": "fa9aa3fa349c53d6e00ce5e14f99528c4fba600c",
-    "macOSSourceRevision": null,
+    "macOSSourceRevision": "c24f0ca8c8d9e774449a5a95f16ecfdf0d916b27",
     "macOSAdaptation": "Real Android ELF namespace fixtures cover APK/unpacked sources and both load orders; actual Conscrypt coexists with app libcrypto. Real DEX verifies configured density, framework image fallback, compound drawable subclass dispatch, drawing cache and resized Picture/RenderNode pixels. Default CTest 90/90 in 70.58 seconds; bundle 18 Mach-O / 406 resources. P0 missing JIT symbol reproduced, fixed and classic ELF executed. Shared iOS syntax passes; no iOS device or real-game compatibility claim.",
     "previousCI": {
       "run": 38835337776,
