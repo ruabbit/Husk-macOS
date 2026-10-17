@@ -1,10 +1,23 @@
 # 上游功能与 macOS 接入现况
 
-核对日期：2026-10-16（Asia/Shanghai）。上游发布标签仍为 **2.0 = e02ac68**；upstream/main 本轮从 **0695248** 到 **4c03823**，只有 `Build 120` 一个提交，修改 iOS 构建号 119→120。先经 fork main **b377a45** 合回 macOS，均无文本冲突。重新核对 TLReport.nativeEngine、TLUnityView、project.yml、CMake/资料库/Runner 分发、Store 与图形依赖；本轮上游没有新运行时功能。既有 2.0、手柄、Geode 和 PS4 宿主接线保留，PS4 产品链路仍开放。
+核对日期：2026-10-17（Asia/Shanghai）。upstream/main 从 **4c03823** 到 **a3407fc**，11 个提交、19 个路径；源码版本号已改为 **3.0.0**，远端尚无 3.0 tag，最新发布标签仍为 **2.0 = e02ac68**。origin 两分支没有外来新提交；上游先普通合并到 fork main **fa9aa3f**，再合回 macOS，无文本冲突。
 
-本轮继续交付 Java 内嵌 WebView：存档绑定、旧数据关联保留、文档异步卸载、待回复回调/网络请求回收、cookie 写入等待、独立 WebKit 托管回执与清除存档已接入 NativeRunner 和监督器。WebView 的 IO/桥接 worker 与 SharedPreferences 空闲 writer 退出也已补齐。**2.0.0 / build 8** 在唯一 `build/macos` 构建，默认 **CTest 83/83（68.96 秒）** 通过。包内 **18 个 Mach-O / 406 个运行资源** 校验通过，CUA 已重开一次 build 8 并核对原有 10 个应用；代码提交 **b551a50** 与 main **b377a45** 已推送并读回。完整交付记录见 [progress.md](progress.md)。本轮测试均为真实 DEX fixture 的后台独立存档；没有把它们写成真实游戏兼容。
+本轮共享 loader 的运行时/应用库隔离、Java 配置密度及框架图像回退、TextView 递归修复、Picture/RenderNode/绘图缓存释放，已编入 macOS NativeRunner 和重新构建的 framework DEX。新增 7 项回归验证 APK/解包库、两种加载顺序、真实 Conscrypt 与应用 libcrypto 共存及 Java 绘图/资源行为。上游共享 JIT 分区和 TrollStore/JIT 提示属于 iOS；macOS 保留独立 NativeRunner/VMRunner 与权限模型。P0 classic harness 因新增 tl_jit_reserve_bottom 漏链接的问题已复现并修正，真实 ELF 执行通过。
 
-fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 本次核对仍为开放草稿，没有评论/review，iOS 真机验证仍缺。PR #82 接口继续返回 404，不能确认其远端状态；已采用的单例修复保留。本轮代码的 [CI 38835337776](https://github.com/ruabbit/Husk-macOS/actions/runs/38835337776) 已完成并成功，hardware job 按配置跳过；不替代实体设备或真实游戏验收。
+**3.0.0 / build 9** 在唯一 `build/macos` 原位构建，VM=ON；默认 **CTest 90/90（70.58 秒）**，包内 **18 个 Mach-O / 406 个 Java 资源** 校验通过。CUA 单次打开当前候选，主窗口显示原有 10 个应用，Product PID **53326** 已核对。提交、推送及本轮 hosted CI 尚待收尾，详见 [progress.md](progress.md)。旧的 2.0/手柄/Geode/窗口/Store/图形接线均已复核；不能将此次版本更新写成 PS4、真实游戏或 Play 登录验收。
+
+fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 仍为开放草稿，没有评论/review。PR #82 接口返回 404，已采用的单例修复保留；没有重复建 PR。
+
+## 3.0 本轮变更
+
+| 上游变更 | macOS 接入和验证 |
+| --- | --- |
+| 运行时与应用同名 ELF 隔离 | 共享 loader 已编入 NativeRunner；真实 arm64 ELF 测试覆盖 APK/解包目录、应用先加载/运行时先加载、依赖重定位、构造函数、dlsym 和重复加载；Conscrypt SSLContext 在应用自带 libcrypto 时实际初始化通过 |
+| Resources 密度与框架图片 | 新 framework DEX 已打包；真实 DEX 使用空 DisplayMetrics + 480 dpi Configuration，核对密度与图片加载，再切换 mdpi 验证固定 framework-res 的图像回退 |
+| TextView / View | 子类在绝对和相对 compound drawable 接口间转发不会再递归；cancelLongPress 与绘图缓存重用/缩放后释放/销毁由真实 DEX 检查 |
+| Picture / RenderNode | 已接入上游的替换位图释放；真实 DEX 连续改变尺寸并核对输出像素、discardDisplayList 后不再绘制与内存用量归零。没有把这些断言当作长期内存压力测试 |
+| JIT 区域分配、诊断与 TrollStore | iOS 修复完整保留；共享 C 文件及 iOS JIT 文件 SDK 语法检查通过。macOS 本来由独立进程持有各自 JIT，保留现有内存/权限验证，不显示 iPhone 的 StikDebug 操作提示 |
+| Console / Mac harness | 采用上游弱符号门控，保留本地停止与线程回收协议；console 回归全部通过。真实 PS4 core 仍未打包 |
 
 ## 2.0 发布功能
 
@@ -53,7 +66,7 @@ Java 关闭先等待 Activity/框架 worker/preferences/SQLite，WebView 自身�
 
 ## 后续开放项
 
-1. Java 内嵌 WebView：基础存储/关闭/删除已完成上述 build 8 接入与 fixture 验证。下一步以真实应用验证插件、HTTP 页面和完整保存重开；需要 pagehide 调用 Java 插件的应用，应设计 Android 销毁前的受控 Web 关闭阶段，明确停止接收新任务及回执顺序，再接入，当前继续拒绝这类完成回执。通用 Java Thread.interrupt/等待唤醒语义仍开放，不能取消 guest worker 检查或仅延长超时。macOS 14 实机、网络取消超时和系统 WebKit 异常恢复也尚未实测。
+1. Java 内嵌 WebView：基础存储/关闭/删除已完成上述 build 8 接入与 fixture 验证。下一步以真实应用验证插件、HTTP 页面和完整保存重开。2026-10-17 复核确认：WebKit 会在真实卸载时压掉 prompt，因此仅将现有 tl_web_close_for_host 提前到 tl_javaapp_stop 之前仍不能支持 pagehide 的同步 Java 桥。需要先设计受控的卸载前保存阶段，保持 AppMain/bridge 消息循环可用，保证页面生命周期只交付一次、停止新导航/普通任务、排空已接收的插件任务，然后销毁 Android、回收 WebKit 并组合回执。现有失败检查不能删除；该实现继续开放。通用 Java Thread.interrupt/等待唤醒语义仍开放，不能取消 guest worker 检查或仅延长超时。macOS 14 实机、网络取消超时和系统 WebKit 异常恢复也尚未实测。
 2. Geode：下载、配置、启动注入和存储关闭回归已进入 build 6。下一步使用独立存档验证真实 Geometry Dash、官方 Geode 发布包和模组，从设置开关、版本匹配下载到交互、保存重开；不要把自建 ELF 的通过当作这些外部程序已兼容。共享 GeodeUtils 的剪贴板、选文件/文件夹、openWebview、restartGame 仍继承上游的空实现/拒绝行为，需要实际使用证据后逐项适配。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
 4. Egg：继续核对 DT_INIT/PLT；已知构造函数 RVA 0x1621794 调用 0x16413c0，槽 0x17636b8 仍为 0x1625d90 且没有该槽重定位。2026-10-13 静态检查确认 DT_INIT=0x17a0000，通过槽 0x1798000 调用导入的 ExecuteProgram；尚不能证明其完成所需初始化。NativeActivity 目前提供合成 Activity，未执行自定义 Application 的 Java 启动；不能直接切换到 Java profile，因为 framework 的 NativeActivity 仍是签名 stub。下一步核对 ExecuteProgram 的输入/输出和 Java Application 初始化契约，再设计对应 bridge/fixture；未复跑 Egg，也没有跳过保护或修改用户 APK。

@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "0695248f491cda877f7969d1f0cc89aeede1482e",
-  "integratedRevision": "4c03823ba1ca529e9d8ab28d8ec4b1a3547661ff",
-  "checkedOn": "2026-10-16",
-  "commitCount": 1,
-  "integration": "Merged the one upstream iOS build-number update through fork main b377a45 and macOS b551a50 without conflicts; both normally pushed and remote SHAs confirmed. Delivered Java WebView save identity, legacy binding preservation, asynchronous document detach, WebKit ownership and deletion in build 8. Framework worker and idle preferences-writer teardown are verified. Real games, late pagehide Java plugins and PS4 product delivery remain open in upstream-parity.md.",
+  "previousRevision": "4c03823ba1ca529e9d8ab28d8ec4b1a3547661ff",
+  "integratedRevision": "a3407fc7fc275efa6c7d346d3d61ef6c7367a470",
+  "checkedOn": "2026-10-17",
+  "commitCount": 11,
+  "integration": "Merged upstream 3.0 runtime changes through fork main fa9aa3f without conflicts. The macOS NativeRunner and rebuilt framework DEX include runtime/app ELF namespaces, resource-density fallbacks, TextView recursion and bitmap-cache fixes. Seven new regressions and the complete 90-test suite pass; the legacy P0 harness now links the shared JIT reservation implementation. Candidate build 9 is packaged and launched once; commit/push and hosted CI pending. Open platform work remains in upstream-parity.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
   "deliveryStatus": "partial-platform-integration",
@@ -14,34 +14,25 @@
     "revision": "e02ac68f1065e86dd40a371020c1243bbc685b7f"
   },
   "candidate": {
-    "version": "2.0.0",
-    "build": "8",
-    "defaultTests": 83,
+    "version": "3.0.0",
+    "build": "9",
+    "defaultTests": 90,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": "b551a5062cfc9f3df1e352cd5fd51a1ea940f158",
-    "appSHA256": "a5947bcdaa8e8a4a227a8a8e7e740d8507a60748e26b53951740d3db85f6222e",
-    "nativeRunnerSHA256": "257bf6b7e3c19bd834ba16a4dac9963c9aea9e2a0b9859491a969c132628893e",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "CUA normally quit idle Husk before packaging and launched the sole build 8 Product once. Main window AX showed the original 10 apps; exact Product process PID 86539 was verified. No user game or VM launched.",
-    "ci": {
-      "run": 38835337776,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38835337776",
-      "statusAtDelivery": "completed",
-      "statusAtLastCheck": "completed",
-      "conclusionAtDelivery": "success",
-      "conclusionAtLastCheck": "success",
-      "hardware": "skipped"
-    }
+    "sourceRevision": null,
+    "appSHA256": "29408f26de18ad99321223bafaa3ac3c349ca2e0093cef64613652c505c8dfd7",
+    "nativeRunnerSHA256": "205aa11ad5119b8e095da72eed428765b51bbdd61a06cba28feaae365442c4f7",
+    "deliveryStatus": "verified-local-push-pending",
+    "gui": "Husk was already exited. CUA launched the sole build 9 Product once; main window AX showed the original 10 apps, exact Product PID 53326 confirmed. No user game or VM launched."
   },
   "lastCheck": {
-    "upstreamNewCommits": 1,
+    "upstreamNewCommits": 11,
     "originNewCommits": 0,
-    "mainRevision": "b377a459de381f3e10dd1b1e66a03cd6db0ec1fc",
-    "macOSSourceRevision": "b551a5062cfc9f3df1e352cd5fd51a1ea940f158",
-    "macOSAdaptation": "Java WebView stable save identities and legacy bindings; real document detach, pending handler/network/cookie drains, separate Android and WebKit receipts, helper-owned removal. Default CTest 83/83 in 68.96 seconds; additional original legacy-UUID assertion passed; bundle 18 Mach-O / 406 resources and shared iOS ObjC syntax pass. No real game compatibility claim.",
+    "mainRevision": "fa9aa3fa349c53d6e00ce5e14f99528c4fba600c",
+    "macOSSourceRevision": null,
+    "macOSAdaptation": "Real Android ELF namespace fixtures cover APK/unpacked sources and both load orders; actual Conscrypt coexists with app libcrypto. Real DEX verifies configured density, framework image fallback, compound drawable subclass dispatch, drawing cache and resized Picture/RenderNode pixels. Default CTest 90/90 in 70.58 seconds; bundle 18 Mach-O / 406 resources. P0 missing JIT symbol reproduced, fixed and classic ELF executed. Shared iOS syntax passes; no iOS device or real-game compatibility claim.",
     "previousCI": {
-      "run": 38664636797,
+      "run": 38835337776,
       "conclusion": "success"
     }
   },
@@ -74,8 +65,9 @@
     "legacyPolicy": "Existing native data without a marker retains the old package UUID. Clearing that save drops its binding and uses a fresh UUID on next launch; shared legacy WebKit bytes are retained to protect other libraries.",
     "remaining": [
       "Real application/plugin and HTTP-page persistence; no fsync claim for system WebKit databases.",
-      "Java plugin calls during pagehide after Android destruction are rejected; a pre-destroy web-close phase remains to be implemented.",
+      "Java plugin calls during pagehide after Android destruction are rejected. WebKit suppresses unload prompt(), so merely moving the existing close earlier is insufficient. A controlled pre-unload save stage must retain AppMain/bridge dispatch, deliver lifecycle once, drain plugin work, then destroy Android and acknowledge both owners.",
       "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit failure recovery and cancellation timeouts remain unverified."
     ]
-  }
+  },
+  "sourceVersion": "3.0.0"
 }

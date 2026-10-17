@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-10-17 上游 3.0 运行时修复与 build 9
+
+从干净的 `codex/macos-p0=8fa4003` 开始，确认远端地址、单一工作区、没有未完成 Git 操作或本项目构建/游戏/VM。主程序已退出；系统中其他项目的 UTM/QEMU 不属于 Husk，未触碰。fetch origin/upstream 后，origin 两分支无外来提交，上游 `4c03823..a3407fc` 有 11 个提交、19 个路径。源码版本为 3.0.0，远端没有 3.0 tag，最新发布 tag 仍为 2.0。先普通 merge 到 main **fa9aa3fa349c53d6e00ce5e14f99528c4fba600c**，再合回 macOS，无文本冲突；未使用 ours、stash、重置或清理用户工作。
+
+共享 loader 的运行时/应用库隔离已进入 NativeRunner。Resources 的 Configuration 密度、精简 framework 图像回退、TextView compound drawable 递归修复、View.cancelLongPress，以及 Picture/RenderNode/绘图缓存的位图释放均进入重新构建的 framework DEX。对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake/资料库/Runner、Store/Play 和图形依赖，本轮没有新的引擎/Store 分发项；既有输入、手柄、固定画布、默认失焦继续、正常关闭协议和 Geode 均保留。iOS 的 QEMU/原生共享 JIT 分区、TrollStore 和诊断修复完整合入，但不套用到 macOS 独立 Runner 的内存模型。
+
+新增 7 项后台回归：4 组真实 Android ELF 覆盖 APK/解包目录、同名库两种加载顺序、依赖构造函数/重定位/dlsym/重复加载；2 组真实 Dalvik/Conscrypt 覆盖应用携带冲突 libcrypto；1 组真实 Java Activity 检查资源密度、framework 图片、TextView 子类转发、View 绘图缓存复用和回收、Picture/RenderNode 替换后的像素与 display list 释放。针对性回归 **7/7（2.13 秒）**，完整默认 **CTest 90/90（70.58 秒）**。这批是独立 fixture，不代表微信、Compose 应用或其他真实游戏已验收，也不是长期内存压力测试。
+
+额外预检发现 CI 的 P0 classic harness 未链接上游新增的 `tl_jit_reserve_bottom`，确实复现 undefined symbol。构建脚本已链接真实 husk-tl-xmem 实现，随后在 build/macos 内编译、按既有测试权限签名并执行经典 16 KiB ELF，构造函数/全局重定位通过。4 个共享 loader/JIT/console 文件的 iOS 17 SDK 语法检查通过；iOS 专用 JIT 文件首轮缺 QEMU include 路径，补用现有 QEMU 源码 include 后也通过。未声称 iOS 完整构建或真机验证。
+
+唯一候选 **3.0.0 / build 9** 已原位更新，保留 VM=ON 和依赖/Java 缓存。包检查通过 **18 个 arm64 Mach-O / 406 个 Java 资源**。验证后 CUA 只启动一次完整 Product 路径，主窗口 AX 显示原有 10 个应用，PID **53326** 对应当前候选。主程序 SHA-256 `29408f26de18ad99321223bafaa3ac3c349ca2e0093cef64613652c505c8dfd7`；NativeRunner `205aa11ad5119b8e095da72eed428765b51bbdd61a06cba28feaae365442c4f7`。没有启动用户游戏/VM、播放测试音频或修改用户 APK/存档/Android 磁盘。
+
+本轮 WebView 关闭顺序复核已补入 upstream-parity.md：真实 unload 中 prompt 被压制，单纯提前宿主 close 无效，需保持 Java 桥可用的卸载前保存阶段和单次生命周期交付。该实现及真实游戏保存重开、旧 Unity IME、实体手柄、Geode 真模组、个人 Play 登录、PS4 产品链路、VM/P6 继续开放。fork PR #1 已合并；上游 #118 仍开放草稿无 review；#82 接口仍 404。
+
+证据复用 `build/logs/current-upstream-build.log`、`current-upstream-new-regressions.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-classic-build.log`、`current-upstream-classic-test.log`、`current-upstream-ios-syntax.log`、`current-upstream-ios-jit-syntax.log` 及 `build/macos/bundle-verification.json`。本地交付验证已完成，提交、推送、远端 SHA 和本轮 hosted CI 待收尾。
+
 ## 2026-10-16 上游 build 120 与 Java WebView 存档（build 8）
 
 从干净的 `codex/macos-p0=ba5ec17` 开始，核对工作区、origin/upstream、未完成操作和本项目进程后 fetch。origin 没有外来新提交；上游 `0695248..4c03823` 只有 `Build 120`，将 iOS 构建号 119 改为 120，发布标签仍为 2.0。对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake、Models、NativeLaunch、SessionController、NativeRunner、Store/PlayAPI 与图形依赖，本轮没有新增上游运行时功能，继续交付已记录的平台缺口。保留手柄、输入/窗口/失焦策略、Geode 和既有引擎接线。

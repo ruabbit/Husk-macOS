@@ -19,7 +19,8 @@ if not android:
     raise SystemExit('Install an Android SDK platform or set ANDROID_JAR for the lifecycle fixture')
 web = len(sys.argv) > 2 and sys.argv[2] == 'web'
 source = Path(__file__).parent/('java/WebStorageActivity.java' if web else 'java/LifecycleActivity.java')
-subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', source], check=True)
+sources = [source] if web else [source, Path(__file__).parent/'java/FrameworkChecks.java']
+subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', *sources], check=True)
 jar_classes(output/'classes', output/'classes.jar')
 subprocess.run([jdk/'bin/java', '-cp', d8, 'com.android.tools.r8.D8', '--min-api', '26', '--lib', android,
                 '--output', output, output/'classes.jar'], check=True)

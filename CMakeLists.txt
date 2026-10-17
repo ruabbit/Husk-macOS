@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Supported native architecture")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Provisional deployment floor; requires separate machine validation")
-project(HuskMac VERSION 2.0.0 LANGUAGES C OBJC Swift)
+project(HuskMac VERSION 3.0.0 LANGUAGES C OBJC Swift)
 if(NOT APPLE OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "HuskMac currently targets native macOS arm64")
 endif()
@@ -322,6 +322,26 @@ add_custom_command(TARGET JavaBootTests POST_BUILD COMMAND codesign --force --si
 add_test(NAME java-runtime-boot COMMAND JavaBootTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/TestResults/JavaBoot")
 set_tests_properties(java-runtime-boot PROPERTIES TIMEOUT 60 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
 add_test(NAME java-runtime-resources COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --verify --output ${HUSK_JAVA_RUNTIME})
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/LoaderTests/ready"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_loader_cases.py "${CMAKE_BINARY_DIR}/LoaderTests"
+    DEPENDS tests/macos/prepare_loader_cases.py tests/macos/fixture/namespace.c scripts/build_macos_fixture.py VERBATIM)
+add_custom_target(LoaderFixtures DEPENDS "${CMAKE_BINARY_DIR}/LoaderTests/ready")
+add_executable(LoaderNamespaceTests tests/macos/LoaderNamespace.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(LoaderNamespaceTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(LoaderNamespaceTests PRIVATE NativeRuntime)
+add_dependencies(LoaderNamespaceTests LoaderFixtures)
+add_custom_command(TARGET LoaderNamespaceTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:LoaderNamespaceTests>" VERBATIM)
+foreach(mode apk-first apk-system-first unpacked-first unpacked-system-first)
+    add_test(NAME core-loader-namespace-${mode} COMMAND LoaderNamespaceTests "${CMAKE_BINARY_DIR}/LoaderTests" ${mode})
+    set_tests_properties(core-loader-namespace-${mode} PROPERTIES TIMEOUT 15 ENVIRONMENT "TL_XMEM_MIB=64")
+endforeach()
+add_dependencies(JavaBootTests LoaderFixtures)
+foreach(order app-first system-first)
+    add_test(NAME java-runtime-crypto-${order} COMMAND JavaBootTests "${HUSK_JAVA_RUNTIME}"
+        "${CMAKE_BINARY_DIR}/TestResults/JavaBoot-${order}" "${CMAKE_BINARY_DIR}/LoaderTests/app.apk" ${order})
+    set_tests_properties(java-runtime-crypto-${order} PROPERTIES TIMEOUT 60 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
+endforeach()
 add_executable(MacSystemResourceTests tests/macos/SystemResources.m ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(MacSystemResourceTests PRIVATE ${MAC}/NativeRunner)
 target_compile_options(MacSystemResourceTests PRIVATE -fobjc-arc)
@@ -331,7 +351,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -339,7 +359,7 @@ target_link_libraries(JavaLifecycleTests PRIVATE NativeRuntime)
 add_dependencies(JavaLifecycleTests JavaRuntimeResources JavaLifecycleFixture)
 add_custom_command(TARGET JavaLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaLifecycleTests>" VERBATIM)
-foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle)
+foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework)
     add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")

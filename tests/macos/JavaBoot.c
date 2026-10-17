@@ -2,6 +2,7 @@
 #include "husk-tl-dvm-boot.h"
 #include "husk-tl-dvm.h"
 #include "husk-tl-jni.h"
+#include "husk-tl-ld.h"
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -12,17 +13,32 @@
 
 static char **arguments;
 static int failure;
+static int argument_count;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL Java boot line %d: %s\n",__LINE__,#c); failure=1; return NULL; } } while(0)
 static void *run(void *unused)
 {
     (void)unused;
     mac_runtime_diagnostics_install();
     mkdir(arguments[2],0700);
+    bool collision = argument_count == 5;
+    tl_lib *app_crypto = NULL;
+    if (collision) {
+        CHECK(tl_ld_add_apk(arguments[3]));
+        if (!strcmp(arguments[4],"app-first")) {
+            app_crypto = tl_ld_load("libcrypto.so"); CHECK(app_crypto && tl_ld_init(app_crypto));
+        }
+    }
     CHECK(tl_dvm_boot(arguments[1], arguments[2]));
     jvalue a={.l=tl_jni_new_string("123456")}, result;
     CHECK(tl_dvm_call_static("java/lang/Integer","parseInt","(Ljava/lang/String;)I",&a,&result) && result.i==123456);
     CHECK(tl_dvm_call_static("java/util/TimeZone","getDefault","()Ljava/util/TimeZone;",NULL,&result) && result.l);
     CHECK(tl_dvm_call_static("javax/net/ssl/SSLContext","getDefault","()Ljavax/net/ssl/SSLContext;",NULL,&result) && result.l);
+    if (collision) {
+        tl_lib *library = tl_ld_load("libcrypto.so"); CHECK(library && (!app_crypto || library == app_crypto));
+        int (*origin)(void) = tl_ld_sym(library,"namespace_origin"); CHECK(origin && origin() == 11);
+        CHECK(tl_dvm_call_static("javax/net/ssl/SSLContext","getDefault","()Ljavax/net/ssl/SSLContext;",NULL,&result) && result.l);
+        puts("PASS real Conscrypt remains usable with the app's conflicting libcrypto.so");
+    }
     a.l=tl_jni_new_string("husk.AppRunner");
     CHECK(tl_dvm_call_static("java/lang/Class","forName","(Ljava/lang/String;)Ljava/lang/Class;",&a,&result) && result.l);
     /* Unity resolves this on InputEvent, before it knows whether the incoming
@@ -44,8 +60,8 @@ static void *run(void *unused)
 }
 int main(int argc,char **argv)
 {
-    if(argc!=3)return 64;
-    arguments=argv;
+    if(argc!=3&&argc!=5)return 64;
+    arguments=argv;argument_count=argc;
     pthread_attr_t attr;pthread_attr_init(&attr);pthread_attr_setstacksize(&attr,256u<<20);
     pthread_t thread;
     if(pthread_create(&thread,&attr,run,NULL))return 1;

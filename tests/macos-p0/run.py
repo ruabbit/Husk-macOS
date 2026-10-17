@@ -94,7 +94,7 @@ def build():
               CLASSIC / "husk-tl-elf.c", CLASSIC / "husk-tl-zip.c", HERE / "host-adapter.c"]
     command([*common, HERE / "loader-test.c", *modern, "-lz", "-o", OUT / "loader-test"])
     sign(OUT / "loader-test", OUT / "unsigned.plist")
-    command([*common, HERE / "classic-test.c", CLASSIC / "husk-tl-elf.c", CLASSIC / "husk-tl-json.c",
+    command([*common, HERE / "classic-test.c", CLASSIC / "husk-tl-elf.c", CLASSIC / "husk-tl-json.c", NEXT / "husk-tl-xmem.c",
              "-Wl,-dead_strip", "-o", OUT / "classic-test"])
     sign(OUT / "classic-test", OUT / "jit.plist")
 

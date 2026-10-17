@@ -23,6 +23,7 @@ public final class LifecycleActivity extends Activity {
     private static void delay() { try { Thread.sleep(100); } catch (InterruptedException e) { throw new RuntimeException(e); } }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); owner = Thread.currentThread(); events |= 1;
+        if ("framework".equals(System.getenv("HUSK_JAVA_CASE"))) FrameworkChecks.run(this);
         View view = new View(this) {
             @Override protected void onDraw(Canvas canvas) { canvas.drawColor(0xff2864a0); }
             @Override public boolean onTouchEvent(MotionEvent e) { callback(); if (e.getActionMasked() == MotionEvent.ACTION_UP) events |= 2; return true; }
