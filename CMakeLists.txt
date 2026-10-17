@@ -364,6 +364,20 @@ foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
 endforeach()
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/KeyStoreTests/KeyStore.apk"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/KeyStoreTests" keystore
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/KeyStoreActivity.java scripts/build_java_framework.py VERBATIM)
+add_custom_target(JavaKeyStoreFixture DEPENDS "${CMAKE_BINARY_DIR}/KeyStoreTests/KeyStore.apk")
+add_executable(JavaKeyStoreTests tests/macos/JavaKeyStore.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(JavaKeyStoreTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(JavaKeyStoreTests PRIVATE NativeRuntime)
+add_dependencies(JavaKeyStoreTests JavaRuntimeResources JavaKeyStoreFixture)
+add_custom_command(TARGET JavaKeyStoreTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaKeyStoreTests>" VERBATIM)
+add_test(NAME java-keystore-import-persistence COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/JavaKeyStore.py
+    "$<TARGET_FILE:JavaKeyStoreTests>" "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/KeyStoreTests/KeyStore.apk"
+    "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/KeyStore")
+set_tests_properties(java-keystore-import-persistence PROPERTIES TIMEOUT 180)
 add_executable(MacJavaSessionTests tests/macos/JavaSession.swift)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_bootstrap.py "${CMAKE_BINARY_DIR}/NativeBootstrap"

@@ -1,5 +1,18 @@
 # 审计进度
 
+## 2026-10-18：补齐 Egg 所需的软件密钥接收端
+
+在上一轮 Java/NativeActivity 修复后继续追踪实际 APK，确认普通密钥返回后还会触发缺失的 `setEntry(SecretKeyEntry, KeyProtection)`。现已补软件 AES/GCM 导入、不导出字节的句柄及用途/模式/有效期/IV 检查；不支持的硬件/认证/包装密钥要求明确失败。KeyStore 改为 0600 临时文件同步后原子替换，失败保留旧文件和内存条目，损坏文件不再变成空库。详见 [Egg 报告](2026-10-18_reverse-egg-startup-report.md)。
+
+真实 DEX 的八进程测试覆盖导入/重开/真实 GCM 加解密与标签失败、写入和删除失败、目录隔离、删除持久化及损坏文件保护。默认 CTest **97/97（77.84 秒）**、当前候选包检查通过。新增测试只用随机测试密钥，未启动 Egg、修改用户 APK/存档或现有 Android 磁盘。Play 密钥下发服务仍开放，不能写成 Egg 已可运行。
+
+当前候选 **3.0.0 / build 11** 已原地打包，VM=ON；18 个 arm64 Mach-O、406 个 Java 资源校验通过。CUA 正常退出空闲旧实例后，单次打开 Product，PID **7656**，主窗口显示原有 11 个应用。App SHA-256 为 `810a5533490062621abf08f899139ab247b4cee69666a9305fff84c44e44feb6`，本次修改所在 framework DEX 为 `53f535efa0627cca47c631a486ce740e5707cd7da886cda8fbabb70bec1b1107`；NativeRunner 可执行文件未变。证据复用 `build/logs/current-egg-keystore-*`。
+
+已准备单套官方 ARM64 Play Android 对照环境（Emulator 37.2.12，API 35 镜像 revision 9），无窗口/静音冷启动成功。预装 Play 41.3.25 对所需 action 查询返回 **No services found**；未登录、未安装或启动 Egg，随后 guest 正常关机。该环境独立于 Husk VMRunner，路径为 `build/macos/PlayValidation/avd/husk-play-validation.avd`。后续需要可用的实际 Play 服务和用户本人身份验证，不能用导入端回归代替；用户 APK、存档、原 Android 磁盘及 USB 设备均未修改。
+
+前一代码提交 e1d8060 的 [CI 39059495981](https://github.com/ruabbit/Husk-macOS/actions/runs/39059495981) 已读回 **completed / success**；下方“in_progress”为当时记录。
+
+
 ## 2026-10-18 Egg 启动桥与 build 10
 
 用户授权按调查建议修复；基线 eaf9911，工作区初始干净，仍在 codex/macos-p0。通用 NativeActivity profile 已改为真实 Java Application → attachBaseContext/自定义 ClassLoader → providers/Application.onCreate → Java Activity → NDK 入口；UE4 专用路径保留。补 framework NativeActivity、ContextImpl/LoadedApk 的加载器状态、Class.forName 指定加载器派发、同线程窗口/输入/暂停/失败清理及原生销毁确认。SessionController 同时校验 Java Web 存储关闭回执。

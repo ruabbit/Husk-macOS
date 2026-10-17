@@ -11,7 +11,7 @@ public final class KeyProtection implements java.security.KeyStore.ProtectionPar
     public java.util.Date getKeyValidityForConsumptionEnd() { return (java.util.Date) huskProps.get("KeyValidityForConsumptionEnd"); }
     public java.util.Date getKeyValidityForOriginationEnd() { return (java.util.Date) huskProps.get("KeyValidityForOriginationEnd"); }
     public java.util.Date getKeyValidityStart() { return (java.util.Date) huskProps.get("KeyValidityStart"); }
-    public int getMaxUsageCount() { return (huskProps.get("MaxUsageCount") instanceof Integer ? (Integer) huskProps.get("MaxUsageCount") : 0); }
+    public int getMaxUsageCount() { return (huskProps.get("MaxUsageCount") instanceof Integer ? (Integer) huskProps.get("MaxUsageCount") : -1); }
     public java.util.Set getMgf1Digests() { return (huskProps.get("Mgf1Digests") != null ? (java.util.Set) huskProps.get("Mgf1Digests") : new java.util.HashSet()); }
     public int getPurposes() { return (huskProps.get("Purposes") instanceof Integer ? (Integer) huskProps.get("Purposes") : 0); }
     public java.lang.String[] getSignaturePaddings() { return (java.lang.String[]) huskProps.get("SignaturePaddings"); }
@@ -21,7 +21,7 @@ public final class KeyProtection implements java.security.KeyStore.ProtectionPar
     public boolean isDigestsSpecified() { return (huskProps.get("DigestsSpecified") instanceof Boolean ? (Boolean) huskProps.get("DigestsSpecified") : false); }
     public boolean isInvalidatedByBiometricEnrollment() { return (huskProps.get("InvalidatedByBiometricEnrollment") instanceof Boolean ? (Boolean) huskProps.get("InvalidatedByBiometricEnrollment") : false); }
     public boolean isMgf1DigestsSpecified() { return (huskProps.get("Mgf1DigestsSpecified") instanceof Boolean ? (Boolean) huskProps.get("Mgf1DigestsSpecified") : false); }
-    public boolean isRandomizedEncryptionRequired() { return (huskProps.get("RandomizedEncryptionRequired") instanceof Boolean ? (Boolean) huskProps.get("RandomizedEncryptionRequired") : false); }
+    public boolean isRandomizedEncryptionRequired() { return (huskProps.get("RandomizedEncryptionRequired") instanceof Boolean ? (Boolean) huskProps.get("RandomizedEncryptionRequired") : true); }
     public boolean isRollbackResistant() { return (huskProps.get("RollbackResistant") instanceof Boolean ? (Boolean) huskProps.get("RollbackResistant") : false); }
     public boolean isStrongBoxBacked() { return (huskProps.get("StrongBoxBacked") instanceof Boolean ? (Boolean) huskProps.get("StrongBoxBacked") : false); }
     public boolean isUnlockedDeviceRequired() { return (huskProps.get("UnlockedDeviceRequired") instanceof Boolean ? (Boolean) huskProps.get("UnlockedDeviceRequired") : false); }
@@ -40,8 +40,8 @@ public final class KeyProtection implements java.security.KeyStore.ProtectionPar
         public android.security.keystore.KeyProtection.Builder setDigests(java.lang.String[] p0) { huskProps.put("Digests", p0); return this; }
         public android.security.keystore.KeyProtection.Builder setEncryptionPaddings(java.lang.String[] p0) { huskProps.put("EncryptionPaddings", p0); return this; }
         public android.security.keystore.KeyProtection.Builder setInvalidatedByBiometricEnrollment(boolean p0) { huskProps.put("InvalidatedByBiometricEnrollment", Boolean.valueOf(p0)); return this; }
-        public android.security.keystore.KeyProtection.Builder setIsStrongBoxBacked(boolean p0) { huskProps.put("IsStrongBoxBacked", Boolean.valueOf(p0)); return this; }
-        public android.security.keystore.KeyProtection.Builder setKeyValidityEnd(java.util.Date p0) { huskProps.put("KeyValidityEnd", p0); return this; }
+        public android.security.keystore.KeyProtection.Builder setIsStrongBoxBacked(boolean p0) { huskProps.put("StrongBoxBacked", Boolean.valueOf(p0)); return this; }
+        public android.security.keystore.KeyProtection.Builder setKeyValidityEnd(java.util.Date p0) { huskProps.put("KeyValidityForConsumptionEnd", p0); huskProps.put("KeyValidityForOriginationEnd", p0); return this; }
         public android.security.keystore.KeyProtection.Builder setKeyValidityForConsumptionEnd(java.util.Date p0) { huskProps.put("KeyValidityForConsumptionEnd", p0); return this; }
         public android.security.keystore.KeyProtection.Builder setKeyValidityForOriginationEnd(java.util.Date p0) { huskProps.put("KeyValidityForOriginationEnd", p0); return this; }
         public android.security.keystore.KeyProtection.Builder setKeyValidityStart(java.util.Date p0) { huskProps.put("KeyValidityStart", p0); return this; }
@@ -51,7 +51,7 @@ public final class KeyProtection implements java.security.KeyStore.ProtectionPar
         public android.security.keystore.KeyProtection.Builder setRollbackResistant(boolean p0) { huskProps.put("RollbackResistant", Boolean.valueOf(p0)); return this; }
         public android.security.keystore.KeyProtection.Builder setSignaturePaddings(java.lang.String[] p0) { huskProps.put("SignaturePaddings", p0); return this; }
         public android.security.keystore.KeyProtection.Builder setUnlockedDeviceRequired(boolean p0) { huskProps.put("UnlockedDeviceRequired", Boolean.valueOf(p0)); return this; }
-        public android.security.keystore.KeyProtection.Builder setUserAuthenticationParameters(int p0, int p1) { return this; }
+        public android.security.keystore.KeyProtection.Builder setUserAuthenticationParameters(int p0, int p1) { huskProps.put("UserAuthenticationValidityDurationSeconds", p0); huskProps.put("UserAuthenticationType", p1); return this; }
         public android.security.keystore.KeyProtection.Builder setUserAuthenticationRequired(boolean p0) { huskProps.put("UserAuthenticationRequired", Boolean.valueOf(p0)); return this; }
         public android.security.keystore.KeyProtection.Builder setUserAuthenticationValidWhileOnBody(boolean p0) { huskProps.put("UserAuthenticationValidWhileOnBody", Boolean.valueOf(p0)); return this; }
         public android.security.keystore.KeyProtection.Builder setUserAuthenticationValidityDurationSeconds(int p0) { huskProps.put("UserAuthenticationValidityDurationSeconds", Integer.valueOf(p0)); return this; }

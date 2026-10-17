@@ -134,3 +134,34 @@ DEX 中 `KeyImportActiveClient.importEncryptionKey` 明确向 Play Store 包绑�
 - `current-egg-vmrunner-path.json`、`current-egg-key-service.json`：资源 URL 截取与实际绑定服务的 DEX 证据。
 
 下一步是核对合法 Play 安装所需的密钥下发、Android KeyStore 持久化和 Binder 服务环境，或在有完整 Play 环境的隔离 Android VM 中验证同一版本；不得通过返回假密钥、跳过保护、修改 APK 或补猜测的 PLT 地址来关闭此问题。在相关环境尚未接通前，不重复运行这个样本。
+
+
+## 软件 KeyStore 导入与持久化修复
+
+继续只读检查 APK 的 `KeyStoreManager` 后，确认 `saveUnwrappedEncryptionKey()` 使用 `SecretKeySpec("AES")`、`KeyStore.SecretKeyEntry` 和 `KeyProtection` 调用 `KeyStore.setEntry()`，配置为 GCM / NoPadding / SHA-256。`saveWrappedEncryptionKey()` 是另一个硬件包装密钥路径。这两个路径都依赖真实 Play 服务先返回对应密钥；APK 本身不是密钥下发服务。
+
+源码中的 AndroidKeyStore 之前没有覆盖 `engineSetEntry()`，继承实现会拒绝 Android 的 `KeyProtection`。即使服务已返回普通 AES 密钥，仍会在本地导入失败。此外，旧实现原地覆盖序列化文件、吞掉写入错误；加载损坏文件时退化为空表，有覆盖旧密钥的风险。
+
+本次修复：
+
+- 新增软件 AES/GCM/NoPadding 导入，接受调用者实际提供的 128/192/256 位 AES 密钥；JCA 取回的是不导出字节的句柄。Cipher 检查用途、有效期、模式以及随机加密的 IV 约束；删除或替换后的旧句柄不能重新初始化 Cipher。
+- 不宣称硬件 Keystore，不提供假 Play 密钥。StrongBox、用户认证、设备解锁、使用次数等尚不能履行的导入要求明确失败；WrappedKeyEntry 仍拒绝。软件实现保留应用私有目录中的序列化格式，不等价于 TEE、Secure Enclave 或 Keychain 的安全边界；旧生成器的策略范围不在这次 AES 导入修复内。
+- 写入采用同目录 0600 临时文件、文件同步和原子替换，文件提交后才发布内存状态。写入或删除失败向调用方抛错并保留旧状态；损坏、读不到的存储不能被当作新的空表。此回归没有覆盖整机掉电耐久性。
+- 修正 KeyProtection 的无限使用次数、随机加密默认值、StrongBox 字段和有效期终点映射。协议参数参考 [Android API](https://developer.android.com/reference/android/security/keystore/KeyProtection.Builder) 及 [AOSP KeyProtection](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/keystore/java/android/security/keystore/KeyProtection.java)；Context7 本轮返回配额耗尽，未把它记为文档查询成功。
+
+`java-keystore-import-persistence` 在真实 DEX/Conscrypt 中使用随机测试密钥，以八个独立进程检查导入、重开解密、写入/删除失败、第二次重开、应用目录隔离、删除、删除后重开与损坏存储保护，并检查 GCM 认证标签、用途/期限/模式、硬件请求拒绝、句柄不能被重新导入以丢弃策略及文件权限。全过程静音、无可见窗口，临时数据结束后删除。默认 CTest **97/97，77.84 秒**，完整候选构建和包校验通过。
+
+真实 Egg 未在本轮重跑：下发服务尚未接通，只有本地接收端发生变化，没有再次启动已知失败样本的必要。它仍未到达游戏 NativeActivity，旧构造函数初始化结果和存档重开仍未验收。当前缺口不能用更多随机密钥测试关闭。
+
+新增证据：`build/logs/current-egg-keystore-contract.json`、`current-egg-keystore-methods.json` 保存调用摘要；`current-egg-keystore-build.log`、`current-egg-keystore-tests.log`、`current-egg-keystore-ctest.log`、`current-egg-keystore-bundle.json` 保存本地验证。没有收集或输出用户密钥、账号 token。
+
+
+## 官方 Play Android 对照环境
+
+本机原先没有 Android SDK 系统镜像或 AVD。通过 Google 官方 SDK 源安装了 Android Emulator **37.2.12** 以及 `system-images;android-35;google_apis_playstore;arm64-v8a` **revision 9**；沿用 SDK 已接受的许可，没有自动回答新的许可提示。只创建一套独立 `build/macos/PlayValidation/avd/husk-play-validation.avd`，使用 HVF、2 核、2 GB 内存、4 GB 数据分区、无快照、无窗口、无音频。未触碰 Husk 已有 Android 磁盘或 USB 设备。
+
+该系统单次冷启动完成，Android 15 / API 35。真实安装的 Play Store 为 **41.3.25-31 / 84132530**。对精确 action 执行 `cmd package query-services --brief --components -a com.android.vending.securedatatransfer.IAntiTamperKeyTransferService -p com.android.vending` 返回 **No services found**；package 服务清单也没有该 action。这个结果仅说明此镜像当前未提供所需服务，不能推断所有 Play 镜像都不可用，也不能把装有 Play Store 当作服务通过。
+
+没有登录个人账号，没有把 Egg 安装或启动到该环境。检查结束已通过 guest `reboot -p` 正常关机；保留这一套验证环境供后续使用。这是 Android 对照环境，未接入 Husk 的 VMRunner，也不是 macOS 原生运行兼容性证明。下一步需要先经 Play 支持的流程更新并确认服务，再由用户本人完成必要身份验证和合法安装；设备认证及密钥下发是否成功仍须实际证明。也可在用户明确选定的正常 Android 设备上做同版本对照；不导出设备密钥、不伪装 Binder 调用者、不修改 APK。
+
+结果记录为 `build/logs/current-egg-play-environment.json`；SDK 包清单、安装日志、独立 AVD 和 emulator 日志均以 `current-egg-*` 前缀复用。上一代码提交 `e1d8060` 的 GitHub CI 已读回 completed/success；本次新提交的远端 CI 状态应另行核对。

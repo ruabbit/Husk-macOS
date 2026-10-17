@@ -2,6 +2,9 @@ package husk;
 
 import java.io.*;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.*;
 import java.security.cert.Certificate;
 import java.security.spec.AlgorithmParameterSpec;
@@ -13,16 +16,17 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * "AndroidKeyStore": Android's hardware-backed key store, as a JCA provider apps find by that name. Keys here are ordinary keys made
- * by the other providers (conscrypt, BouncyCastle) and kept in the app's own data, which iOS's sandbox protects: what apps do with
- * them (EncryptedSharedPreferences, Tink, signing) works the same. KeyGenerator (AES, HMAC) and KeyPairGenerator (RSA, EC) take
- * KeyGenParameterSpec and store the key under its alias.
+ * Software compatibility provider for AndroidKeyStore. Key material lives in the app's private data,
+ * not secure hardware. Imported AES/GCM keys have opaque handles and software-enforced usage policy;
+ * hardware, authentication and wrapped-key import requests are not advertised or emulated.
  */
 public final class KeyStoreProvider extends Provider {
     public static final String NAME = "AndroidKeyStore";
     public KeyStoreProvider() {
         super(NAME, 1.0, "Husk's AndroidKeyStore");
         put("KeyStore.AndroidKeyStore", Store.class.getName());
+        put("Cipher.AES/GCM/NoPadding", ImportedGCM.class.getName());
+        put("Cipher.AES/GCM/NoPadding SupportedKeyClasses", KeyStoreImport.Handle.class.getName());
         for (String a : new String[] { "AES", "HmacSHA1", "HmacSHA224", "HmacSHA256", "HmacSHA384", "HmacSHA512", "DESede" }) put("KeyGenerator." + a, SecretGen.class.getName() + "$" + a.replace("Hmac", "H"));
         put("KeyPairGenerator.RSA", PairGen.class.getName() + "$RSA");
         put("KeyPairGenerator.EC", PairGen.class.getName() + "$EC");
@@ -42,26 +46,62 @@ public final class KeyStoreProvider extends Provider {
         private static final long serialVersionUID = 1;
         Key secretOrPrivate;
         PublicKey publicKey;
+        KeyStoreImport.Policy policy;
         long created = System.currentTimeMillis();
     }
     private static LinkedHashMap<String, Entry> sKeys;
     private static File file() { return new File(Native.dataDir(), ".husk_keystore"); }
-    @SuppressWarnings("unchecked")
     static synchronized LinkedHashMap<String, Entry> huskKeys() {
         if (sKeys != null) return sKeys;
-        sKeys = new LinkedHashMap<>();
+        LinkedHashMap<String, Entry> loaded = new LinkedHashMap<>();
         File f = file();
-        if (f.isFile()) {
-            try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(f))) { sKeys = (LinkedHashMap<String, Entry>) in.readObject(); }
-            catch (Exception e) { android.util.Log.w("Husk", "AndroidKeyStore: could not read the keys: " + e); }
+        if (!Files.notExists(f.toPath())) {
+            try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(f))) {
+                Object value = in.readObject();
+                if (!(value instanceof LinkedHashMap)) throw new IOException("invalid key store");
+                for (Map.Entry<?, ?> item : ((LinkedHashMap<?, ?>)value).entrySet()) {
+                    if (!(item.getKey() instanceof String) || !(item.getValue() instanceof Entry))
+                        throw new IOException("invalid key store entry");
+                    loaded.put((String)item.getKey(), (Entry)item.getValue());
+                }
+            } catch (Exception e) {
+                // A damaged or unreadable store must not become an empty, writable one.
+                throw new ProviderException("Cannot read AndroidKeyStore; existing file preserved", e);
+            }
         }
+        sKeys = loaded;
         return sKeys;
     }
-    static synchronized void save() {
-        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(file()))) { out.writeObject(sKeys); }
-        catch (Exception e) { android.util.Log.w("Husk", "AndroidKeyStore: could not save the keys: " + e); }
+    private static void persist(LinkedHashMap<String, Entry> next) {
+        File temporary = null;
+        try {
+            temporary = Files.createTempFile(file().getParentFile().toPath(), ".husk_keystore-", ".tmp",
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"))).toFile();
+            try (FileOutputStream stream = new FileOutputStream(temporary);
+                 ObjectOutputStream out = new ObjectOutputStream(stream)) {
+                out.writeObject(next);
+                out.flush();
+                stream.getFD().sync();
+            }
+            Files.move(temporary.toPath(), file().toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception e) {
+            throw new ProviderException("Cannot persist AndroidKeyStore; previous entries preserved", e);
+        } finally {
+            if (temporary != null && temporary.exists()) temporary.delete();
+        }
+        sKeys = next; // Publish only after the file was committed.
     }
-    static synchronized void put(String alias, Entry e) { huskKeys().put(alias, e); save(); }
+    static synchronized void put(String alias, Entry e) {
+        if (alias == null) throw new NullPointerException("alias");
+        LinkedHashMap<String, Entry> next = new LinkedHashMap<>(huskKeys());
+        next.put(alias, e);
+        persist(next);
+    }
+    static synchronized Entry entry(String alias) { return huskKeys().get(alias); }
+    private static synchronized void delete(String alias) {
+        LinkedHashMap<String, Entry> next = new LinkedHashMap<>(huskKeys());
+        if (next.remove(alias) != null) persist(next);
+    }
 
     /** A certificate that carries only its public key (Android's are self-signed X.509; what apps read is the key). */
     static final class KeyCertificate extends Certificate {
@@ -75,35 +115,50 @@ public final class KeyStoreProvider extends Provider {
     }
 
     public static final class Store extends KeyStoreSpi {
-        @Override public Key engineGetKey(String alias, char[] password) { Entry e = huskKeys().get(alias); return e == null ? null : e.secretOrPrivate; }
+        @Override public Key engineGetKey(String alias, char[] password) { Entry e = entry(alias); return e == null ? null : e.policy == null ? e.secretOrPrivate : new KeyStoreImport.Handle(alias, e); }
         @Override public Certificate[] engineGetCertificateChain(String alias) { Certificate c = engineGetCertificate(alias); return c == null ? null : new Certificate[] { c }; }
-        @Override public Certificate engineGetCertificate(String alias) { Entry e = huskKeys().get(alias); return e == null || e.publicKey == null ? null : new KeyCertificate(e.publicKey); }
-        @Override public Date engineGetCreationDate(String alias) { Entry e = huskKeys().get(alias); return e == null ? null : new Date(e.created); }
-        @Override public void engineSetKeyEntry(String alias, Key key, char[] password, Certificate[] chain) {
+        @Override public Certificate engineGetCertificate(String alias) { Entry e = entry(alias); return e == null || e.publicKey == null ? null : new KeyCertificate(e.publicKey); }
+        @Override public Date engineGetCreationDate(String alias) { Entry e = entry(alias); return e == null ? null : new Date(e.created); }
+        @Override public void engineSetEntry(String alias, KeyStore.Entry entry, KeyStore.ProtectionParameter protection) throws KeyStoreException {
+            if (entry instanceof KeyStore.SecretKeyEntry && protection instanceof android.security.keystore.KeyProtection) {
+                KeyStoreImport.importKey(alias, ((KeyStore.SecretKeyEntry)entry).getSecretKey(),
+                        (android.security.keystore.KeyProtection)protection);
+                return;
+            }
+            // The superclass rejects unsupported protection parameters and WrappedKeyEntry.
+            super.engineSetEntry(alias, entry, protection);
+        }
+        @Override public void engineSetKeyEntry(String alias, Key key, char[] password, Certificate[] chain) throws KeyStoreException {
+            if (key instanceof KeyStoreImport.Handle)
+                throw new KeyStoreException("An imported key handle cannot be reimported without its original policy");
             Entry e = new Entry();
             e.secretOrPrivate = key;
             if (chain != null && chain.length > 0) e.publicKey = chain[0].getPublicKey();
-            put(alias, e);
+            try { put(alias, e); } catch (ProviderException ex) { throw new KeyStoreException(ex); }
         }
         @Override public void engineSetKeyEntry(String alias, byte[] key, Certificate[] chain) throws KeyStoreException { throw new KeyStoreException("not supported"); }
-        @Override public void engineSetCertificateEntry(String alias, Certificate cert) {
+        @Override public void engineSetCertificateEntry(String alias, Certificate cert) throws KeyStoreException {
             Entry e = new Entry();
             e.publicKey = cert.getPublicKey();
-            put(alias, e);
+            try { put(alias, e); } catch (ProviderException ex) { throw new KeyStoreException(ex); }
         }
-        @Override public void engineDeleteEntry(String alias) { synchronized (KeyStoreProvider.class) { huskKeys().remove(alias); save(); } }
+        @Override public void engineDeleteEntry(String alias) throws KeyStoreException {
+            try { delete(alias); } catch (ProviderException ex) { throw new KeyStoreException(ex); }
+        }
         @Override public Enumeration<String> engineAliases() { synchronized (KeyStoreProvider.class) { return Collections.enumeration(new ArrayList<>(huskKeys().keySet())); } }
         @Override public boolean engineContainsAlias(String alias) { return huskKeys().containsKey(alias); }
         @Override public int engineSize() { return huskKeys().size(); }
-        @Override public boolean engineIsKeyEntry(String alias) { Entry e = huskKeys().get(alias); return e != null && e.secretOrPrivate != null; }
-        @Override public boolean engineIsCertificateEntry(String alias) { Entry e = huskKeys().get(alias); return e != null && e.secretOrPrivate == null; }
+        @Override public boolean engineIsKeyEntry(String alias) { Entry e = entry(alias); return e != null && e.secretOrPrivate != null; }
+        @Override public boolean engineIsCertificateEntry(String alias) { Entry e = entry(alias); return e != null && e.secretOrPrivate == null; }
         @Override public String engineGetCertificateAlias(Certificate cert) {
             for (Map.Entry<String, Entry> e : huskKeys().entrySet()) if (e.getValue().publicKey != null && e.getValue().publicKey.equals(cert.getPublicKey())) return e.getKey();
             return null;
         }
         @Override public void engineStore(OutputStream stream, char[] password) {}
-        @Override public void engineLoad(InputStream stream, char[] password) { huskKeys(); }
-        @Override public void engineLoad(KeyStore.LoadStoreParameter param) { huskKeys(); }
+        @Override public void engineLoad(InputStream stream, char[] password) throws IOException {
+            try { huskKeys(); } catch (ProviderException e) { throw new IOException(e); }
+        }
+        @Override public void engineLoad(KeyStore.LoadStoreParameter param) throws IOException { engineLoad(null, null); }
     }
 
     private static String aliasOf(AlgorithmParameterSpec spec) {
@@ -190,6 +245,7 @@ public final class KeyStoreProvider extends Provider {
             for (int i = 0; i < CIPHERS.length; i++) put("Cipher." + CIPHERS[i], Delegate.class.getName() + "$C" + i);
         }
     }
+    public static final class ImportedGCM extends Delegate { public ImportedGCM() { super(0); } }
     /** A cipher of the default providers, for a transformation fixed by the subclass. */
     public static class Delegate extends javax.crypto.CipherSpi {
         private final String mTransformation;
@@ -197,7 +253,14 @@ public final class KeyStoreProvider extends Provider {
         Delegate(int i) { mTransformation = BCWorkaround.CIPHERS[i].replace("PKCS7Padding", "PKCS5Padding"); }
         private javax.crypto.Cipher c() {
             if (mCipher == null) {
-                try { mCipher = javax.crypto.Cipher.getInstance(mTransformation); }
+                try {
+                    for (Provider provider : Security.getProviders()) {
+                        if (provider instanceof KeyStoreProvider || provider instanceof BCWorkaround) continue;
+                        try { mCipher = javax.crypto.Cipher.getInstance(mTransformation, provider); break; }
+                        catch (GeneralSecurityException ignored) {}
+                    }
+                    if (mCipher == null) throw new NoSuchAlgorithmException(mTransformation);
+                }
                 catch (GeneralSecurityException e) { throw new ProviderException("no " + mTransformation + ": " + e); }
             }
             return mCipher;
@@ -208,9 +271,9 @@ public final class KeyStoreProvider extends Provider {
         @Override protected int engineGetOutputSize(int n) { return c().getOutputSize(n); }
         @Override protected byte[] engineGetIV() { return c().getIV(); }
         @Override protected AlgorithmParameters engineGetParameters() { return c().getParameters(); }
-        @Override protected void engineInit(int op, Key k, SecureRandom r) throws InvalidKeyException { c().init(op, k, r); }
-        @Override protected void engineInit(int op, Key k, AlgorithmParameterSpec p, SecureRandom r) throws InvalidKeyException, InvalidAlgorithmParameterException { c().init(op, k, p, r); }
-        @Override protected void engineInit(int op, Key k, AlgorithmParameters p, SecureRandom r) throws InvalidKeyException, InvalidAlgorithmParameterException { c().init(op, k, p, r); }
+        @Override protected void engineInit(int op, Key k, SecureRandom r) throws InvalidKeyException { c().init(op, KeyStoreImport.forCipher(k, op, mTransformation, false), r); }
+        @Override protected void engineInit(int op, Key k, AlgorithmParameterSpec p, SecureRandom r) throws InvalidKeyException, InvalidAlgorithmParameterException { c().init(op, KeyStoreImport.forCipher(k, op, mTransformation, p != null), p, r); }
+        @Override protected void engineInit(int op, Key k, AlgorithmParameters p, SecureRandom r) throws InvalidKeyException, InvalidAlgorithmParameterException { c().init(op, KeyStoreImport.forCipher(k, op, mTransformation, p != null), p, r); }
         @Override protected byte[] engineUpdate(byte[] in, int off, int len) { return c().update(in, off, len); }
         @Override protected int engineUpdate(byte[] in, int off, int len, byte[] out, int outOff) throws javax.crypto.ShortBufferException { return c().update(in, off, len, out, outOff); }
         @Override protected void engineUpdateAAD(byte[] src, int off, int len) { c().updateAAD(src, off, len); }

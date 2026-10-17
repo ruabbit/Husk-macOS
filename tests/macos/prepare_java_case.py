@@ -18,8 +18,9 @@ android = Path(os.environ['ANDROID_JAR']) if 'ANDROID_JAR' in os.environ else ne
 if not android:
     raise SystemExit('Install an Android SDK platform or set ANDROID_JAR for the lifecycle fixture')
 web = len(sys.argv) > 2 and sys.argv[2] == 'web'
-source = Path(__file__).parent/('java/WebStorageActivity.java' if web else 'java/LifecycleActivity.java')
-sources = [source] if web else [source, Path(__file__).parent/'java/FrameworkChecks.java']
+keystore = len(sys.argv) > 2 and sys.argv[2] == 'keystore'
+source = Path(__file__).parent/('java/WebStorageActivity.java' if web else 'java/KeyStoreActivity.java' if keystore else 'java/LifecycleActivity.java')
+sources = [source] if web or keystore else [source, Path(__file__).parent/'java/FrameworkChecks.java']
 subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', *sources], check=True)
 jar_classes(output/'classes', output/'classes.jar')
 subprocess.run([jdk/'bin/java', '-cp', d8, 'com.android.tools.r8.D8', '--min-api', '26', '--lib', android,
@@ -31,6 +32,9 @@ strings = ['manifest','package','org.husk.lifecycle','application','activity','n
 if web:
     strings[2] = 'org.husk.webstorage'
     strings[6] = 'org.husk.webstorage.WebStorageActivity'
+if keystore:
+    strings[2] = 'org.husk.keystore'
+    strings[6] = 'org.husk.keystore.KeyStoreActivity'
 le = lambda n: struct.pack('<I',n)
 text = b''; offsets = []
 for value in strings:
@@ -48,9 +52,9 @@ body=pool+begin('manifest',[('package',3,2)])+begin('uses-feature',[('glEsVersio
 body+=begin('application')+begin('activity',[('name',3,6)])+begin('intent-filter')+begin('action',[('name',3,9)])+end('action')
 body+=begin('category',[('name',3,11)])+end('category')+end('intent-filter')+end('activity')+end('application')+end('manifest')
 manifest=struct.pack('<HHI',3,8,len(body)+8)+body
-with zipfile.ZipFile(output/('WebStorage.apk' if web else 'Lifecycle.apk'),'w') as archive:
+with zipfile.ZipFile(output/('WebStorage.apk' if web else 'KeyStore.apk' if keystore else 'Lifecycle.apk'),'w') as archive:
     archive.writestr('AndroidManifest.xml',manifest)
     archive.write(output/'classes.dex','classes.dex')
     if web:
         archive.write(Path(__file__).parent/'java/storage.html', 'assets/storage.html')
-print('Built Java WebView fixture' if web else 'Built Java lifecycle fixture')
+print('Built Java fixture:', output)
