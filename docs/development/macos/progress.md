@@ -12,6 +12,8 @@
 
 证据在 `build/logs/current-egg-build.log`、`current-egg-ctest.log`、`current-egg-bundle.json`、`current-egg-repair.log`、`current-egg-repair-result.json`，逐步失败与下一步见 [Egg 报告](2026-10-18_reverse-egg-startup-report.md)。修复和提交仅在自己的 fork。Egg 的实际 Play 服务/密钥环境继续开放，不再按“尚缺 Java NativeActivity 桥”重复处理。
 
+代码提交 [e1d8060](https://github.com/ruabbit/Husk-macOS/commit/e1d806049ced39a7d3b6d2ea5ef2135225e71285) 已普通推送到 origin/codex/macos-p0，远端 SHA 读回一致。当前 [CI 39059495981](https://github.com/ruabbit/Husk-macOS/actions/runs/39059495981) head 为该提交，记录时仍 in_progress，不能记为 CI 通过。每日自动化已通过工具更新并从配置读回确认：保留每日 09:00 和仅自己仓库写入范围，Egg 待办改为实际 Play 密钥服务环境；不再重复做已完成的 Java 启动桥。
+
 ## 2026-10-18 Egg 启动调查与贡献范围
 
 用户要求调查 Egg 崩溃，并明确以后所有修复仅在自己的 `ruabbit/Husk-macOS` 仓库完成。上游 PR #118 已关闭，fork PR #1 保持已合并；每日 `husk` 自动化已读回确认包含该范围，保留上游只读同步，不重开或更新上游 PR/issue。
