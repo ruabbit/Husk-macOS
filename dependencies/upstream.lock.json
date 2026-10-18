@@ -20,14 +20,21 @@
     "defaultTestSeconds": 82.65,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": null,
+    "sourceRevision": "70c27644a34822286524216235a1d39ecf0b7773",
     "appSHA256": "ca156721f8e0137e9ddd2e924033be1768616d098ca6ec404ba08d434b45fe6a",
     "nativeRunnerSHA256": "6232396133282a2dbc40b088c14a3574dd89df74b4d95f1de4f3bb5035fd6909",
     "frameworkSHA256": "5668fb5bc1444654996f4a81441afc9e225e2541a8e7f6d04b4361907aff9b68",
-    "deliveryStatus": "verified-push-pending",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "CUA normally quit idle build 11, launched the exact build 12 Product once, and verified home screenshot, 11 apps and featured-game selection; PID 13331. Native pipe closed on details navigation and on one read retry, so details/log-picker UI acceptance remains open. No user game or VM launched.",
     "ci": {
-      "statusAtDelivery": "not-started"
+      "run": 39087010940,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39087010940",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 29
     }
   },
   "lastCheck": {
@@ -35,7 +42,7 @@
     "upstreamChangedPaths": 82,
     "originNewCommits": 0,
     "mainRevision": "308793d30b8ebc4d7247914bfaa8231e44aee101",
-    "macOSSourceRevision": null,
+    "macOSSourceRevision": "70c27644a34822286524216235a1d39ecf0b7773",
     "macOSAdaptation": "19 focused regressions plus 103/103 default CTest (82.65 seconds), 18 Mach-O and 406 Java resources. Actual ELF data/code pointer and raw syscall checks, ANGLE shader compile, Godot 4 driver lifecycle, DEX factory/missing classes/Unicode/OOM/Wi-Fi/drawable/OBB and signed APK/OBB installation checks. Shared loader, Unity and Bionic iOS 15.5 syntax checks passed. No real game or device compatibility claim.",
     "previousCI": {
       "run": 39061615178,

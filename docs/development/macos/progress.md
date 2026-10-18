@@ -12,7 +12,9 @@
 
 CUA 按完整 Product 路径只启动一次，PID **13331**；主窗口 AX/截图核对原有 **11 个应用**、正确图标和游戏选择后的展示区。进入详情页时报 native pipe closed，一次只读重试也失败，故详情/日志选择操作未声称通过；没有重复启动。主程序 SHA-256 `ca156721f8e0137e9ddd2e924033be1768616d098ca6ec404ba08d434b45fe6a`，NativeRunner `6232396133282a2dbc40b088c14a3574dd89df74b4d95f1de4f3bb5035fd6909`，framework DEX `5668fb5bc1444654996f4a81441afc9e225e2541a8e7f6d04b4361907aff9b68`。
 
-本轮未启动 Egg、Hole.io、War、Clash 或其他用户游戏/VM，没有播放音频、检查 USB 或改动用户 APK、存档与 Android 磁盘；没有发送公共兼容报告。Egg 的真实 Play 密钥服务、个人 Play/passkey、真实游戏保存重开、实体手柄/IME、PS4 和 VM/P6 仍开放。来源锁和功能对齐表已更新，提交/推送与 CI 的最终状态在下一段补记。
+本轮未启动 Egg、Hole.io、War、Clash 或其他用户游戏/VM，没有播放音频、检查 USB 或改动用户 APK、存档与 Android 磁盘；没有发送公共兼容报告。Egg 的真实 Play 密钥服务、个人 Play/passkey、真实游戏保存重开、实体手柄/IME、PS4 和 VM/P6 仍开放。来源锁和功能对齐表已更新。
+
+代码合并 [70c2764](https://github.com/ruabbit/Husk-macOS/commit/70c27644a34822286524216235a1d39ecf0b7773) 与 main [308793d](https://github.com/ruabbit/Husk-macOS/commit/308793d30b8ebc4d7247914bfaa8231e44aee101) 已正常原子推送，两条远端完整 SHA 读回一致；未 force push。对应 [CI 39087010940](https://github.com/ruabbit/Husk-macOS/actions/runs/39087010940) 已确认 **completed / success**，build-and-core 用时 **5 分 12 秒**，构建、签名/依赖闭包、**29 项 hosted 核心测试（19.61 秒）**及 P0 memory/core 通过；实体硬件 job 按配置 skipped，不能替代实际手柄/IME/游戏验收。CI JSON 和完整日志复用 `current-upstream-ci.json`、`current-upstream-ci.log`。最后只补交交付文档，工作分支保持 codex/macos-p0。
 
 证据复用 `build/logs/current-upstream-build.log`、`current-upstream-targeted.log`、`current-upstream-runtime-tests.log`、`current-upstream-runtime-recheck.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-ios-syntax.log`，以及 `build/macos/bundle-verification.json`。
 
