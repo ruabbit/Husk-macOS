@@ -30,6 +30,14 @@ const char *husk_native_loaded_apk(void) __attribute__((weak_import));
 
 static const HuskConsoleModuleV1 *g_module;
 static HuskHostV1 g_host;
+
+/* The app's keyboard for a game's text dialog (husk_console_set_text_requester); none: the module answers for the player. */
+static husk_console_text_requester g_text_requester;
+void husk_console_set_text_requester(husk_console_text_requester fn) { g_text_requester = fn; }
+static int host_request_text(const char *title, const char *initial, uint32_t max_chars, void (*done)(void *, const char *), void *ctx)
+{
+    return g_text_requester ? g_text_requester(title, initial, max_chars, done, ctx) : -1;
+}
 static int g_log_fd = -1;
 static pthread_mutex_t g_log_lock = PTHREAD_MUTEX_INITIALIZER;
 static struct timespec g_t0;
@@ -244,7 +252,7 @@ bool husk_console_launch(const husk_console_launch_args *a, char *err, size_t er
     if (!lib) { snprintf(err, errlen, "could not load %s: %s", a->module_path, dlerror()); return false; }
     husk_console_module_v1_fn entry = (husk_console_module_v1_fn)dlsym(lib, "husk_console_module_v1");
     const HuskConsoleModuleV1 *m = entry ? entry() : NULL;
-    if (!m || m->version != HUSK_CONSOLE_ABI_VERSION || m->struct_size < sizeof(HuskConsoleModuleV1)) {
+    if (!m || m->version != HUSK_CONSOLE_ABI_VERSION || m->struct_size < offsetof(HuskConsoleModuleV1, install_package)) {
         snprintf(err, errlen, "%s is not a console module this Husk understands", a->module_path);
         return false;
     }
@@ -274,6 +282,7 @@ bool husk_console_launch(const husk_console_launch_args *a, char *err, size_t er
     g_host.footprint = host_footprint;
     g_host.log_line = host_log_line;
     g_host.vulkan_library_path = a->vulkan_path;
+    g_host.request_text = host_request_text;
 
     host_log("console: %s module, JIT region %zu MiB (ceiling %zu MiB), %zu MiB available", m->platform,
              husk_jit_arena_held_bytes() >> 20, husk_jit_arena_ceiling_bytes() >> 20, (size_t)(host_available_memory() >> 20));
@@ -333,4 +342,20 @@ bool husk_console_join(void) {
 bool husk_console_take_pending_restart(char *path, int path_size, char *args, int args_size)
 {
     return g_module && g_module->take_pending_restart(path, path_size, args, args_size) != 0;
+}
+
+bool husk_console_install_package(const char *module_path, const char *package, const char *dest_dir,
+                                  void (*progress)(void *ctx, uint64_t done, uint64_t total), void *ctx, char *err, size_t errlen)
+{
+    /* The same handle launch gets later: dlopen counts references to one image. */
+    void *lib = dlopen(module_path, RTLD_NOW | RTLD_LOCAL);
+    if (!lib) { snprintf(err, errlen, "could not load %s: %s", module_path, dlerror()); return false; }
+    husk_console_module_v1_fn entry = (husk_console_module_v1_fn)dlsym(lib, "husk_console_module_v1");
+    const HuskConsoleModuleV1 *m = entry ? entry() : NULL;
+    if (!m || m->version != HUSK_CONSOLE_ABI_VERSION || m->struct_size < offsetof(HuskConsoleModuleV1, install_package) + sizeof(void *)
+        || !m->install_package) {
+        snprintf(err, errlen, "this build's console module cannot install packages");
+        return false;
+    }
+    return m->install_package(package, dest_dir, progress, ctx, err, (int)errlen) == 0;
 }

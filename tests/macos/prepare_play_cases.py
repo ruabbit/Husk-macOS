@@ -76,11 +76,16 @@ def apk(name, version=1, split=None, package='org.husk.playtest', key=0, v3=Fals
 
 for version in (1, 2):
     apk(f'base-v{version}.apk', version, v3=version == 2)
-    for i in range(6):
+    for i in range(47 if version == 1 else 6):
         apk(f'split{i}-v{version}.apk', version, f'config.test{i}', v3=version == 2)
 apk('wrong-key.apk', 2, key=1)
 apk('wrong-package.apk', 1, 'config.wrong', package='org.husk.different')
 apk('wrong-split-key.apk', 1, 'config.wrong', key=1)
+for bad in [False, True]:
+    with zipfile.ZipFile(out/('foreign-obb.xapk' if bad else 'expanded.xapk'), 'w', zipfile.ZIP_DEFLATED) as z:
+        z.write(out/'base-v1.apk', 'base.apk')
+        package = 'org.other.game' if bad else 'org.husk.playtest'
+        z.writestr(f'Android/obb/{package}/main.1.{package}.obb', b'archived main resource')
 b = bytearray((out/'base-v1.apk').read_bytes()); b[50] ^= 1; (out/'tampered.apk').write_bytes(b)
 # Network-provided ZIP metadata and signing-block sizes must fail without traps.
 for n, b in [('short', b'PK'), ('overflow', b'\xff' * 80)]:

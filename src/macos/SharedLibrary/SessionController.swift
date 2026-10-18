@@ -70,6 +70,7 @@ final class PipeReader: @unchecked Sendable {
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
+        try game.verifyExpansions(in: apk.deletingLastPathComponent())
         let geodeArguments = try Geode.arguments(game: game, apk: apk)
         let nativeArguments = runtime != "orbit" && runtime != "minecraft"
             ? NativeLaunch.arguments(apk: apk, package: game.packageName, nativeActivity: runtime == "nativeactivity" || runtime == "ue4") : []

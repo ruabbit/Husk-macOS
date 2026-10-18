@@ -45,7 +45,7 @@ struct GooglePlayService: MacPlayService {
         // Paid apps use the account's existing entitlement. Never issue a purchase.
         if app.isFree { token = try await PlayAPI.purchase(packageName: app.id, versionCode: app.versionCode, session: session) }
         let delivery = try await PlayAPI.delivery(packageName: app.id, versionCode: app.versionCode, deliveryToken: token, session: session)
-        return try await PlayDownload().fetch(delivery, progress: progress)
+        return try await PlayDownload().fetch(delivery, package: app.id, progress: progress)
     }
 }
 
@@ -154,7 +154,7 @@ struct GooglePlayService: MacPlayService {
                 defer { files.remove() }
                 try Task.checkCancellation(); guard generation == account else { return }
                 downloads[app.id]?.phase = "校验并导入…"; downloads[app.id]?.cancellable = false
-                let game = try await importer(files.apks, fresh)
+                let game = try await importer(files.apks + files.expansions, fresh)
                 guard generation == account else { return }
                 downloads[app.id] = DownloadState(progress: 1, phase: "已加入资料库", gameID: game.id, active: false, cancellable: false)
             } catch {

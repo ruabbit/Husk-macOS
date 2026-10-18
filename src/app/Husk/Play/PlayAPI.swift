@@ -88,9 +88,14 @@ enum PlayAPI {
 
         req.httpBody = try? JSONSerialization.data(withJSONObject: deviceProps)
 
-        let (data, response) = try await urlSession.data(for: req)
+        // The dispenser is a free service of the Aurora Store project; when Google refuses its shared accounts it answers 5xx for
+        // hours, so the message says what is down and that signing in still works
+        let unavailable = "The anonymous login service (Aurora's token dispenser) is not working right now"
+        let advice = "Sign in with a Google account instead, or try again later."
+        let data: Data, response: URLResponse
+        do { (data, response) = try await urlSession.data(for: req) } catch { throw PlayError("\(unavailable) (\(error.localizedDescription)). \(advice)") }
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw PlayError("Aurora token dispenser returned HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0).")
+            throw PlayError("\(unavailable) (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)). \(advice)")
         }
 
         struct DispenserResponse: Decodable {
@@ -682,6 +687,14 @@ enum PlayAPI {
         public let size: Int64
         public let splits: [SplitFile]
         public let downloadAuthCookie: (name: String, value: String)?
+        /// Expansion files (OBB): a game's data kept beside the APK, "main" and sometimes "patch"
+        public struct ExpansionFile {
+            public let isPatch: Bool
+            public let versionCode: Int64
+            public let size: Int64
+            public let downloadUrl: String
+        }
+        public var expansions: [ExpansionFile] = []
     }
 
     /// "Purchase" (license) a free app so Google Play allows delivery. Returns encoded delivery token if provided.
@@ -724,6 +737,17 @@ enum PlayAPI {
             throw PlayError("Google Play did not return download information.")
         }
 
+        if ProcessInfo.processInfo.environment["HUSK_PLAY_DUMP"] != nil {
+            // what Play sent, field by field (asset packs and expansion files are in fields Husk did not read)
+            func dump(_ m: ProtoMessage, _ indent: String, _ depth: Int) {
+                for k in m.fields.keys.sorted() {
+                    let subs = m.messages(k)
+                    print("\(indent)\(k): \(subs.isEmpty || depth > 2 ? (m.string(k).map { String($0.prefix(80)) } ?? m.int(k).map(String.init) ?? "?") : "\(subs.count) message(s)")")
+                    if depth <= 2 { for sub in subs.prefix(6) { dump(sub, indent + "    ", depth + 1) } }
+                }
+            }
+            print("delivery response:"); if let r = delivResp { dump(r, "  ", 0) }
+        }
         let downloadUrl = deliveryDataMsg.string(3)
         let downloadSize = deliveryDataMsg.int(1) ?? 0
 
@@ -745,13 +769,24 @@ enum PlayAPI {
             cookie = (cName, cVal)
         }
 
-        return DeliveryData(
-            requiresAdditionalFiles: !deliveryDataMsg.messages(4).isEmpty,
+        // Expansion files: field 4 (AppFileMetadata: 1 file type, 0 main and 1 patch; 2 version code; 3 size; 4 URL)
+        var expansions: [DeliveryData.ExpansionFile] = []
+        for f in deliveryDataMsg.messages(4) {
+            if let url = f.string(4) {
+                expansions.append(DeliveryData.ExpansionFile(isPatch: f.int(1) == 1, versionCode: f.int(2) ?? Int64(versionCode),
+                                                             size: f.int(3) ?? 0, downloadUrl: url))
+            }
+        }
+
+        var data = DeliveryData(
+
             downloadUrl: downloadUrl,
             size: downloadSize,
             splits: splits,
             downloadAuthCookie: cookie
         )
+        data.expansions = expansions
+        return data
     }
 
     /// Downloads the APK (and splits if present) into a temporary directory and returns the list of file URLs.
@@ -759,6 +794,7 @@ enum PlayAPI {
         packageName: String,
         versionCode: Int,
         session: PlaySession,
+        stagingDirectory: URL? = nil,
         progress: (@MainActor (Double) -> Void)? = nil
     ) async throws -> [URL] {
         // Purchase first to obtain delivery token, then request delivery
@@ -777,13 +813,19 @@ enum PlayAPI {
         for split in deliveryData.splits {
             downloadsToMake.append(("\(packageName).\(split.name).apk", split.downloadUrl, split.size))
         }
+        // Expansion files keep the name Android gives them; the store puts them where the game looks (obb/ beside the APKs)
+        for x in deliveryData.expansions {
+            downloadsToMake.append(("\(x.isPatch ? "patch" : "main").\(x.versionCode).\(packageName).obb", x.downloadUrl, x.size))
+        }
 
         guard !downloadsToMake.isEmpty else {
             throw PlayError("No download URLs available for \(packageName).")
         }
 
         let totalExpectedBytes = downloadsToMake.reduce(Int64(0)) { $0 + max(0, $1.size) }
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("PlayDownload_\(UUID().uuidString)", isDirectory: true)
+        // stagingDirectory: a folder on the destination's disk (the Mac downloader's games go to an external one; the temporary
+        // folder is always on the internal disk)
+        let tempDir = (stagingDirectory ?? FileManager.default.temporaryDirectory).appendingPathComponent("PlayDownload_\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         var downloadedFiles: [URL] = []
@@ -798,11 +840,11 @@ enum PlayAPI {
             }
 
             let fileDest = tempDir.appendingPathComponent(item.name)
-            let (tempLocalURL, resp) = try await URLSession.shared.download(for: req)
-            guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
-                throw PlayError("Failed to download \(item.name) (HTTP \((resp as? HTTPURLResponse)?.statusCode ?? 0))")
+            let status = try await FileStreamer.download(req, to: fileDest)
+            guard status == 200 else {
+                try? FileManager.default.removeItem(at: fileDest)
+                throw PlayError("Failed to download \(item.name) (HTTP \(status))")
             }
-            try FileManager.default.moveItem(at: tempLocalURL, to: fileDest)
             downloadedFiles.append(fileDest)
 
             totalBytesWritten += item.size
@@ -817,3 +859,89 @@ enum PlayAPI {
     }
 }
 
+
+
+/// Writes a download straight into its file as it arrives. A download task would first put the whole file in the system's temporary
+/// folder and then move it: twice the space at the peak, and on the internal disk whatever the destination (the Mac downloader's
+/// games go to an external one).
+final class FileStreamer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let handle: FileHandle
+    private let maxBytes: Int64
+    private let progress: @Sendable (Int64) -> Void
+    private let lock = NSLock()
+    private var task: URLSessionDataTask?
+    private var cancelled = false
+    private var status = 0
+    private var written: Int64 = 0
+    private var failure: Error?
+    private var continuation: CheckedContinuation<Int, Error>?
+
+    private init(handle: FileHandle, maxBytes: Int64, progress: @escaping @Sendable (Int64) -> Void) {
+        self.handle = handle; self.maxBytes = maxBytes; self.progress = progress
+    }
+    private func cancel() {
+        lock.lock(); cancelled = true; let task = task; lock.unlock(); task?.cancel()
+    }
+    private func start(_ request: URLRequest, session: URLSession, continuation: CheckedContinuation<Int, Error>) {
+        lock.lock()
+        self.continuation = continuation
+        let task = session.dataTask(with: request); self.task = task
+        let cancelled = cancelled
+        lock.unlock()
+        task.resume(); if cancelled { task.cancel() }
+    }
+    static func download(_ request: URLRequest, to destination: URL,
+                         configuration: URLSessionConfiguration = .default, maxBytes: Int64 = 4 << 30,
+                         progress: @escaping @Sendable (Int64) -> Void = { _ in }) async throws -> Int {
+        try Task.checkCancellation()
+        guard FileManager.default.createFile(atPath: destination.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+            throw PlayError("Cannot create the download file.")
+        }
+        let handle = try FileHandle(forWritingTo: destination)
+        let streamer = FileStreamer(handle: handle, maxBytes: maxBytes, progress: progress)
+        let session = URLSession(configuration: configuration, delegate: streamer, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate(); try? handle.close() }
+        do {
+            let status = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { streamer.start(request, session: session, continuation: $0) }
+            } onCancel: { streamer.cancel() }
+            try Task.checkCancellation()
+            try handle.synchronize()
+            return status
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        guard request.url?.scheme == "https", request.url?.user == nil, request.url?.password == nil else { completionHandler(nil); return }
+        var request = request
+        if request.url?.host != task.originalRequest?.url?.host {
+            request.setValue(nil, forHTTPHeaderField: "Cookie")
+            request.setValue(nil, forHTTPHeaderField: "Authorization")
+        }
+        completionHandler(request)
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if response.expectedContentLength > maxBytes { failure = PlayError("Download exceeds the size limit.") }
+        completionHandler(status == 200 && failure == nil ? .allow : .cancel)
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard failure == nil else { return }
+        do {
+            guard Int64(data.count) <= maxBytes - written else { throw PlayError("Download exceeds the size limit.") }
+            try handle.write(contentsOf: data); written += Int64(data.count); progress(written)
+        } catch { failure = error; dataTask.cancel() }
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock(); let c = continuation; continuation = nil; let cancelled = cancelled; lock.unlock()
+        if let failure { c?.resume(throwing: failure) }
+        else if cancelled { c?.resume(throwing: CancellationError()) }
+        else if status != 0 && status != 200 { c?.resume(returning: status) }
+        else if let error { c?.resume(throwing: error) }
+        else { c?.resume(returning: status) }
+    }
+}

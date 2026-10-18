@@ -246,7 +246,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMA
     "${CMAKE_BINARY_DIR}/NativeTests/gamemaker-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-missing.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/ue4.apk"
-    "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-godot4.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta-missing.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_cases.py "${CMAKE_BINARY_DIR}/NativeTests"
     DEPENDS tests/macos/prepare_native_cases.py tests/macos/fixture/native_driver.c scripts/build_macos_fixture.py VERBATIM)
@@ -301,6 +301,17 @@ foreach(engine godot gamemaker sdl gta)
     set_tests_properties(native-${engine}-missing-destroy PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
 endforeach()
 add_executable(MacCompatibilityTests tests/macos/CommunityCompatibility.swift src/app/Husk/Compatibility.swift)
+foreach(mode compatibility explicit-vulkan)
+    add_test(NAME native-godot4-${mode} COMMAND NativeDriverLifecycleTests godot "${CMAKE_BINARY_DIR}/NativeTests/godot-godot4.apk"
+        "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/NativeDrivers")
+    set_tests_properties(native-godot4-${mode} PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
+endforeach()
+set_property(TEST native-godot4-explicit-vulkan APPEND PROPERTY ENVIRONMENT "TL_GODOT_VULKAN=1")
+add_executable(ExternalTextureShaderTests tests/macos/ExternalTextureShader.c)
+target_include_directories(ExternalTextureShaderTests PRIVATE ${HUSK_DEPS}/include)
+target_link_libraries(ExternalTextureShaderTests PRIVATE NativeRuntime)
+add_test(NAME macos-external-texture-shader COMMAND ExternalTextureShaderTests "${HUSK_DEPS}/lib/libANGLE-shared.dylib")
+set_tests_properties(macos-external-texture-shader PROPERTIES TIMEOUT 30)
 target_compile_options(MacCompatibilityTests PRIVATE -parse-as-library)
 target_link_libraries(MacCompatibilityTests PRIVATE "-framework AppKit" "-framework SwiftUI")
 add_test(NAME macos-community-compatibility COMMAND MacCompatibilityTests)
@@ -324,8 +335,18 @@ set_tests_properties(java-runtime-boot PROPERTIES TIMEOUT 60 ENVIRONMENT "TL_AUD
 add_test(NAME java-runtime-resources COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/build_java_runtime.py --verify --output ${HUSK_JAVA_RUNTIME})
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/LoaderTests/ready"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_loader_cases.py "${CMAKE_BINARY_DIR}/LoaderTests"
-    DEPENDS tests/macos/prepare_loader_cases.py tests/macos/fixture/namespace.c scripts/build_macos_fixture.py VERBATIM)
+    DEPENDS tests/macos/prepare_loader_cases.py tests/macos/fixture/namespace.c tests/macos/fixture/data_views.S scripts/build_macos_fixture.py VERBATIM)
 add_custom_target(LoaderFixtures DEPENDS "${CMAKE_BINARY_DIR}/LoaderTests/ready")
+add_executable(LoaderDataViewTests tests/macos/LoaderDataViews.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_include_directories(LoaderDataViewTests PRIVATE ${MAC}/NativeRunner)
+target_link_libraries(LoaderDataViewTests PRIVATE NativeRuntime)
+add_dependencies(LoaderDataViewTests LoaderFixtures)
+add_custom_command(TARGET LoaderDataViewTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
+    --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:LoaderDataViewTests>" VERBATIM)
+foreach(mode go-data mixed-data go-mixed-data)
+    add_test(NAME core-loader-${mode} COMMAND LoaderDataViewTests "${CMAKE_BINARY_DIR}/LoaderTests/${mode}.so")
+    set_tests_properties(core-loader-${mode} PROPERTIES TIMEOUT 15 ENVIRONMENT "TL_XMEM_MIB=64")
+endforeach()
 add_executable(LoaderNamespaceTests tests/macos/LoaderNamespace.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(LoaderNamespaceTests PRIVATE ${MAC}/NativeRunner)
 target_link_libraries(LoaderNamespaceTests PRIVATE NativeRuntime)
@@ -351,7 +372,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -381,7 +402,7 @@ set_tests_properties(java-keystore-import-persistence PROPERTIES TIMEOUT 180)
 add_executable(MacJavaSessionTests tests/macos/JavaSession.swift)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_bootstrap.py "${CMAKE_BINARY_DIR}/NativeBootstrap"
-    DEPENDS tests/macos/prepare_native_bootstrap.py tests/macos/java/nativeactivity/Bootstrap.java tests/macos/java/nativeactivity/Provider.java
+    DEPENDS tests/macos/prepare_native_bootstrap.py tests/macos/java/nativeactivity/Bootstrap.java tests/macos/java/nativeactivity/Provider.java tests/macos/java/nativeactivity/Factory.java
         tests/macos/java/nativeactivity/Game.java tests/macos/fixture/native_bootstrap.c tests/macos/fixture/java_nativeactivity.c
         ${NEXT}/husk-tl-nativeactivity-abi.h VERBATIM)
 add_custom_target(NativeBootstrapFixture DEPENDS "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks")

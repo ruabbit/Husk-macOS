@@ -21,7 +21,13 @@ web = len(sys.argv) > 2 and sys.argv[2] == 'web'
 keystore = len(sys.argv) > 2 and sys.argv[2] == 'keystore'
 source = Path(__file__).parent/('java/WebStorageActivity.java' if web else 'java/KeyStoreActivity.java' if keystore else 'java/LifecycleActivity.java')
 sources = [source] if web or keystore else [source, Path(__file__).parent/'java/FrameworkChecks.java']
+if not web and not keystore:
+    sources += [Path(__file__).parent/'java/MissingOptional.java', Path(__file__).parent/'java/unicode/例.java']
 subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', *sources], check=True)
+if not web and not keystore:
+    (output/'classes/missing/optional/MissingOptional.class').unlink()
+    (output/'obb').mkdir(exist_ok=True)
+    (output/'obb/main.1.org.husk.lifecycle.obb').write_bytes(b'OBB runtime fixture')
 jar_classes(output/'classes', output/'classes.jar')
 subprocess.run([jdk/'bin/java', '-cp', d8, 'com.android.tools.r8.D8', '--min-api', '26', '--lib', android,
                 '--output', output, output/'classes.jar'], check=True)

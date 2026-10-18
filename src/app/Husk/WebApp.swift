@@ -246,7 +246,11 @@ final class WebAppRuntime: NSObject {
         case ("Device", "getBatteryInfo"):
             ok(["batteryLevel": Self.batteryLevel, "isCharging": false])
         case ("Device", "getLanguageCode"):
+#if os(macOS)
             ok(["value": Locale.current.language.languageCode?.identifier ?? "en"])
+#else
+            ok(["value": Locale.current.huskLanguageCode ?? "en"])
+#endif
         case ("Device", "getLanguageTag"):
             ok(["value": Locale.preferredLanguages.first ?? "en-US"])
         case ("StatusBar", "setBackgroundColor"):

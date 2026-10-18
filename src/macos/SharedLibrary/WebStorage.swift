@@ -85,7 +85,7 @@ public enum WebStorage {
 
     /// Extract only bounded APK assets. Never resolve archive paths outside this cache.
     public static func assets(apks: [URL], digest: String, save: URL, engine: String) throws -> URL {
-        guard (1...32).contains(apks.count), ["Capacitor", "Cordova"].contains(engine) else { throw LibraryFailure("无效的 Web 应用。") }
+        guard (1...48).contains(apks.count), ["Capacitor", "Cordova"].contains(engine) else { throw LibraryFailure("无效的 Web 应用。") }
         let hashes = try apks.map { url -> String in
             let input = try FileHandle(forReadingFrom: url); defer { try? input.close() }
             var hash = SHA256()

@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-10-18：正式 3.0 上游同步与 build 12
+
+从干净的 `codex/macos-p0=b9caa81` 开始，origin 地址和 upstream 地址符合任务要求；无其他合并/构建/游戏/VM。CUA 检查到空闲主窗口后正常退出旧 PID 7656。fetch 后 origin 两分支无外来提交，上游 `a3407fc..cedb01e` 有 64 个提交、82 个路径，正式 `3.0=cffaf8b`。先普通合并到 main **308793d**，再合回 macOS；七个冲突逐项处理，没有 ours 策略、stash、重置或上游写操作。前一提交 b9caa81 的 CI 39061615178 已确认 success。
+
+实际接入旧 Unity 的 MacTextInput/UnityMain 文字提交、退格、完成/取消、多行和 UTF-16 选择偏移；48 个 APK 完整导入与 Runner 加载；共享流式下载；Play/XAPK 的 OBB 与 APK 原子安装、摘要验证、目录映射和 Java/HLE getObbDir。保留 Application attach 后的自定义加载器，同时采用上游 AppComponentFactory。上游 Java 缺类/Unicode/数组上限/资源/Wi-Fi、Godot 4 Compatibility/NativeBridge、外部纹理 shader 重写均进入当前 NativeRunner 和 framework DEX。Mac 首页加入游戏选择及启动/显示窗口入口，装饰限圣诞季；兼容报告可显式选日志、预览/移除并发送快照，默认不附日志。
+
+新增测试中曾发现 Unity fixture 误把类名当类对象、重复 APK 的幂等行为断言错误，以及 D8 优化掉未使用的数组分配；已修正测试本身。真实 ELF 地址一致性回归还发现普通 4 KiB ELF 的只读重定位被 16 KiB 页写权限误分到 RW，而 ADRP 保持 RX；已统一按实际 PT_LOAD 与代码范围分类。该修复与 Go 数据视图、代码指针和 raw syscall NZCV/q8–q15 一并验证，没有猜测游戏地址或绕过保护。测试的首次意外失败均保留日志，没有重复运行未修复的用户游戏。
+
+最终 **19 项针对性回归通过；默认 CTest 103/103（82.65 秒）**。唯一 `build/macos` 原位构建 **3.0.0 / build 12**，VM=ON，**18 个 arm64 Mach-O / 406 个 Java 资源** 的包检查通过；共享 loader/Unity/Bionic 的 iOS 15.5 SDK 语法检查通过。原有签名、固定依赖、关闭/存储协议和默认失焦继续保留。CJK 字体已随 Mac 包提供，不采用上游为精简 iOS 包新增的非固定下载。VM 仍为 32 APK，明确拒绝 OBB；PS4 新 ABI 只进入未打包的宿主测试组件，真实模块和其他差异在 upstream-parity.md 保持开放。
+
+CUA 按完整 Product 路径只启动一次，PID **13331**；主窗口 AX/截图核对原有 **11 个应用**、正确图标和游戏选择后的展示区。进入详情页时报 native pipe closed，一次只读重试也失败，故详情/日志选择操作未声称通过；没有重复启动。主程序 SHA-256 `ca156721f8e0137e9ddd2e924033be1768616d098ca6ec404ba08d434b45fe6a`，NativeRunner `6232396133282a2dbc40b088c14a3574dd89df74b4d95f1de4f3bb5035fd6909`，framework DEX `5668fb5bc1444654996f4a81441afc9e225e2541a8e7f6d04b4361907aff9b68`。
+
+本轮未启动 Egg、Hole.io、War、Clash 或其他用户游戏/VM，没有播放音频、检查 USB 或改动用户 APK、存档与 Android 磁盘；没有发送公共兼容报告。Egg 的真实 Play 密钥服务、个人 Play/passkey、真实游戏保存重开、实体手柄/IME、PS4 和 VM/P6 仍开放。来源锁和功能对齐表已更新，提交/推送与 CI 的最终状态在下一段补记。
+
+证据复用 `build/logs/current-upstream-build.log`、`current-upstream-targeted.log`、`current-upstream-runtime-tests.log`、`current-upstream-runtime-recheck.log`、`current-upstream-ctest.log`、`current-upstream-bundle.log`、`current-upstream-ios-syntax.log`，以及 `build/macos/bundle-verification.json`。
+
 ## 2026-10-18：补齐 Egg 所需的软件密钥接收端
 
 在上一轮 Java/NativeActivity 修复后继续追踪实际 APK，确认普通密钥返回后还会触发缺失的 `setEntry(SecretKeyEntry, KeyProtection)`。现已补软件 AES/GCM 导入、不导出字节的句柄及用途/模式/有效期/IV 检查；不支持的硬件/认证/包装密钥要求明确失败。KeyStore 改为 0600 临时文件同步后原子替换，失败保留旧文件和内存条目，损坏文件不再变成空库。详见 [Egg 报告](2026-10-18_reverse-egg-startup-report.md)。

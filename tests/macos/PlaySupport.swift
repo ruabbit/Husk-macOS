@@ -191,14 +191,53 @@ private final class FixtureHTTP: URLProtocol, @unchecked Sendable {
             })) { progress = $0 }
             try check(downloaded.apks.count == 7 && progress == 1, "download preserves every split and reports completion")
             downloaded.remove()
+            // The same production downloader now streams APKs and OBBs into one
+            // disposable installation; the library publishes them together.
+            let mainOBB = cases.appendingPathComponent("main.1.org.husk.playtest.obb")
+            let patchOBB = cases.appendingPathComponent("patch.1.org.husk.playtest.obb")
+            try Data("main expansion payload".utf8).write(to: mainOBB)
+            try Data("patch expansion payload".utf8).write(to: patchOBB)
+            var expanded = delivery("base-v1.apk")
+            expanded.expansions = [mainOBB, patchOBB].enumerated().map { i, url in
+                .init(isPatch: i == 1, versionCode: 1, size: 0, downloadUrl: "https://play.test.invalid/\(url.lastPathComponent)")
+            }
+            let resources = try await downloader.fetch(expanded, package: "org.husk.playtest") { _ in }
+            defer { resources.remove(); try? FileManager.default.removeItem(at: mainOBB); try? FileManager.default.removeItem(at: patchOBB) }
+            try check(resources.apks.count == 1 && resources.expansions.count == 2, "streamed OBBs stay separate from APK package installer")
+            let obbPaths = LibraryPaths(root: root.appendingPathComponent("WithOBB"))
+            let obbRepository = try LibraryRepository(paths: obbPaths, trustedFixtureHash: "none")
+            let obbGame = try await obbRepository.importAPKs(resources.apks + resources.expansions, package: "org.husk.playtest", version: 1, title: "OBB")
+            try check(obbGame.expansions?.count == 2 && obbGame.apkNames.count == 1, "OBB metadata published with the APK installation")
+            try check(try Data(contentsOf: obbPaths.game(obbGame.id).appendingPathComponent("obb/\(mainOBB.lastPathComponent)")) == Data(contentsOf: mainOBB), "installed OBB bytes match streamed resource")
+            let again = try LibraryRepository(paths: obbPaths, trustedFixtureHash: "none")
+            let reopenedOBB = try await again.games()
+            try check(reopenedOBB.first?.expansions == obbGame.expansions, "OBB hashes survive repository reopen")
+            try await refused("VM never silently drops required OBB resources") { _ = try await again.prepareVMSet(obbGame.id) }
+            let archivePaths = LibraryPaths(root: root.appendingPathComponent("ArchivedOBB"))
+            let archiveRepository = try LibraryRepository(paths: archivePaths, trustedFixtureHash: "none")
+            let archived = try await archiveRepository.importGame(cases.appendingPathComponent("expanded.xapk"))
+            try check(archived.expansions?.count == 1 &&
+                      (try Data(contentsOf: archivePaths.game(archived.id).appendingPathComponent("obb/main.1.org.husk.playtest.obb"))) == Data("archived main resource".utf8),
+                      "XAPK imports its OBB in the same installation transaction")
+            try await refused("foreign-package archived OBB") { _ = try await archiveRepository.importGame(cases.appendingPathComponent("foreign-obb.xapk")) }
+            try await refused("incomplete same-version replacement preserves OBB installation") {
+                _ = try await obbRepository.importAPKs(resources.apks, package: "org.husk.playtest", version: 1, title: "missing")
+            }
+            var invalidExpansion = expanded; invalidExpansion.expansions += [expanded.expansions[0]]
+            try await refused("duplicate OBB roles") { _ = try await downloader.fetch(invalidExpansion, package: "org.husk.playtest") { _ in } }
+            let fullSet = [cases.appendingPathComponent("base-v1.apk")] + (0..<47).map { cases.appendingPathComponent("split\($0)-v1.apk") }
+            let large = try LibraryRepository(paths: LibraryPaths(root: root.appendingPathComponent("48APKs")), trustedFixtureHash: "none")
+            let largeGame = try await large.importAPKs(fullSet, package: "org.husk.playtest", version: 1, title: "48 APKs")
+            try check(largeGame.apkNames.count == 48, "48 signed APKs import as a single set")
+            try await refused("49 APKs refused") { _ = try await large.importAPKs(fullSet + [fullSet[0]], package: "org.husk.playtest", version: 1, title: "too many") }
             for plan in [delivery("fail"), delivery("base-v1.apk", size: 1), delivery("base-v1.apk", splits: [.init(name: "bad", size: 1, downloadUrl: "http://play.test.invalid/split.apk")])] {
                 try await refused("failed or incomplete download") { _ = try await downloader.fetch(plan) { _ in } }
-                try check(try FileManager.default.contentsOfDirectory(atPath: downloadRoot.path).isEmpty, "failed download cleans all partial files")
+                try check(try FileManager.default.contentsOfDirectory(atPath: downloadRoot.path) == [resources.directory.lastPathComponent], "failed download cleans all partial files")
             }
             let cancelled = Task { try await downloader.fetch(delivery("slow")) { _ in } }
             try await Task.sleep(for: .milliseconds(30)); cancelled.cancel()
             try await refused("download cancellation") { _ = try await cancelled.value }
-            try check(try FileManager.default.contentsOfDirectory(atPath: downloadRoot.path).isEmpty, "cancel removes partial download")
+            try check(try FileManager.default.contentsOfDirectory(atPath: downloadRoot.path) == [resources.directory.lastPathComponent], "cancel removes partial download")
 
             let service = FakeService(), credentials = MemoryCredentials()
             let store = MacPlayStore(service: service, credentials: credentials)

@@ -197,6 +197,16 @@ static void javaKeyboard(int show,int inputType,int imeOptions) {
     dispatch_async(dispatch_get_main_queue(),^{javaHost.textInput.textInputActive=show!=0;});
 }
 static void nativeKeyboard(int action) { javaKeyboard(action==1,1,0); }
+static int unityKeyboardKind;
+static void unityKeyboard(int action,int kind) {
+    dispatch_async(dispatch_get_main_queue(),^{
+        Runner *host=javaHost;
+        if(!host || ![@[@"starting",@"running",@"paused"] containsObject:host.state])return;
+        unityKeyboardKind=kind;
+        [host.textInput receiveText:@"" selection:NSMakeRange(0,0) marked:NSMakeRange(NSNotFound,0)];
+        host.textInput.textInputActive=action==1;
+    });
+}
 static void javaSetClipboard(const char *text) {
     NSString *value=[NSString stringWithUTF8String:text?:""]?:@"";
     dispatch_async(dispatch_get_main_queue(),^{[NSPasteboard.generalPasteboard clearContents];[NSPasteboard.generalPasteboard setString:value forType:NSPasteboardTypeString];});
@@ -523,7 +533,7 @@ static int androidKey(unsigned code)
             else tl_unity_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"mouse"]) {tl_ga_mouse([message[@"action"] intValue],[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue],[message[@"scroll"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"relative-mouse"]) {tl_ga_mouse_relative([message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue]);self.pointerEvents++;}
-        else if((minecraft||javaapp)&&[source isEqual:@"text"]&&self.textInput.textInputActive&&[message[@"text"] isKindOfClass:NSString.class]) {
+        else if((minecraft||javaapp||unity)&&[source isEqual:@"text"]&&self.textInput.textInputActive&&[message[@"text"] isKindOfClass:NSString.class]) {
             if([message[@"selectAll"] boolValue])[self.textInput selectAll:nil];
             [self.textInput insertText:message[@"text"] replacementRange:NSMakeRange(NSNotFound,0)];
         }
@@ -666,6 +676,21 @@ static int androidKey(unsigned code)
             tl_ga_text(text.UTF8String,(int)selection.location,(int)NSMaxRange(selection),marked.location==NSNotFound?-1:(int)marked.location,marked.location==NSNotFound?-1:(int)NSMaxRange(marked));
         };
         self.textInput.textCommand=^(unsigned code){[weakSelf guestKey:code down:YES repeat:NO];[weakSelf guestKey:code down:NO repeat:NO];};
+        if(unity){
+            javaHost=self;tl_unity_set_keyboard_handler(unityKeyboard);
+            self.textInput.committedText=^(NSString *text){
+                if([weakSelf.state isEqual:@"running"])tl_unity_insert_text(text.UTF8String);
+            };
+            self.textInput.textCommand=^(unsigned code){
+                Runner *host=weakSelf;if(![host.state isEqual:@"running"])return;
+                if(code==51)tl_unity_delete_backward();
+                else if(code==36 && (unityKeyboardKind&0x200))tl_unity_insert_text("\n");
+                else if(code==36 || code==53){
+                    tl_unity_finish_text(code==36);host.textInput.textInputActive=NO;
+                    [host.textInput receiveText:@"" selection:NSMakeRange(0,0) marked:NSMakeRange(NSNotFound,0)];
+                }
+            };
+        }
         if(nativeDriver){
             javaHost=self; mac_driver_keyboard(nativeKeyboard);
             self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])mac_driver_text(text.UTF8String);};

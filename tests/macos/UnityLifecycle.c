@@ -16,6 +16,8 @@ static pthread_t render_thread;
 static atomic_int calls, pause_entered, pause_returned, destroy_entered, destroy_returned;
 static atomic_bool wrong_thread, quitting;
 static int resumes, focuses, actions[16], keys[16], motion_count, key_count;
+static atomic_int text_events, text_selection, text_closed, text_cancelled, keyboard_action, keyboard_kind;
+static char last_text[4096];
 static void check_thread(void) { if (!pthread_equal(pthread_self(), render_thread)) atomic_store(&wrong_thread,true); }
 static void noop(void *env, void *self) { (void)env; (void)self; }
 static void init(void *env, void *self, void *context) { (void)context; noop(env,self); }
@@ -40,6 +42,16 @@ static void done(void *env, void *self) {
     usleep(50000); atomic_store(&destroy_returned,1);
 }
 static unsigned char done_modern(void *env, void *self) { done(env,self);return 0; }
+static void text_set(void *env,void *self,jobj *text) {
+    noop(env,self);check_thread();snprintf(last_text,sizeof(last_text),"%s",tl_jni_string(text));
+    atomic_fetch_add(&text_events,1);
+}
+static void text_select(void *env,void *self,int start,int count) {
+    noop(env,self);check_thread();if(count)atomic_store(&wrong_thread,true);atomic_store(&text_selection,start);
+}
+static void text_close(void *env,void *self) { noop(env,self);check_thread();atomic_fetch_add(&text_closed,1); }
+static void text_cancel(void *env,void *self) { noop(env,self);check_thread();atomic_fetch_add(&text_cancelled,1); }
+static void keyboard(int action,int kind) { atomic_store(&keyboard_kind,kind);atomic_store(&keyboard_action,action); }
 static unsigned char inject(void *env, void *self, jobj *event) {
     noop(env,self);
     int action=tl_jni_call(event,"getAction","()I",NULL).i;
@@ -77,7 +89,32 @@ int main(int argc, char **argv) {
         CHECK(!register_natives(tl_jni_env(),tl_jni_class_object("com/unity3d/player/UnityPlayer"),base,2));
         CHECK(!register_natives(tl_jni_env(),tl_jni_class_object("com/unity3d/player/UnityPlayerForActivityOrService"),natives+1,8));
     }else CHECK(!register_natives(tl_jni_env(),tl_jni_class_object("com/unity3d/player/UnityPlayer"),natives,missing?8:9));
+    Native text_natives[]={
+        {"nativeSetInputString","(Ljava/lang/String;)V",text_set},
+        {"nativeSetInputSelection","(II)V",text_select},
+        {"nativeSoftInputClosed","()V",text_close},{"nativeSoftInputCanceled","()V",text_cancel}
+    };
+    CHECK(!register_natives(tl_jni_env(),tl_jni_class_object("com/unity3d/player/UnityPlayer"),text_natives,4));
+    tl_unity_set_keyboard_handler(keyboard);
     CHECK(tl_unity_run()&&wait_state(TL_UNITY_RUNNING));
+    jobj *player=tl_jni_new_object(tl_jni_class("com/unity3d/player/UnityPlayer"));
+    jvalue show[9]={0};show[0].l=tl_jni_new_string("");show[3].z=1;show[4].z=1;show[7].i=3;
+    tl_jni_call(player,"showSoftInput","(Ljava/lang/String;IZZZZLjava/lang/String;IZ)V",show);
+    CHECK(atomic_load(&keyboard_action)==1&&atomic_load(&keyboard_kind)==0x300);
+    tl_unity_insert_text("中😀ab");
+    for(int i=0;i<2000&&atomic_load(&text_selection)!=4;i++)usleep(1000);
+    CHECK(atomic_load(&text_selection)==4&&!strcmp(last_text,"中😀a"));
+    tl_unity_delete_backward();tl_unity_delete_backward();
+    char current[4096];tl_unity_text_copy(current,sizeof(current));CHECK(!strcmp(current,"中"));
+    tl_unity_finish_text(true);
+    for(int i=0;i<2000&&!atomic_load(&text_closed);i++)usleep(1000);
+    CHECK(atomic_load(&text_closed)==1&&!strcmp(last_text,"中"));
+    tl_jni_call(player,"showSoftInput","(Ljava/lang/String;IZZZZLjava/lang/String;IZ)V",show);
+    tl_unity_insert_text("cancel");tl_unity_finish_text(false);
+    for(int i=0;i<2000&&!atomic_load(&text_cancelled);i++)usleep(1000);
+    CHECK(atomic_load(&text_cancelled)==1);
+    tl_jni_call(player,"hideSoftInput","()V",NULL);
+    tl_jni_unref(show[0].l);tl_jni_unref(player);
     tl_unity_touch(0,0,10,20);tl_unity_touch(1,0,12,22);tl_unity_touch(2,0,12,22);
     tl_unity_touch(0,0,10,20);tl_unity_touch(3,0,0,0);
     tl_unity_key(29,true,0);tl_unity_key(29,false,0);

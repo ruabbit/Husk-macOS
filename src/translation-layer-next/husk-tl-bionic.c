@@ -550,6 +550,9 @@ static int bionic_uname(void *buf)
     return 0;
 }
 
+/* the same answer for uname by raw system call (fingerprinting libraries avoid libc: FingerprintJS's libfp in Airbnb) */
+int tl_bionic_uname(void *buf) { return bionic_uname(buf); }
+
 static int bionic_gethostname(char *name, size_t len) { snprintf(name, len, "localhost"); return 0; }
 
 static int bionic_gettid(void)
@@ -655,7 +658,8 @@ static void *dlopen_impl(const char *path, int flags)
         if (!L) dl_fail("dlopen failed: library \"%s\" is not loaded", path);
         return L;
     }
-    if (!strcmp(base, "libvulkan.so") && !tl_vk_available()) { dl_fail("dlopen failed: library \"%s\" not found", path); return NULL; }
+    /* libvulkan.so.1 is the versioned name Godot 4 asks for: the same loader */
+    if ((!strcmp(base, "libvulkan.so") || !strcmp(base, "libvulkan.so.1")) && !tl_vk_available()) { dl_fail("dlopen failed: library \"%s\" not found", path); return NULL; }
     if (tl_bionic_is_system_lib(base)) {
         for (int i = 0; i < g_nsys; i++) if (!strcmp(g_sys_names[i], base)) return &g_sys_handle[i + 1];
         if (g_nsys < 15) { snprintf(g_sys_names[g_nsys], 48, "%s", base); g_nsys++; return &g_sys_handle[g_nsys]; }

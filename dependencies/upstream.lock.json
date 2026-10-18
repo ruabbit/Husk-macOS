@@ -1,48 +1,44 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "4c03823ba1ca529e9d8ab28d8ec4b1a3547661ff",
-  "integratedRevision": "a3407fc7fc275efa6c7d346d3d61ef6c7367a470",
-  "checkedOn": "2026-10-17",
-  "commitCount": 11,
-  "integration": "Merged upstream 3.0 runtime changes through fork main fa9aa3f without conflicts. The macOS NativeRunner and rebuilt framework DEX include runtime/app ELF namespaces, resource-density fallbacks, TextView recursion and bitmap-cache fixes. Seven new regressions and the complete 90-test suite pass; the legacy P0 harness now links the shared JIT reservation implementation. Candidate build 9 is packaged and launched once. Source c24f0ca and main fa9aa3f were atomically pushed and remote SHAs read back; hosted CI 38990038463 completed successfully. Open platform work remains in upstream-parity.md.",
+  "previousRevision": "a3407fc7fc275efa6c7d346d3d61ef6c7367a470",
+  "integratedRevision": "cedb01ee0b93122fe3780fc55a1d9720b61fd2c8",
+  "checkedOn": "2026-10-18",
+  "commitCount": 64,
+  "integration": "Normal merge of the official 3.0 release through fork main 308793d; seven conflicts resolved by intent. macOS integrates legacy Unity IME, 48 APKs, streamed Play/OBB imports and runtime paths, AppComponentFactory, Java/Godot/external shader updates, home selection and optional log attachment. Corrected mixed-page ELF data address consistency. Default CTest 103/103 and bundle verification passed. Real games, Play authentication and PS4/VM gaps remain explicit in upstream-parity.md.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
   "deliveryStatus": "partial-platform-integration",
   "release": {
-    "tag": "2.0",
-    "revision": "e02ac68f1065e86dd40a371020c1243bbc685b7f"
+    "tag": "3.0",
+    "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
   },
   "candidate": {
     "version": "3.0.0",
-    "build": "9",
-    "defaultTests": 90,
+    "build": "12",
+    "defaultTests": 103,
+    "defaultTestSeconds": 82.65,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": "c24f0ca8c8d9e774449a5a95f16ecfdf0d916b27",
-    "appSHA256": "29408f26de18ad99321223bafaa3ac3c349ca2e0093cef64613652c505c8dfd7",
-    "nativeRunnerSHA256": "205aa11ad5119b8e095da72eed428765b51bbdd61a06cba28feaae365442c4f7",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Husk was already exited. CUA launched the sole build 9 Product once; main window AX showed the original 10 apps, exact Product PID 53326 confirmed. No user game or VM launched.",
+    "sourceRevision": null,
+    "appSHA256": "ca156721f8e0137e9ddd2e924033be1768616d098ca6ec404ba08d434b45fe6a",
+    "nativeRunnerSHA256": "6232396133282a2dbc40b088c14a3574dd89df74b4d95f1de4f3bb5035fd6909",
+    "frameworkSHA256": "5668fb5bc1444654996f4a81441afc9e225e2541a8e7f6d04b4361907aff9b68",
+    "deliveryStatus": "verified-push-pending",
+    "gui": "CUA normally quit idle build 11, launched the exact build 12 Product once, and verified home screenshot, 11 apps and featured-game selection; PID 13331. Native pipe closed on details navigation and on one read retry, so details/log-picker UI acceptance remains open. No user game or VM launched.",
     "ci": {
-      "run": 38990038463,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463",
-      "statusAtDelivery": "completed",
-      "statusAtLastCheck": "completed",
-      "conclusionAtDelivery": "success",
-      "conclusionAtLastCheck": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 26
+      "statusAtDelivery": "not-started"
     }
   },
   "lastCheck": {
-    "upstreamNewCommits": 11,
+    "upstreamNewCommits": 64,
+    "upstreamChangedPaths": 82,
     "originNewCommits": 0,
-    "mainRevision": "fa9aa3fa349c53d6e00ce5e14f99528c4fba600c",
-    "macOSSourceRevision": "c24f0ca8c8d9e774449a5a95f16ecfdf0d916b27",
-    "macOSAdaptation": "Real Android ELF namespace fixtures cover APK/unpacked sources and both load orders; actual Conscrypt coexists with app libcrypto. Real DEX verifies configured density, framework image fallback, compound drawable subclass dispatch, drawing cache and resized Picture/RenderNode pixels. Default CTest 90/90 in 70.58 seconds; bundle 18 Mach-O / 406 resources. P0 missing JIT symbol reproduced, fixed and classic ELF executed. Shared iOS syntax passes; no iOS device or real-game compatibility claim.",
+    "mainRevision": "308793d30b8ebc4d7247914bfaa8231e44aee101",
+    "macOSSourceRevision": null,
+    "macOSAdaptation": "19 focused regressions plus 103/103 default CTest (82.65 seconds), 18 Mach-O and 406 Java resources. Actual ELF data/code pointer and raw syscall checks, ANGLE shader compile, Godot 4 driver lifecycle, DEX factory/missing classes/Unicode/OOM/Wi-Fi/drawable/OBB and signed APK/OBB installation checks. Shared loader, Unity and Bionic iOS 15.5 syntax checks passed. No real game or device compatibility claim.",
     "previousCI": {
-      "run": 38835337776,
+      "run": 39061615178,
       "conclusion": "success"
     }
   },
@@ -81,5 +77,27 @@
       "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit failure recovery and cancellation timeouts remain unverified."
     ]
   },
-  "sourceVersion": "3.0.0"
+  "sourceVersion": "3.0.0",
+  "legacyUnityTextInput": {
+    "status": "packaged-driver-fixture-verified",
+    "remaining": [
+      "Physical IME composition and real legacy Unity text fields.",
+      "Full field selection/replacement semantics beyond committed text and backspace."
+    ]
+  },
+  "playExpansionFiles": {
+    "status": "packaged-fixture-verified",
+    "limits": {
+      "apkCount": 48,
+      "expansionCount": 2,
+      "downloadTotalBytes": 4294967296,
+      "archiveEntryBytes": 536870912,
+      "vmAPKCount": 32
+    },
+    "remaining": [
+      "Real authenticated Play OBB/PAD delivery and game resource use.",
+      "Same-version expansion replacement and standalone OBB import need an installation transaction keyed by both APK and expansion generations.",
+      "VM does not install OBB and rejects required expansions."
+    ]
+  }
 }

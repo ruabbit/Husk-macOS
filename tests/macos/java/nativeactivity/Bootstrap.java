@@ -3,6 +3,7 @@ public class Bootstrap extends android.app.Application {
     public static int stage, loaderCalls;
     @Override protected void attachBaseContext(android.content.Context base) {
         super.attachBaseContext(base);
+        if (Factory.calls != 2 || getClassLoader() != Factory.installed) throw new AssertionError("component factory was skipped");
         if (stage != 0) throw new AssertionError("duplicate attach");
         java.net.URL manifest = Bootstrap.class.getResource("/AndroidManifest.xml");
         if (manifest == null) throw new AssertionError("application class loader cannot find its APK manifest");

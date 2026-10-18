@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension CompatibilityStore.Status {
     var macLabel: String {
@@ -48,6 +49,9 @@ struct MacCompatReportSheet: View {
     @State private var sending = false
     @State private var error: String?
     @State private var sendTask: Task<Void, Never>?
+    @State private var choosingLog = false
+    @State private var logName: String?
+    @State private var logText: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("报告“\(subject.name)”的运行情况").font(.title2)
@@ -60,6 +64,21 @@ struct MacCompatReportSheet: View {
             Picker("类型", selection: $isGame) { Text("游戏").tag(true); Text("应用").tag(false) }
             TextField("你的称呼（可留空）", text: $author)
             TextField("运行到哪一步、遇到什么问题", text: $notes, axis: .vertical).lineLimit(4...8)
+            HStack {
+                Button("选择日志附件…") { choosingLog = true }.disabled(sending)
+                if let logName {
+                    Text(logName).lineLimit(1).truncationMode(.middle)
+                    Button("移除") { self.logName = nil; logText = nil }.disabled(sending)
+                } else { Text("不附带日志").foregroundStyle(.secondary) }
+            }
+            if let logText {
+                DisclosureGroup("预览将公开的日志（\(logText.utf8.count) 字节）") {
+                    ScrollView { Text(logText).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading) }.frame(height: 140)
+                }
+                Text("仅附带所选文件末尾最多 400 KB。请检查预览中的账号、路径或其他个人信息。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Text("将公开发布到 antiweb.lol：应用包名、名称、图标、类型、所选结果、称呼和说明，以及 \(CompatibilityStore.device)、\(CompatibilityStore.systemVersion)、Husk build \(CompatibilityStore.build)、运行组件 \(subject.runtime ?? "unknown")。")
                 .font(.caption).foregroundStyle(.secondary)
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
@@ -75,6 +94,17 @@ struct MacCompatReportSheet: View {
         }.padding(24).frame(width: 530)
         .onAppear { isGame = subject.isGame; if let crash = subject.crash { status = .broken; notes = crash } }
         .onDisappear { sendTask?.cancel() }
+        .fileImporter(isPresented: $choosingLog, allowedContentTypes: [.plainText, .json, .log, .data]) { result in
+            do {
+                let url = try result.get()
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                guard let text = CompatibilityStore.logTail(url: url) else {
+                    error = "日志为空或无法读取。"; return
+                }
+                logName = url.lastPathComponent; logText = text; error = nil
+            } catch { self.error = error.localizedDescription }
+        }
     }
     private func send() {
         guard let status else { return }
@@ -82,7 +112,8 @@ struct MacCompatReportSheet: View {
         sendTask = Task { @MainActor in
             do {
                 try await CompatibilityStore.shared.send(package: subject.package, name: subject.name, isGame: isGame,
-                    status: status, notes: notes, author: author, iconPath: subject.iconPath, runtime: subject.runtime)
+                    status: status, notes: notes, author: author, iconPath: subject.iconPath, runtime: subject.runtime,
+                    attachLog: logText != nil, logText: logText)
                 dismiss()
             } catch { self.error = error.localizedDescription }
             sending = false

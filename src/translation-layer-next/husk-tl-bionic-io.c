@@ -9,6 +9,7 @@
  */
 #define _DARWIN_C_SOURCE
 #include "husk-tl-bionic.h"
+const char *tl_ld_main_apk(void);
 #include "husk-tl-internal.h"
 #include "husk-tl-codewrite.h"
 #include "husk-tl-xmem.h"
@@ -57,12 +58,20 @@
 static char g_data_dir[512];
 static struct { char guest[320], host[1024]; } g_install_apks[TL_LD_MAX_APKS];
 static int g_install_count;
+static char g_obb_package[200], g_obb_source[1024];
+void tl_path_set_obb_source(const char *apk,const char *package) {
+    snprintf(g_obb_package,sizeof(g_obb_package),"%s",package?package:"");
+    const char *slash=apk?strrchr(apk,'/'):NULL;
+    if(slash)snprintf(g_obb_source,sizeof(g_obb_source),"%.*s/obb",(int)(slash-apk),apk);
+    else g_obb_source[0]=0;
+}
 
 bool tl_path_install_apks(const char *base, const char *package)
 {
     if (!base || !package || !*package || strlen(package) > 199 ||
         strspn(package, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._") != strlen(package)) return false;
     g_install_count = 0;
+    tl_path_set_obb_source(base,package);
     for (int i = 0; i < TL_LD_MAX_APKS; i++) {
         const char *host = i ? tl_ld_queued_split(i - 1) : base;
         if (!host) break;
@@ -185,6 +194,10 @@ void tl_set_cacerts_dir(const char *dir) { snprintf(g_cacerts, sizeof(g_cacerts)
  * typeface (Skia, in Flutter apps): a copy the app carries, laid out as fonts/ and etc/ under one directory. */
 static char g_sysfonts[1024];
 void tl_set_system_fonts_dir(const char *dir) { snprintf(g_sysfonts, sizeof(g_sysfonts), "%s", dir ? dir : ""); }
+/* Fonts the app downloaded later (the Chinese, Japanese and Korean ones the bundle leaves out, #95): a /system/fonts file the bundle
+ * does not have is looked for here too, and fonts.xml already names them. */
+static char g_extrafonts[1024];
+void tl_set_extra_fonts_dir(const char *dir) { snprintf(g_extrafonts, sizeof(g_extrafonts), "%s", dir ? dir : ""); }
 
 const char *tl_path_resolve(const char *path, char *buf, size_t n)
 {
@@ -192,7 +205,15 @@ const char *tl_path_resolve(const char *path, char *buf, size_t n)
     for (int i = 0; i < g_install_count; i++)
         if (!strcmp(path, g_install_apks[i].guest)) return g_install_apks[i].host;
     if (g_sysfonts[0]) {
-        if (!strncmp(path, "/system/fonts", 13) && (path[13] == 0 || path[13] == '/')) { snprintf(buf, n, "%s/fonts%s", g_sysfonts, path + 13); return buf; }
+        if (!strncmp(path, "/system/fonts", 13) && (path[13] == 0 || path[13] == '/')) {
+            snprintf(buf, n, "%s/fonts%s", g_sysfonts, path + 13);
+            if (g_extrafonts[0] && path[13] == '/' && access(buf, F_OK) != 0) {
+                char extra[1100];
+                snprintf(extra, sizeof(extra), "%s%s", g_extrafonts, path + 13);
+                if (access(extra, F_OK) == 0) snprintf(buf, n, "%s", extra);
+            }
+            return buf;
+        }
         if (!strcmp(path, "/system/etc/fonts.xml") || !strcmp(path, "/system/etc/font_fallback.xml")) { snprintf(buf, n, "%s/etc%s", g_sysfonts, path + 11); return buf; }
     }
     if (g_cacerts[0]) {
@@ -282,6 +303,24 @@ const char *tl_path_resolve(const char *path, char *buf, size_t n)
             return buf;
         }
         snprintf(buf, n, "%s/sdcard%s", tl_data_dir(), rest);
+        /* An expansion file (Android/obb/<package>/main.<version>.<package>.obb) not in the app's data: the one Husk's store
+         * downloaded with the app, kept beside its APKs in obb/ */
+        if (g_obb_source[0] && g_obb_package[0] && !strncmp(rest, "/Android/obb/", 13)) {
+            struct stat st;
+            size_t len=strlen(g_obb_package);
+            const char *tail=rest+13;
+            if(!strncmp(tail,g_obb_package,len) && (!tail[len] || tail[len]=='/')) {
+                tail+=len;
+                // Only this app's immediate OBB files or directory. No traversal or other package aliases.
+                bool directory=!*tail || !strcmp(tail,"/");
+                bool file=!directory && tail[0]=='/' && !strchr(tail+1,'/') &&
+                    strncmp(tail+1,"..",2) && strlen(tail)>4 && !strcmp(tail+strlen(tail)-4,".obb");
+                if(directory || (file && stat(buf,&st)!=0)) {
+                    char beside[1400];snprintf(beside,sizeof(beside),"%s%s",g_obb_source,directory?"":tail);
+                    if(lstat(beside,&st)==0 && !S_ISLNK(st.st_mode))snprintf(buf,n,"%s",beside);
+                }
+            }
+        }
         return buf;
     }
     return path;
@@ -1546,7 +1585,7 @@ static long linux_syscall_impl(long a0, long a1, long a2, long a3, long a4, long
     case 233: return 0;                                                                 /* madvise */
     case 122: case 123: return 0;                                                       /* sched_setaffinity / getaffinity */
     case 167: return 0;                                                                 /* prctl */
-    case 160: return 0;                                                                 /* uname */
+    case 160: { int tl_bionic_uname(void *); return tl_bionic_uname((void *)a0); }    /* uname: filled in, as the libc call is */
     case 47: {                                                                          /* fallocate: growing the file (Superpack maps it at its full size, then writes) */
         if (a1) return -95;
         struct stat st;

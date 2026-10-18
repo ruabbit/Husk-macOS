@@ -71,6 +71,12 @@ private final class CompatibilityProtocol: URLProtocol {
             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         try bitmap.representation(using: .png, properties: [:])!.write(to: icon)
         var payload: [String: String] = [:], posts = 0
+        let log = root.appendingPathComponent("chosen.log")
+        try Data(String(repeating: "日志😀\n", count: 50_000).utf8).write(to: log)
+        let excerpt = CompatibilityStore.logTail(url: log)!
+        try check(excerpt.utf8.count <= 400_000 && !excerpt.contains("�") && excerpt.hasSuffix("日志😀\n"),
+                  "log tail is bounded and preserves UTF-8 boundaries")
+        try check(CompatibilityStore.logTail() == nil, "macOS never chooses a log implicitly")
         CompatibilityProtocol.handler = { request in
             if request.httpMethod == "POST" {
                 posts += 1
@@ -86,11 +92,16 @@ private final class CompatibilityProtocol: URLProtocol {
             return (200, list)
         }
         try await store.send(package: "org.husk.fixture", name: "Fixture", isGame: true, status: .works,
-            notes: "local fixture", author: "", iconPath: icon.path, runtime: "java")
+            notes: "local fixture", author: "", iconPath: icon.path, runtime: "java", logURL: log)
         try check(posts == 1 && payload["ios"]?.hasPrefix("macOS ") == true && payload["device"]?.hasPrefix("Mac") == true &&
                   payload["notes"]?.contains("runtime: java") == true && payload["author"] == nil, "report identifies macOS and excludes blank author")
         let png = payload["icon"].flatMap { Data(base64Encoded: $0) }.flatMap { NSBitmapImageRep(data: $0) }
         try check(png?.pixelsWide == 128 && png?.pixelsHigh == 128, "first report icon is a bounded PNG")
+        try check(payload["log"] == nil, "log attachment defaults off even with a source URL")
+        try Data("later file changes".utf8).write(to: log)
+        try await store.send(package: "org.husk.fixture", name: "Fixture", isGame: true, status: .opens,
+            notes: "", author: "", attachLog: true, logURL: log, logText: excerpt)
+        try check(payload["log"] == excerpt, "explicit attachment sends the reviewed snapshot")
         posts = 0
         CompatibilityProtocol.handler = { _ in posts += 1; throw URLError(.networkConnectionLost) }
         do {

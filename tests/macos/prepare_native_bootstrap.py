@@ -34,7 +34,8 @@ subprocess.run([jdk/'bin/java','-cp',d8,'com.android.tools.r8.D8','--min-api','2
 strings=['manifest','package','org.husk.nativeboot','application','activity','name','org.husk.nativeboot.Game',
     'intent-filter','action','android.intent.action.MAIN','category','android.intent.category.LAUNCHER',
     'http://schemas.android.com/apk/res/android','org.husk.nativeboot.Bootstrap','provider','org.husk.nativeboot.Provider',
-    'authorities','org.husk.nativeboot.provider','meta-data','value','android.app.lib_name','native_fixture','split','config.arm64_v8a','versionCode']
+    'authorities','org.husk.nativeboot.provider','meta-data','value','android.app.lib_name','native_fixture','split','config.arm64_v8a','versionCode',
+    'appComponentFactory','org.husk.nativeboot.Factory']
 raw=b'';offsets=[]
 for s in strings:
     offsets.append(len(raw));b=s.encode();raw+=bytes([len(s),len(b)])+b+b'\0'
@@ -44,7 +45,7 @@ def begin(name,attrs=()):
     data=b''.join(struct.pack('<IIIHBBI',0xffffffff if k in ('package','split') else 12,strings.index(k),0xffffffff if isinstance(v,int) else strings.index(v),8,0,0x10 if isinstance(v,int) else 3,v if isinstance(v,int) else strings.index(v)) for k,v in attrs)
     return struct.pack('<HHIII',0x102,16,36+len(data),1,0xffffffff)+struct.pack('<IIHHHHHH',0xffffffff,strings.index(name),20,20,len(attrs),0,0,0)+data
 def end(name):return struct.pack('<HHIIIII',0x103,16,24,1,0xffffffff,0xffffffff,strings.index(name))
-body=pool+begin('manifest',[('package','org.husk.nativeboot'),('versionCode',1)])+begin('application',[('name','org.husk.nativeboot.Bootstrap')])
+body=pool+begin('manifest',[('package','org.husk.nativeboot'),('versionCode',1)])+begin('application',[('name','org.husk.nativeboot.Bootstrap'),('appComponentFactory','org.husk.nativeboot.Factory')])
 body+=begin('provider',[('name','org.husk.nativeboot.Provider'),('authorities','org.husk.nativeboot.provider')])+end('provider')
 body+=begin('activity',[('name','org.husk.nativeboot.Game')])+begin('meta-data',[('name','android.app.lib_name'),('value','native_fixture')])+end('meta-data')
 body+=begin('intent-filter')+begin('action',[('name','android.intent.action.MAIN')])+end('action')+begin('category',[('name','android.intent.category.LAUNCHER')])+end('category')

@@ -728,11 +728,11 @@ static void Coll_size(tl_jcall *c) { c->ret = vi(0); }
 static void Coll_isEmpty(tl_jcall *c) { c->ret = vz(1); }
 static void SP_getAll(tl_jcall *c) { c->ret = vl(make("java/util/HashMap")); }
 static void Intent_getExtras(tl_jcall *c) { c->ret = vl(NULL); }
-static void Context_getObbDir(tl_jcall *c) { char p[700]; snprintf(p, sizeof(p), "%s/obb", H.ext_files); mkdirs(p); c->ret = vl(new_file(p)); }
+static void Context_getObbDir(tl_jcall *c) { char p[700]; snprintf(p, sizeof(p), "/sdcard/Android/obb/%s", H.pkg); c->ret = vl(new_file(p)); }
 static void Context_getObbDirs(tl_jcall *c)
 {
     jobj *a = tl_jni_new_obj_array(C("java/io/File"), 1);
-    char p[700]; snprintf(p, sizeof(p), "%s/obb", H.ext_files); mkdirs(p);
+    char p[700]; snprintf(p, sizeof(p), "/sdcard/Android/obb/%s", H.pkg);
     a->oarr.v[0] = new_file(p);
     c->ret = vl(a);
 }
@@ -1070,6 +1070,7 @@ static const tl_jhle k_hle[] = {
 
 void tl_hle_configure(const char *pkg, const char *apk, const char *data, int w, int h)
 {
+    void tl_path_set_obb_source(const char *,const char *);tl_path_set_obb_source(apk,pkg);
     snprintf(H.pkg, sizeof(H.pkg), "%s", pkg);
     snprintf(H.apk, sizeof(H.apk), "%s", apk);
     snprintf(H.data, sizeof(H.data), "%s", data);

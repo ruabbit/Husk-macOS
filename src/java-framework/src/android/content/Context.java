@@ -94,7 +94,7 @@ public abstract class Context {
     public java.util.concurrent.Executor getMainExecutor() { final Handler h = new Handler(getMainLooper()); return h::post; }
     public File getCodeCacheDir() { return sub("code_cache"); }
     public File getNoBackupFilesDir() { return sub("no_backup"); }
-    public File getObbDir() { return getExternalFilesDir(null).getParentFile(); }
+    public File getObbDir() { File dir = new File("/sdcard/Android/obb/" + getPackageName()); if (!dir.isDirectory()) dir.mkdirs(); return dir; }
     public File[] getObbDirs() { return new File[] { getObbDir() }; }
     public File getExternalCacheDir() { File f = new File(getExternalFilesDir(null).getParentFile(), "cache"); f.mkdirs(); return f; }
     public File[] getExternalCacheDirs() { return new File[] { getExternalCacheDir() }; }

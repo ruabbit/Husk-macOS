@@ -239,7 +239,9 @@ final class CompatibilityStore: ObservableObject {
 #endif
     }
 
-    func send(package: String, name: String, isGame: Bool, status: Status, notes: String, author: String, iconPath: String? = nil, runtime: String? = nil) async throws {
+    func send(package: String, name: String, isGame: Bool, status: Status, notes: String, author: String,
+              iconPath: String? = nil, runtime: String? = nil, attachLog: Bool = false, logURL: URL? = nil,
+              logText: String? = nil) async throws {
         var body: [String: String] = [
             "package": package, "name": name, "type": isGame ? "game" : "app", "status": status.rawValue,
             "device": Self.device, "ios": Self.systemVersion, "build": Self.build, "jit": Self.jitMethod,
@@ -252,6 +254,7 @@ final class CompatibilityStore: ObservableObject {
 #endif
         if body["author"]?.isEmpty == true { body["author"] = nil }
         if entry(package)?.icon == nil, let icon = Self.iconPNG(iconPath) { body["icon"] = icon }
+        if attachLog, let log = logText.map({ Self.logExcerpt(Data($0.utf8)) }) ?? Self.logTail(url: logURL) { body["log"] = log }
         let payload = try JSONSerialization.data(withJSONObject: body)
         // A lost POST response may already have created a report. Do not repeat
         // it at the fallback site without server-side idempotency.
@@ -268,6 +271,29 @@ final class CompatibilityStore: ObservableObject {
         Self.log("reported \(package): \(status.rawValue)")
         markAsked(package)
         await refresh(force: true)
+    }
+
+    /// The end of Husk's log, as the log export shares it (husk.log): at most the last 400,000 bytes, cut on a character boundary.
+    static func logTail(url: URL? = nil, limit: Int = 400_000) -> String? {
+#if os(iOS)
+        let source = url ?? HuskLog.logFileURL
+#else
+        guard let source = url else { return nil }
+#endif
+        guard limit > 0, let handle = try? FileHandle(forReadingFrom: source) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > UInt64(limit) ? size - UInt64(limit) : 0)
+        guard let data = try? handle.read(upToCount: limit), !data.isEmpty else { return nil }
+        return logExcerpt(data, limit: limit)
+    }
+
+    private static func logExcerpt(_ data: Data, limit: Int = 400_000) -> String {
+        let data = data.suffix(max(0, limit))
+        var start = data.startIndex
+        // Not inside a UTF-8 sequence: skip continuation bytes (10xxxxxx).
+        while start < data.endIndex, data[start] & 0xC0 == 0x80 { start += 1 }
+        return String(decoding: data[start...], as: UTF8.self)
     }
 
     // Ask once per game per Husk build: a new build can change how a game runs.
@@ -348,6 +374,7 @@ struct CompatReportSheet: View {
     @State private var sending = false
     @State private var error: String?
     @State private var sent = false
+    @AppStorage("husk.compatAttachLog") private var attachLog = true
 
     var body: some View {
         NavigationStack {
@@ -367,8 +394,12 @@ struct CompatReportSheet: View {
                     Text(subject.afterPlaying ? "How did \(subject.name) run?" : "How does \(subject.name) run?")
                 }
                 Section("Notes") {
-                    TextField("What worked, what didn\u{2019}t, how far you got", text: $notes, axis: .vertical)
-                        .lineLimit(3...8)
+                    if #available(iOS 16, *) {
+                        TextField("What worked, what didn\u{2019}t, how far you got", text: $notes, axis: .vertical)
+                            .lineLimit(3...8)
+                    } else {
+                        TextEditor(text: $notes).frame(minHeight: 80)
+                    }
                 }
                 Section {
                     TextField("Anonymous", text: $author)
@@ -378,6 +409,11 @@ struct CompatReportSheet: View {
                     Text("Your Name")
                 } footer: {
                     Text("Sent with it: \(CompatibilityStore.device), iOS \(UIDevice.current.systemVersion), Husk build \(CompatibilityStore.build), JIT from \(CompatibilityStore.jitMethod). It shows on antiweb.lol for everyone.")
+                }
+                Section {
+                    Toggle("Attach my log", isOn: $attachLog)
+                } footer: {
+                    Text("Your Husk log helps the developer see what went wrong. Only moderators can read it.")
                 }
                 if let error {
                     Section { Text(error).foregroundStyle(.red) }
@@ -405,7 +441,7 @@ struct CompatReportSheet: View {
                 if notes.isEmpty { notes = crash }
             }
         }
-        .presentationDetents([.medium, .large])
+        .huskDetents([.medium, .large])
     }
 
     private func send() {
@@ -415,7 +451,8 @@ struct CompatReportSheet: View {
         Task {
             do {
                 try await CompatibilityStore.shared.send(package: subject.package, name: subject.name, isGame: subject.isGame,
-                                                         status: status, notes: notes, author: author, iconPath: subject.iconPath)
+                                                         status: status, notes: notes, author: author, iconPath: subject.iconPath,
+                                                         attachLog: attachLog)
                 sent = true
                 try? await Task.sleep(nanoseconds: 600_000_000)
                 dismiss()

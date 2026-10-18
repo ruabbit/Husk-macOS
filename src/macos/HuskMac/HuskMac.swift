@@ -393,7 +393,8 @@ struct GameDetail: View {
                 }
                 if model.vmAvailability.installed {
                     Button("在 Android 中安装并运行") { model.playVM(game) }
-                        .disabled(!model.vmAvailable || game.apkNames.count > 32 || model.vm.state == "stopping")
+                        .disabled(!model.vmAvailable || game.apkNames.count > 32 || game.expansions?.isEmpty == false || model.vm.state == "stopping")
+                    if game.expansions?.isEmpty == false { Text("OBB 资源目前仅支持原生运行。").font(.caption).foregroundStyle(.secondary) }
                     if let reason = model.vmAvailability.unavailableReason { Text(reason).font(.caption).foregroundStyle(.secondary) }
                     Text("Android 实验功能尚未通过 Minecraft 运行和持续音频验证。安装成功不代表游戏可运行；存档保存在所选虚拟机的数据盘中。").font(.caption).foregroundStyle(.secondary)
                 }

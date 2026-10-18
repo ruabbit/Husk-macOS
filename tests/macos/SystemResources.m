@@ -2,6 +2,7 @@
 #import <Foundation/Foundation.h>
 #import "MacJavaRuntime.h"
 #include "husk-tl-bionic.h"
+#include "husk-tl-ld.h"
 #include <unistd.h>
 #include <string.h>
 
@@ -28,6 +29,18 @@ int main(int argc,char **argv) { @autoreleasepool {
         CHECK(!memcmp(header,expected.bytes,sizeof(header)));
     }
     CHECK(guest_open("/system/fonts/husk-nonexistent-font.ttf",0)<0);
+    NSString *temporary=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+    NSString *obb=[temporary stringByAppendingPathComponent:@"obb"];
+    CHECK([NSFileManager.defaultManager createDirectoryAtPath:obb withIntermediateDirectories:YES attributes:nil error:NULL]);
+    NSString *name=@"main.1.org.husk.obb.obb";
+    CHECK([[@"OBB payload" dataUsingEncoding:NSUTF8StringEncoding] writeToFile:[obb stringByAppendingPathComponent:name] atomically:YES]);
+    CHECK(tl_path_install_apks([[temporary stringByAppendingPathComponent:@"base.apk"] fileSystemRepresentation],"org.husk.obb"));
+    int fd=guest_open("/sdcard/Android/obb/org.husk.obb/main.1.org.husk.obb.obb",0);
+    CHECK(fd>=0);char bytes[4]={0};CHECK(guest_read(fd,bytes,3)==3&&!strcmp(bytes,"OBB"));CHECK(guest_close(fd)==0);
+    CHECK(guest_open("/sdcard/Android/obb/another.package/main.1.org.husk.obb.obb",0)<0);
+    CHECK(guest_open("/sdcard/Android/obb/org.husk.obb/../main.1.org.husk.obb.obb",0)<0);
+    char mapped[1400];CHECK(!strcmp(tl_path_resolve("/storage/emulated/0/Android/obb/org.husk.obb",mapped,sizeof(mapped)),obb.fileSystemRepresentation));
+    CHECK([NSFileManager.defaultManager removeItemAtPath:temporary error:NULL]);
     printf("PASS production runtime mapping: %lu font names, font XML and missing-file behavior\n",(unsigned long)fonts.count);
     return 0;
 } }

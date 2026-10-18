@@ -1,18 +1,29 @@
 # 上游功能与 macOS 接入现况
 
-上游核对日期：2026-10-17（Asia/Shanghai）；Egg 运行链路更新于 2026-10-18。upstream/main 从 **4c03823** 到 **a3407fc**，11 个提交、19 个路径；源码版本号已改为 **3.0.0**，远端尚无 3.0 tag，最新发布标签仍为 **2.0 = e02ac68**。origin 两分支没有外来新提交；上游先普通合并到 fork main **fa9aa3f**，再合回 macOS，无文本冲突。
+上游核对日期：2026-10-18（Asia/Shanghai）。本轮 `a3407fc..cedb01e` 共 **64 个提交、82 个路径**；正式 **3.0 tag = cffaf8b**，上游 iOS build 129。origin 两分支没有外来新提交；先普通合并到本地 fork main **308793d**，再合回 macOS。七个冲突按语义解决，保留自定义 Java ClassLoader、NativeActivity 关闭协议、Mac 报告来源和加载器混合页修复。
 
-本轮共享 loader 的运行时/应用库隔离、Java 配置密度及框架图像回退、TextView 递归修复、Picture/RenderNode/绘图缓存释放，已编入 macOS NativeRunner 和重新构建的 framework DEX。新增 7 项回归验证 APK/解包库、两种加载顺序、真实 Conscrypt 与应用 libcrypto 共存及 Java 绘图/资源行为。上游共享 JIT 分区和 TrollStore/JIT 提示属于 iOS；macOS 保留独立 NativeRunner/VMRunner 与权限模型。P0 classic harness 因新增 tl_jit_reserve_bottom 漏链接的问题已复现并修正，真实 ELF 执行通过。
+本轮交付 **3.0.0 / build 12**，仍使用唯一 `build/macos`、VM=ON。以下新增接入已编译并通过 19 项针对性回归，完整 CTest、包校验、候选重启与推送结果在 [progress.md](progress.md) 最上方记录。构建和 fixture 通过不等于真实游戏兼容。
 
-**2026-10-17 的 3.0.0 / build 9** 在唯一 `build/macos` 原位构建，VM=ON；默认 **CTest 90/90（70.58 秒）**，包内 **18 个 Mach-O / 406 个 Java 资源** 校验通过。CUA 单次打开当前候选，主窗口显示原有 10 个应用，Product PID **53326** 已核对。源码 **c24f0ca** 和 main **fa9aa3f** 已正常原子推送并读回一致；[CI 38990038463](https://github.com/ruabbit/Husk-macOS/actions/runs/38990038463) 已完成并成功，构建/包检查、26 项 hosted 核心测试和 P0 memory/core 通过，hardware job 跳过。详见 [progress.md](progress.md)。旧的 2.0/手柄/Geode/窗口/Store/图形接线均已复核；不能将此次版本更新写成 PS4、真实游戏或 Play 登录验收。
+| 本轮上游能力 | macOS 实际接入与证据 |
+| --- | --- |
+| 旧 Unity TouchScreenKeyboard | 主线程 MacTextInput 与 UnityMain 队列接通，处理组合文字提交、退格、完成/取消和多行；UTF-16 选择偏移。生产驱动测试覆盖中文/emoji、长度限制和线程顺序，未声称实体输入法或旧 Unity 真游戏已通过 |
+| Store 流式下载、48 APK、OBB | 共享 FileStreamer 直接写 0600 文件，支持取消、HTTPS 重定向和流量上限；48 APK 完整签名导入；main/patch OBB 与 APK 一次安装并保存大小/摘要。Play 与 XAPK 两条导入路径、重开和无效资源拒绝通过。运行时映射本应用 OBB 目录，Java/HLE getObbDir 与真实 open/read 通过 |
+| Go 数据与裸 syscall | Go 标记 ELF 的只读数据使用一致视图，保留 4 KiB 指令页与 16 KiB 宿主页区分。新增测试发现普通 4 KiB ELF 的只读重定位和 ADRP 不一致，已统一按实际 PT_LOAD 地址分类；3 种真实 ELF 布局验证数据/代码指针和 syscall NZCV、完整 q8–q15。不是完整 Go 应用兼容验收 |
+| Java framework / AppComponentFactory | 实际 factory 可以在 Application 前安装 ClassLoader，保留 attachBaseContext 后再次采用自定义 loader。真实 DEX 验非 ASCII 类名、缺可选类的可捕获错误、超过 256 MiB 的数组拒绝、Wi-Fi 对象和 Drawable 克隆；NativeActivity 生命周期回归保留 |
+| Godot 4 / NativeBridge | 默认传递 OpenGL Compatibility 参数，显式 Vulkan 环境选择保持；GodotNativeBridge 提供 RenderView/InputHandler。真实 ELF 经完整输入/暂停/销毁验证；Vulkan override 测试只核对参数，没有运行 Vulkan Godot 游戏 |
+| 外部纹理 shader | 新共享重写器通过实际 ANGLE 对普通与 samplerExternalOES shader 的编译，两种 ES31 shim 状态均通过；没有采集摄像头或验证真实外部视频图像 |
+| 3.0 首页与兼容性日志 | Mac 首页加入选中游戏展示、直接启动/显示窗口和应用列表选择，保留原生资料库/Store/帮助；圣诞装饰限 12/1–1/6。报告日志默认不附带，用户选择后可预览/移除，发送所见快照，最多读取 400 KB；离线协议验证，无公共报告发送 |
+| NativeActivity 分类 | 新导入采用上游 manifest/DEX 检查；旧 NativeActivity 标签按 APK 摘要在内存重新扫描，读取资料库不重写用户索引、设置或存档；Runner 继续独立核验入口 |
+| CJK / iOS 特性 | macOS 已包含固定 Android 系统字体及 CJK，不需要上游为精简 iOS 包新增的按需下载；未删字体或改为未固定的远程来源。iOS 15.5/JIT 配对/UI 兼容代码保留，上游 graphics 依赖 pin 本轮未变化 |
+| Console / VM 差异 | PS4 文本输入与 install_package ABI 已进未打包的 ConsoleHostRuntime，真实核心/包导入/关闭所有权仍未交付。Mac VM 不自动启动，也不使用 iOS 的快照下载器；仍最多 32 APK，明确拒绝 OBB 以免静默漏资源；未修改 Android 磁盘 |
 
 fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 PR #118](https://github.com/Leviidev/Husk/pull/118) 于 2026-10-18 按用户要求关闭，未合并。自该日起，修复、适配、提交与 PR 只在 `ruabbit/Husk-macOS` 完成；上游继续只读核对和同步，不新建、重开或更新上游 PR/issue，也不发表评论，除非用户重新明确授权。PR #82 上次接口返回 404，已采用的单例修复保留。
 
 2026-10-18 上一候选为 **3.0.0 / build 10**。NativeActivity 已补真实 Java Application/ClassLoader/JNI/NDK 启动桥及 Android 安装路径映射；默认 **CTest 96/96（82.91 秒）**、18 个 Mach-O / 406 个 Java 资源校验通过。CUA 单次启动 Product，PID **89011**，主窗口显示当前资料库 **11 个应用**。真实 Egg 已进入 Java 密钥导入错误路径，尚未进入游戏原生入口，详见下方开放项和 [启动报告](2026-10-18_reverse-egg-startup-report.md)。
 
-当前候选已更新为 **3.0.0 / build 11**：补齐软件 AES/GCM KeyProtection 导入、受限密钥句柄与原子持久化，默认 **CTest 97/97（77.84 秒）**、18 个 Mach-O / 406 个 Java 资源检查通过；CUA 单次重开，Product PID **7656**。这只修复 Play 返回密钥后的接收能力，Egg 所需的真实 Play 下发服务继续开放，本轮没有重复启动 Egg。
+本轮之前的候选 **3.0.0 / build 11**：补齐软件 AES/GCM KeyProtection 导入、受限密钥句柄与原子持久化，默认 **CTest 97/97（77.84 秒）**、18 个 Mach-O / 406 个 Java 资源检查通过；CUA 单次重开，Product PID **7656**。这只修复 Play 返回密钥后的接收能力，Egg 所需的真实 Play 下发服务继续开放，本轮没有重复启动 Egg。
 
-## 3.0 本轮变更
+## 2026-10-17 的 3.0 预发布接入
 
 | 上游变更 | macOS 接入和验证 |
 | --- | --- |
@@ -40,9 +51,9 @@ fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 P
 
 | 功能 | 当前 macOS 接入 | 验证与剩余边界 |
 | --- | --- | --- |
-| Java / Dalvik / Unity 6 | 受控 boot class path、固定 Android 资源、源码构建 framework DEX、32 分包、触摸/键盘/IME/手柄、暂停/销毁和 worker/SQLite 检查；InputEvent 父类 getDevice；随包 Vulkan 与 Java/TextureView 合成 | 生产 fixture、真实 DEX、打包会话通过；Hole.io 已取得真实拖动和黑色洞口证据，关闭/保存重开仍未通过；其他游戏逐个验证 |
+| Java / Dalvik / Unity 6 | 受控 boot class path、固定 Android 资源、源码构建 framework DEX、48 个 APK、触摸/键盘/IME/手柄、暂停/销毁和 worker/SQLite 检查；InputEvent 父类 getDevice；随包 Vulkan 与 Java/TextureView 合成 | 生产 fixture、真实 DEX、打包会话通过；Hole.io 已取得真实拖动和黑色洞口证据，关闭/保存重开仍未通过；其他游戏逐个验证 |
 | Cocos 无 FMOD、SDL 无 DXVK、Python、Flutter、libGDX、Java、React Native、.NET | 与上游 TLReport.nativeEngine 一致，进入 Java profile | 不因为分类命中就声称插件或真实游戏兼容 |
-| Unity 旧版 | 已有独立驱动、固定画布、输入和确认销毁保留 | 旧 Unity IME 仍未接；旧样本黑屏/崩溃不被本轮 fixture 结果覆盖 |
+| Unity 旧版 | 已有独立驱动、固定画布、输入和确认销毁保留 | 旧 Unity IME 已于 build 12 接入并经过驱动/组合文字 fixture；实体输入法和旧样本黑屏/崩溃仍须真游戏验证 |
 | Cocos + FMOD | 编入共享驱动、JNI 和文本栅格化；原生 profile、触摸/按键/手柄、IME hooks、GL 线程暂停和关闭 | 真实 ELF/ANGLE 与生产会话通过。Cocos 没有 renderer destroy，按其 Android nativeOnPause 保存，再 join/检查 worker；FMOD 线程残留会明确失败 |
 | Godot / GameMaker | 编入共享驱动，资料库/Runner 分发，方向与固定画布、触摸/按键、同线程暂停；Godot ondestroy / GameMaker Exit 后关闭 | 真实 ELF 与生产会话通过；缺少 destroy 拒绝回执，暂停失败不会被后续成功销毁覆盖；真实游戏和插件另验 |
 | SDL + DXVK | launcher Activity 与分包传递、MoltenVK 配置、SDL/UI 线程生命周期、触摸/按键/手柄、文本 hooks | nativeSendQuit → SDLMain 完成/join → nativeQuit，再检查 worker；正常及缺 destroy 测试通过 |
@@ -79,8 +90,8 @@ Java 关闭先等待 Activity/框架 worker/preferences/SQLite，WebView 自身�
    - War 仍开放：20 秒观察没有进入主菜单，自定义 DagorUpdater 的 getFreeDiskSpace/isInstanceCreated 等方法仍返回未实现结果，需要接真实 Java 启动/更新器路径。停止后进程 exit 0，但没有 storage-closed，仍按失败处理；须追踪原生销毁末尾的进程退出与生命周期确认，不能把 exit 0 或 application destroyed 文本当成存档成功。最新会话 F55D0587，实测截图 `current-war-thunder-repair/frame.png`，解码引擎日志 `current-war-thunder-repair-engine-latest.log`。此次没有证明完整玩法或保存重开。
    - Clash：日志修复后的单次探测输出 5,913,771 bytes，末尾仍保留 `exit(101)` 和 NativeRunner 实际退出 70。退出发生在原生库初始化期间；`JNI_OnLoad+0x12c4c` 是最近导出符号标注，不能当成已执行 JNI_OnLoad 的证据。静态原始 RVA 0x6207bc 为 exit(101) 调用，前置控制流经过 0x61a668；需要继续检查混淆初始化分支及其真实 OS/JNI 前置条件，禁止简单跳过 exit。
    - 日志/静态证据在 `build/logs/current-three-games-audit.json`、`current-icon-repair.log`、`current-war-thunder-repair/`、`current-war-thunder-audio-static.log`、`current-clash-repair/`、`current-egg-init-static.log`、`current-egg-init-relocations.log`、`current-clash-exit-static.log`。自动真实探测静音/不可见，存档位于独立输出目录；三款仍未通过完整运行验收。
-6. Play：个人账号/passkey 仍被 Google 拒绝；只有本人真实登录成功且 Play 会话可用才通过。OBB/PAD、设备配置和已购交付验收仍开放。
-7. VM/P6：VM Minecraft 黑屏与持续 PCM 未通过；QEMU/libssh/OpenSSL 许可、Android 对应源码和发行签名仍按发行门槛处理。
+6. Play：个人账号/passkey 仍被 Google 拒绝；只有本人真实登录成功且 Play 会话可用才通过。OBB 的 Play/XAPK 安装和原生读取已由 build 12 fixture 验证；真实网络 OBB/PAD、设备配置和已购交付仍待验收。当前同一 APK 版本增补/替换 OBB 被明确拒绝，保留原安装；下一步需让安装事务同时记录 APK 与资源代际，再接单独 OBB 导入，不能复用仅 APK 摘要的恢复判断。压缩包单条仍限 512 MiB（现有解包器上限），Play 流式下载总量限 4 GiB。
+7. VM/P6：VM Minecraft 黑屏与持续 PCM 未通过；上游新增的 Android 删除/快照空间预检尚未映射到 Mac 独立 VM 数据管理，需先划清共享基础镜像与用户 overlay，再提供明确确认的删除入口并做隔离磁盘测试；QEMU/libssh/OpenSSL 许可、Android 对应源码和发行签名仍按发行门槛处理。
 8. Hole.io（2026-10-13）：InputEvent.getDevice 的父类 JNI 查找与 Java Vulkan 合成已修复，最终 build 5 的后台真实游戏确认拖动、计分、正常黑色洞口以及暂停/恢复。证据在 `build/macos/TestResults/HoleCandidate/`，会话 E86FC7A5。仍需完成可见 AppKit 窗口鼠标拖动验收（CUA 详情导航 native pipe closed）、Unity 进程退出与 SharedPreferences/worker 关闭、保存重开和长期性能。UnityPlayerForActivityOrService 的销毁路径在 mProcessKillRequested 时调用 onUnityPlayerQuitted 后进入 UnityPlayer.kill → Process.killProcess；当前 host 如实保持失败状态。下一步核对该退出请求的真实时序与写入/worker 所有权，补覆盖该行为的 DEX fixture，再运行真实保存重开；不能忽略 killProcess 或直接发 storage-closed。Vulkan 目前同步读回到 Java 合成器，可进一步评估 GPU 共享纹理，但要保留 present 等待和独立 layer 所有权。
 9. PS4：核心源码公开位于 [Leviidev/AetherPS4 的 husk 分支](https://github.com/Leviidev/AetherPS4/tree/d953592114581cf3e5bdb20229769ec2f69b2359)，已核对 macOS 模块入口。公开 [fex-snapshot](https://github.com/Leviidev/AetherPS4/tree/220ab1e6d5aec14e43428f97c75530fc0113ce08) 的 `FEXCore/include/FEXCore/Utils/AllocatorHooks.h` 没有核心 CMake 检测的 `SetJITHostHooks`，会关闭 `AETHER_FEX_HAS_JIT_HOST`；不能把退回自行分配 JIT 当作 Husk 宿主区域/上限已生效。上游脚本要求作者本地 `husk-fex` 分支，本次公开同名仓库接口返回 404，并非核心源码整体不可获取。
    - 下一步先固定公开核心、FEX 和子模块版本，取得或实现匹配的 host JIT hooks；FEX 与核心同时使用 `FEX_MAC_PHONE_PATH=1`，核心开启 `ENABLE_FEX_GUEST_CPU`、`ENABLE_SHADPS4_IOS_LIB`、`ENABLE_HUSK_MODULE`、`AETHER_MAC_PHONE_PATH`。在现有依赖缓存内验证 arm64 模块、单导出符号、依赖闭包和许可，不另建候选或降低权限约束。

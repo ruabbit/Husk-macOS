@@ -99,12 +99,12 @@ public actor LibraryRepository {
                   result.games.allSatisfy({ Self.validID($0.id) && $0.apkNames.allSatisfy(Self.validName) })
             else { throw LibraryFailure("资料库格式不受支持；原文件已保留。") }
             // Enrich old imports in memory. Listing never rewrites the user's index.
-            for i in result.games.indices where result.games[i].dexCount == nil {
+            for i in result.games.indices where result.games[i].dexCount == nil || result.games[i].engine == "NativeActivity" {
                 let path = paths.game(result.games[i].id).appendingPathComponent("scan.json")
                 var report = (try? Data(contentsOf: path)).flatMap { try? JSONDecoder().decode(Scan.self, from: $0) }
-                // Old scans predate Unity 6 detection. Rescan once per APK digest
+                // Old scans predate Unity 6 and manifest-based NativeActivity detection. Rescan once per APK digest
                 // in this repository instance; never rewrite files while listing.
-                if result.games[i].engine?.hasPrefix("Unity") == true {
+                if result.games[i].engine?.hasPrefix("Unity") == true || result.games[i].engine == "NativeActivity" {
                     let key = result.games[i].digest
                     if upgradedScans[key] == nil {
                         let apks = result.games[i].apkNames.map { paths.game(result.games[i].id).appendingPathComponent($0) }
@@ -214,8 +214,9 @@ public actor LibraryRepository {
                 names = ["base.apk"]
                 try fm.copyItem(at: source, to: stage.appendingPathComponent(names[0]))
             } else {
-                let apks = try listing(source).entries.filter { $0.name.lowercased().hasSuffix(".apk") }
-                guard !apks.isEmpty, apks.count <= 32 else { throw LibraryFailure("此 bundle 需要 1–32 个 APK；无法完整导入该组合。") }
+                let entries = try listing(source).entries
+                let apks = entries.filter { $0.name.lowercased().hasSuffix(".apk") }
+                guard !apks.isEmpty, apks.count <= 48 else { throw LibraryFailure("此 bundle 需要 1–48 个 APK；无法完整导入该组合。") }
                 for entry in apks {
                     let name = (entry.name as NSString).lastPathComponent
                     guard Self.validName(name), !names.contains(where: { $0.lowercased() == name.lowercased() })
@@ -227,6 +228,19 @@ public actor LibraryRepository {
                 }
                 let siblings = names
                 names.sort { let a = BundleUnpacker.rank($0, siblings: siblings), b = BundleUnpacker.rank($1, siblings: siblings); return a == b ? $0 < $1 : a < b }
+                let obbs = entries.filter { $0.name.lowercased().hasSuffix(".obb") }
+                guard obbs.count <= 2 else { throw LibraryFailure("此 bundle 含过多的 OBB 资源。") }
+                if !obbs.isEmpty {
+                    let folder = stage.appendingPathComponent("obb", isDirectory: true)
+                    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+                    for entry in obbs {
+                        let name = (entry.name as NSString).lastPathComponent
+                        guard Self.validName(name) else { throw LibraryFailure("OBB 文件名无效。") }
+                        var error = [CChar](repeating: 0, count: 512)
+                        guard husk_archive_extract(source.path, entry.name, folder.appendingPathComponent(name).path, &error, error.count)
+                        else { throw LibraryFailure("资源解包失败：\(String(cString: error))") }
+                    }
+                }
             }
             return try finishImport(stage: stage, names: names, sourceName: source.lastPathComponent, index: &index, blockedIDs: blockedIDs)
         }
@@ -237,7 +251,10 @@ public actor LibraryRepository {
     public func importAPKs(_ sources: [URL], package: String, version: Int, title: String,
                            blockedIDs: Set<String> = []) throws -> LibraryGame {
         try locked {
-            guard (1...32).contains(sources.count), version > 0 else { throw LibraryFailure("APK 集合的文件数量或版本无效。") }
+            let apkSources = sources.filter { $0.pathExtension == "apk" }
+            let obbSources = sources.filter { $0.pathExtension == "obb" }
+            guard (1...48).contains(apkSources.count), obbSources.count <= 2,
+                  apkSources.count + obbSources.count == sources.count, version > 0 else { throw LibraryFailure("APK 集合的文件数量或版本无效。") }
             var index = try readIndex()
             let stage = paths.root.appendingPathComponent("Staging/\(UUID().uuidString)", isDirectory: true)
             try fm.createDirectory(at: stage, withIntermediateDirectories: true)
@@ -248,14 +265,18 @@ public actor LibraryRepository {
                 try Task.checkCancellation()
                 let name = source.lastPathComponent
                 let values = try source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .isSymbolicLinkKey])
-                guard Self.validName(name), name.hasSuffix(".apk"), !names.contains(name),
+                let obb = source.pathExtension == "obb"
+                guard Self.validName(name), (!obb || GameExpansion.validName(name, package: package, version: version)), !names.contains(name),
                       values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize,
                       size > 0, size <= 4 << 30 else { throw LibraryFailure("APK 集合含无效文件。") }
                 total += size
                 guard total <= 4 << 30 else { throw LibraryFailure("APK 集合超过 4 GB。") }
-                try fm.copyItem(at: source, to: stage.appendingPathComponent(name)); names.append(name)
+                let folder = obb ? stage.appendingPathComponent("obb", isDirectory: true) : stage
+                if obb { try fm.createDirectory(at: folder, withIntermediateDirectories: true) }
+                try fm.copyItem(at: source, to: folder.appendingPathComponent(name))
+                names.append(name)
             }
-            return try finishImport(stage: stage, names: names, sourceName: "\(package).apks", index: &index,
+            return try finishImport(stage: stage, names: names.filter { $0.hasSuffix(".apk") }, sourceName: "\(package).apks", index: &index,
                                     expectedPackage: package, expectedVersion: version, title: title, blockedIDs: blockedIDs)
         }
     }
@@ -303,7 +324,16 @@ public actor LibraryRepository {
         for apk in apks { _ = try listing(apk) }
         let (report, reportData) = try scan(apks)
         let digest = try apks.map(Self.digest).joined(separator: ":")
-        if let duplicate = index.games.first(where: { $0.digest == digest }) { refreshIcon(duplicate); return duplicate }
+        let obbDirectory = stage.appendingPathComponent("obb", isDirectory: true)
+        let expansions: [GameExpansion] = try (fm.fileExists(atPath: obbDirectory.path) ? fm.contentsOfDirectory(atPath: obbDirectory.path) : []).sorted().map { name in
+            let url = obbDirectory.appendingPathComponent(name)
+            return GameExpansion(name: name, size: try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0, sha256: try Self.digest(url))
+        }
+        if let duplicate = index.games.first(where: { $0.digest == digest }) {
+            guard (duplicate.expansions ?? []) == expansions else { throw LibraryFailure("此版本的扩展资源与已安装内容不一致，原安装已保留。") }
+            try duplicate.verifyExpansions(in: paths.game(duplicate.id))
+            refreshIcon(duplicate); return duplicate
+        }
         let base = apks[0]
         let androidManifest = Self.entry(base, "AndroidManifest.xml") ?? Data()
         let resources = Self.entry(base, "resources.arsc", limit: 64 << 20) ?? Data()
@@ -340,6 +370,8 @@ public actor LibraryRepository {
                                settings: GameSettings(), lastPlayed: nil)
         game.dexCount = report.dexCount; game.libraryNames = report.libraries?.map(\.name); game.webKind = report.webKind
         game.packageName = packageID; game.versionCode = version; game.signerSHA256 = signing[0]
+        game.expansions = expansions.isEmpty ? nil : expansions
+        try game.verifyExpansions(in: stage)
         if let previous { game.settings = previous.settings; game.lastPlayed = previous.lastPlayed }
         cacheIcon(apks: apks, game: game, directory: stage)
         try reportData.write(to: stage.appendingPathComponent("scan.json"))
@@ -417,6 +449,7 @@ public actor LibraryRepository {
             guard let game = try readIndex().games.first(where: { $0.id == id }), game.playable else { throw LibraryFailure("此游戏当前无法运行。") }
             let apks = game.apkNames.map { paths.game(id).appendingPathComponent($0) }
             guard try apks.map(Self.digest).joined(separator: ":") == game.digest else { throw LibraryFailure("游戏文件已改变或损坏，请重新导入。") }
+            try game.verifyExpansions(in: paths.game(id))
             try fm.createDirectory(at: paths.save(id), withIntermediateDirectories: true)
             return (game, apks, paths.checkpoint(id))
         }
@@ -432,6 +465,9 @@ public actor LibraryRepository {
         return try locked {
             guard let game = try readIndex().games.first(where: { $0.id == id }), (1...32).contains(game.apkNames.count) else {
                 throw LibraryFailure("Android VM 的 APK 集合不完整。")
+            }
+            guard game.expansions?.isEmpty != false else {
+                throw LibraryFailure("Android VM 尚不支持安装 OBB 资源，请使用原生运行。")
             }
             let apks = game.apkNames.map { paths.game(id).appendingPathComponent($0) }
             let apk = apks[0]

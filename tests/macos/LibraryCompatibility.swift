@@ -66,9 +66,9 @@ import HuskCore
             native["engine"] = "NativeActivity"
             let nativeGame = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: native))
             try check(nativeGame.runtime == "nativeactivity", "existing-nativeactivity-import-gains-driver-without-reimport")
-            unity["engine"] = "Unity (Mono)"; unity["apkNames"] = (0..<32).map { "split\($0).apk" }
+            unity["engine"] = "Unity (Mono)"; unity["apkNames"] = (0..<48).map { "split\($0).apk" }
             let mono = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: unity))
-            try check(mono.runtime == "unity", "unity-mono-and-32-apk-sets-use-driver")
+            try check(mono.runtime == "unity", "unity-mono-and-48-apk-sets-use-driver")
             unity["abis"] = ["armeabi-v7a"]
             let arm32 = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: unity))
             try check(!arm32.playable, "unity-arm32-stays-unavailable")
@@ -117,13 +117,19 @@ import HuskCore
             try check(session.state == "failed" && session.error?.contains("运行入口") == true,
                       "helper-rejects-forged-unity-engine-before-execution")
             records[1]["engine"] = "NativeActivity"; legacy["games"] = records
-            try JSONSerialization.data(withJSONObject: legacy).write(to: paths.index)
-            let (falseNative, nativeFiles, nativeCheckpoint) = try await reopened.prepare(unknown.id)
+            let staleBytes = try JSONSerialization.data(withJSONObject: legacy)
+            try staleBytes.write(to: paths.index)
+            let reclassified = try await reopened.games().first { $0.id == unknown.id }
+            try check(reclassified?.engine != "NativeActivity" && (try Data(contentsOf: paths.index)) == staleBytes,
+                      "stale-nativeactivity-label-is-rescanned-without-index-write")
+            let falseNative = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: records[1]))
             try session.start(executable: app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
-                              game: falseNative, apk: nativeFiles[0], checkpoint: nativeCheckpoint, logs: paths.logs, headless: true)
+                              game: falseNative, apk: files[0], checkpoint: checkpoint, logs: paths.logs, headless: true)
             try await session.wait(until: { !session.active }, timeout: 10)
             try check(session.state == "failed" && session.error?.contains("运行入口") == true,
                       "helper-rejects-forged-nativeactivity-engine-before-execution")
+            records[1]["engine"] = "Minecraft"; legacy["games"] = records
+            try JSONSerialization.data(withJSONObject: legacy).write(to: paths.index)
             try Data("modified APK".utf8).append(to: files[0])
             var refused = false
             do { _ = try await reopened.prepare(unknown.id) } catch { refused = true }

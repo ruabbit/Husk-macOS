@@ -10,6 +10,7 @@ extern int fclose(void *);
 extern char *getenv(const char *);
 extern unsigned long pthread_self(void);
 extern int usleep(unsigned);
+extern int strcmp(const char *,const char *);
 static unsigned mask, wrong_thread;
 static unsigned long owner;
 static _Atomic int quit_requested, paused, rendering;
@@ -63,9 +64,31 @@ void COCOS(nativeTouchesMove)(void *e,void *c,void *ids,void *x,void *y) {}
 void COCOS(nativeTouchesCancel)(void *e,void *c,void *ids,void *x,void *y) {record(64);}
 unsigned char COCOS(nativeKeyDown)(void *e,void *c,int key) {record(32);return 1;}
 void GODOT(initialize)(void *e,void *c,void *a,void *g,void *as,void *io,void *net,void *d,void *f,unsigned char exp){}
-unsigned char GODOT(setup)(void *e,void *c,void *a,void *t){return 1;}
+unsigned char GODOT(setup)(void *e,void *c,void *a,void *t){
+#ifdef GODOT4
+    const void **jni=*(const void ***)e;
+    int n=((int (*)(void *,void *))jni[171])(e,a);
+    const char *expected[]={"--rendering-driver","opengl3","--rendering-method","gl_compatibility"};
+    if(n!=(getenv("TL_GODOT_VULKAN")?0:4))return 0;
+    for(int i=0;i<n;i++){
+        void *s=((void *(*)(void *,void *,int))jni[173])(e,a,i);
+        const char *v=((const char *(*)(void *,void *,void *))jni[169])(e,s,0);
+        int equal=v&&!strcmp(v,expected[i]);
+        ((void (*)(void *,void *,const char *))jni[170])(e,s,v);
+        if(!equal)return 0;
+    }
+    mask|=256;
+#endif
+    return 1;
+}
+#ifdef GODOT4
+void *GODOT(getProjectResourceDir)(void *e,void *c){return 0;}
+void GODOT(newcontext)(void *e,void *c,void *surface){record(1);}
+void GODOT(resize)(void *e,void *c,void *surface,int w,int h){}
+#else
 void GODOT(newcontext)(void *e,void *c){record(1);}
 void GODOT(resize)(void *e,void *c,int w,int h){}
+#endif
 void GODOT(focusin)(void *e,void *c){}
 unsigned char GODOT(step)(void *e,void *c){draw();return 1;}
 void GODOT(onRendererPaused)(void *e,void *c){
@@ -78,7 +101,11 @@ void GODOT(onRendererPaused)(void *e,void *c){
 }
 void GODOT(onRendererResumed)(void *e,void *c){record(16);}
 void GODOT(dispatchTouchEvent)(void *e,void *c,int action,int pointer,int count,void *pos,unsigned char dbl){record(action==0?2:action==3?64:4);}
+#ifdef GODOT4
+void GODOT(key)(void *e,void *c,int code,int uni,int label,unsigned char down,unsigned char echo){record(32);}
+#else
 void GODOT(key)(void *e,void *c,int code,int scan,int uni,unsigned char down){record(32);}
+#endif
 int GM(initGLFuncs)(void *e,void *c,int gl2){return gl2;}
 void GM(Startup)(void *e,void *c,void *apk,void *save,void *package,int sleep,unsigned char dynamic){record(1);}
 int GM(Process)(void *e,void *c,int w,int h,float x,float y,float z,int pad,int ori,float refresh){draw();return 1;}

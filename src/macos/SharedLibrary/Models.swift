@@ -27,6 +27,18 @@ public struct FixtureManifest: Codable, Sendable {
     public let icon: String
 }
 
+public struct GameExpansion: Codable, Equatable, Sendable {
+    public let name: String
+    public let size: Int
+    public let sha256: String
+    static func validName(_ name: String, package: String, version: Int) -> Bool {
+        let pieces = name.split(separator: ".", maxSplits: 2)
+        guard pieces.count == 3, ["main", "patch"].contains(String(pieces[0])),
+              let v = Int(pieces[1]), v > 0, v <= version else { return false }
+        return pieces[2] == "\(package).obb" && !name.contains("/") && !name.contains("\\")
+    }
+}
+
 public struct LibraryGame: Identifiable, Codable, Sendable {
     public let id: String
     public var title: String
@@ -43,13 +55,14 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     public var dexCount: Int? = nil
     public var libraryNames: [String]? = nil
     public var webKind: String? = nil
+    public var expansions: [GameExpansion]? = nil
     public var settings: GameSettings
     public var lastPlayed: Date?
     // Capability belongs to this installed runtime, not to the version which
     // imported the APK. Codable ignores the old persisted unavailableReason.
     public var runtime: String? {
         if fixture != nil { return "orbit" }
-        guard (1...32).contains(apkNames.count) else { return nil }
+        guard (1...48).contains(apkNames.count) else { return nil }
         if ["Capacitor", "Cordova"].contains(engine ?? "") { return "web" }
         guard abis.isEmpty || abis.contains("arm64-v8a") else { return nil }
         if abis.isEmpty { return (dexCount ?? 0) > 0 && webKind == nil ? "java" : nil }
@@ -58,7 +71,7 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
         if engine == nil && (dexCount ?? 0) > 0 { return "java" }
         if engine == "Cocos", let libraries = libraryNames, !libraries.contains("libfmod.so") { return "java" }
         if engine == "SDL", let libraries = libraryNames, !libraries.contains(where: { $0.hasPrefix("libdxvk") }) { return "java" }
-        if (1...32).contains(apkNames.count) && abis.contains("arm64-v8a") {
+        if (1...48).contains(apkNames.count) && abis.contains("arm64-v8a") {
             if engine == "Minecraft" { return "minecraft" }
             if engine == "Cocos" { return "cocos" }
             if engine == "SDL" { return "sdl" }
@@ -76,6 +89,28 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
         if playable { return nil }
         if !abis.contains("arm64-v8a") { return "此应用没有受支持的 arm64 游戏入口。" }
         return "已完成扫描；此游戏的引擎尚未接入 macOS 原生运行组件。"
+    }
+
+    func verifyExpansions(in directory: URL) throws {
+        let entries = expansions ?? []
+        guard entries.count <= 2, Set(entries.map { $0.name.split(separator: ".").first }).count == entries.count else {
+            throw LibraryFailure("扩展资源清单无效。")
+        }
+        let folder = directory.appendingPathComponent("obb", isDirectory: true)
+        if FileManager.default.fileExists(atPath: folder.path) {
+            let values = try folder.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true,
+                  Set(try FileManager.default.contentsOfDirectory(atPath: folder.path)) == Set(entries.map(\.name)) else {
+                throw LibraryFailure("扩展资源目录与安装记录不一致。")
+            }
+        }
+        for entry in entries {
+            guard GameExpansion.validName(entry.name, package: packageName ?? "", version: versionCode ?? 0) else { throw LibraryFailure("扩展资源名称无效。") }
+            let url = folder.appendingPathComponent(entry.name)
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard values.isRegularFile == true, values.isSymbolicLink != true, values.fileSize == entry.size,
+                  try LibraryRepository.digest(url) == entry.sha256 else { throw LibraryFailure("扩展资源已改变或损坏，请重新导入。") }
+        }
     }
 }
 

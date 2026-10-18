@@ -80,6 +80,11 @@ struct tl_lib {
 
     struct { uint64_t start, end; } code[16];   /* executable sections, as vaddrs: the only places instructions are patched */
     int ncode;
+    /* A Go library (Go's build info is in it): every non-executable page is reached through the writable view, read-only data
+     * too, because Go compares data addresses from both kinds of page ("methodValueCallFrameObjs is not in a module" when the
+     * writable view lies below the executable one). C code is left as it was: it can compute jump targets from tables in
+     * read-only data. */
+    bool go_data;
     int tls_id;                    /* 1-based number of this library's thread-local storage template, 0 if it has none */
     uint64_t *fde_start, *fde_end; size_t nfde;   /* the address ranges of the functions the unwind tables describe, sorted; none if the library has no tables */
     size_t n_x18_data;             /* words naming x18 that lie outside every function: constant tables inside .text, left alone */
@@ -90,6 +95,7 @@ struct tl_lib {
     uint32_t n_unresolved;
     bool system;                   /* from the runtime's own folders (an APEX's lib64), not the app: what it needs comes from there too */
 };
+
 
 static struct {
     pthread_mutex_t lock;
@@ -119,15 +125,19 @@ static inline const void *at(const tl_lib *L, uint64_t vaddr) { return L->rw + (
 /* The app's split APKs (its 64-bit libraries, its asset packs), given before the engine starts: they are added right after
  * the base, whichever engine adds that, as Android puts a split's libraries and assets beside the base's. */
 static char g_splits[TL_LD_MAX_APKS - 1][1024];
+
 static int g_nsplits;
 static char g_apk_paths[TL_LD_MAX_APKS][1024];
 
 void tl_ld_queue_split(const char *path)
 {
     if (path && path[0] && g_nsplits < TL_LD_MAX_APKS - 1) snprintf(g_splits[g_nsplits++], sizeof(g_splits[0]), "%s", path);
+
 }
 
 const char *tl_ld_queued_split(int i) { return i >= 0 && i < g_nsplits ? g_splits[i] : NULL; }
+/* The app's base APK, the first one added (its folder also holds what was downloaded with it: expansion files in obb/) */
+const char *tl_ld_main_apk(void) { return G.napks > 0 ? g_apk_paths[0] : NULL; }
 
 static bool add_one(const char *path)
 {
@@ -250,16 +260,29 @@ static bool image_is_code(const tl_lib *L, uint64_t vaddr)
     return false;
 }
 
+/* Code, read-only data and writable segments can share a 16 KiB host page.
+ * Classify the actual ELF address so ADR/ADRP, relocations and dlsym agree. */
+static bool image_uses_rw(const tl_lib *L, uint64_t vaddr)
+{
+    if (image_is_code(L, vaddr)) return false;
+    for (unsigned i = 0; i < L->phnum; i++) {
+        const elf_phdr *p = &L->phdr[i];
+        if (p->p_type == PT_LOAD_ && vaddr >= p->p_vaddr && vaddr - p->p_vaddr < p->p_memsz)
+            return (p->p_flags & PF_W_) || (L->go_data && !(p->p_flags & PF_X_));
+    }
+    return false;
+}
+
 /* ADRP addresses a 4 KiB instruction page, not a 16 KiB host page. Using
  * the host-page permission union also redirects pointers to nearby code. */
 static bool pc_target_rw(const tl_lib *L, uintptr_t target, bool page)
 {
     if (target < (uintptr_t)L->rx || target - (uintptr_t)L->rx >= L->npages * PAGE) return false;
     uint64_t vaddr = target - (uintptr_t)L->rx + L->base_vaddr;
-    if (!page) return !image_is_code(L, vaddr) && (L->pflags[(vaddr - L->base_vaddr) / PAGE] & TL_PAGE_W);
+    if (!page) return image_uses_rw(L, vaddr);
     for (unsigned i = 0; i < L->phnum; i++) {
         const elf_phdr *p = &L->phdr[i];
-        if (p->p_type == PT_LOAD_ && (p->p_flags & PF_W_) && p->p_memsz &&
+        if (p->p_type == PT_LOAD_ && ((p->p_flags & PF_W_) || (L->go_data && !(p->p_flags & PF_X_))) && p->p_memsz &&
             p->p_vaddr < vaddr + 4096 && vaddr < p->p_vaddr + p->p_memsz) return true;
     }
     return false;
@@ -269,9 +292,8 @@ static bool pc_target_rw(const tl_lib *L, uintptr_t target, bool page)
 static void *sym_value(const tl_lib *L, const elf_sym *s)
 {
     uint64_t off = s->st_value - L->base_vaddr;
-    size_t page = (size_t)(off / PAGE);
     bool is_func = (s->st_info & 0xf) == 2;
-    if (!is_func && page < L->npages && (L->pflags[page] & TL_PAGE_W)) return L->rw + off;
+    if (!is_func && image_uses_rw(L, s->st_value)) return L->rw + off;
     return L->rx + off;
 }
 
@@ -630,7 +652,8 @@ static void *make_stub(const char *name)
  * the host might clobber, calls tl_svc_common, and branches back to the instruction
  * after the site. tl_svc_common saves everything else the C handler may disturb --
  * the kernel preserves all registers but x0 across a system call, so code around a
- * raw `svc` relies on that -- and calls tl_linux_syscall with the arguments and number.
+ * raw `svc` relies on that, the condition flags and all of q8-q15 included (C keeps
+ * only their low halves) -- and calls tl_linux_syscall with the arguments and number.
  */
 long tl_linux_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long nr);
 
@@ -640,7 +663,7 @@ __attribute__((naked, used)) void tl_svc_common(void)
     __asm__ volatile(
         "stp x29, x30, [sp, #-16]!\n"
         "mov x29, sp\n"
-        "sub sp, sp, #512\n"
+        "sub sp, sp, #640\n"
         "stp x1, x2, [sp, #0]\n"
         "stp x3, x4, [sp, #16]\n"
         "stp x5, x6, [sp, #32]\n"
@@ -649,6 +672,12 @@ __attribute__((naked, used)) void tl_svc_common(void)
         "stp x11, x12, [sp, #80]\n"
         "stp x13, x14, [sp, #96]\n"
         "str x15, [sp, #112]\n"
+        "mrs x9, nzcv\n"
+        "str x9, [sp, #120]\n"
+        "stp q8, q9, [sp, #512]\n"
+        "stp q10, q11, [sp, #544]\n"
+        "stp q12, q13, [sp, #576]\n"
+        "stp q14, q15, [sp, #608]\n"
         "stp q0, q1, [sp, #128]\n"
         "stp q2, q3, [sp, #160]\n"
         "stp q4, q5, [sp, #192]\n"
@@ -663,6 +692,12 @@ __attribute__((naked, used)) void tl_svc_common(void)
         "stp q30, q31, [sp, #480]\n"
         "mov x6, x8\n"
         "bl _tl_linux_syscall\n"
+        "ldr x9, [sp, #120]\n"
+        "msr nzcv, x9\n"
+        "ldp q8, q9, [sp, #512]\n"
+        "ldp q10, q11, [sp, #544]\n"
+        "ldp q12, q13, [sp, #576]\n"
+        "ldp q14, q15, [sp, #608]\n"
         "ldp x1, x2, [sp, #0]\n"
         "ldp x3, x4, [sp, #16]\n"
         "ldp x5, x6, [sp, #32]\n"
@@ -963,6 +998,7 @@ static int x18_rewrite(tl_lib *L, uint32_t *site_rw, const uint8_t *pc, ptrdiff_
             if (imm & 0x100000) imm -= 0x200000;
             uintptr_t tp = page ? ((uintptr_t)pc & ~(uintptr_t)0xFFF) + (uintptr_t)(imm * 4096) : (uintptr_t)pc + (uintptr_t)imm;
             if (pc_target_rw(L, tp, page))
+
                 tp += (uintptr_t)delta;
             value = tp;
         } else {
@@ -1158,6 +1194,7 @@ static void patch_image(tl_lib *L, size_t *n_tpidr, size_t *n_adrp, size_t *n_ad
                 if (pc_target_rw(L, tp, true) && !adrp_targets_code(L, w, i, nwords, insn & 0x1Fu, tp)) {
                     w[i] = encode_adrp(insn & 0x1Fu, pc, (const void *)(tp + (uintptr_t)delta));
                     (*n_adrp)++;
+
                 }
             } else if (insn == 0xD4000001u) {                       /* svc #0 */
                 uint8_t *stub = svc_stub(L, pc);
@@ -1177,6 +1214,7 @@ static void patch_image(tl_lib *L, size_t *n_tpidr, size_t *n_adrp, size_t *n_ad
                 if (imm & 0x100000) imm -= 0x200000;
                 uintptr_t tp = (uintptr_t)pc + (uintptr_t)imm;
                 if (pc_target_rw(L, tp, false)) {
+
                     uint32_t branch;
                     if (adr_stub(L, pc, insn & 0x1Fu, (uint64_t)(tp + (uintptr_t)delta), &branch)) { w[i] = branch; (*n_adr)++; }
                     else L->n_adr_failed++;
@@ -1284,14 +1322,7 @@ static uint64_t image_addr(const tl_lib *L, uint64_t vaddr)
     /* A 4 KiB ELF can put code and writable data on one 16 KiB host page.
      * RELATIVE/RELR pointers to code (including init_array entries) must still
      * use RX; the page's union of permissions cannot classify that pointer. */
-    if (image_is_code(L, vaddr)) return (uint64_t)(uintptr_t)(L->rx + off);
-    size_t page = (size_t)(off / PAGE);
-    if (page < L->npages && (L->pflags[page] & TL_PAGE_W)) {
-        if (L->pflags[page] & TL_PAGE_X)
-            for (int r = 0; r < L->ncode; r++)
-                if (vaddr >= L->code[r].start && vaddr < L->code[r].end) return (uint64_t)(uintptr_t)(L->rx + off);
-        return (uint64_t)(uintptr_t)(L->rw + off);
-    }
+    if (image_uses_rw(L, vaddr)) return (uint64_t)(uintptr_t)(L->rw + off);
     return (uint64_t)(uintptr_t)(L->rx + off);
 }
 
@@ -1801,6 +1832,9 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen)
         }
     }
 
+    /* Go's build info marks a Go library (see tl_lib.go_data) */
+    static const char go_magic[] = "\xff Go buildinf:";
+    bool go = memmem(file, flen, go_magic, sizeof(go_magic) - 1) != NULL;
     /* Stub pages after the image: one literal slot, a few probes, a stub for every raw
      * system call, and one for every instruction that names the reserved register x18. */
     size_t stub_bytes = 16 + 8192;
@@ -1814,7 +1848,7 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen)
                 int64_t imm = (int64_t)((((v >> 5) & 0x7FFFFu) << 2) | ((v >> 29) & 3u));
                 if (imm & 0x100000) imm -= 0x200000;
                 int64_t tv = (int64_t)(code[r].vaddr + k * 4) + imm - (int64_t)base_vaddr;
-                if (tv >= 0 && (size_t)tv < npages * PAGE && (flags[(size_t)tv / PAGE] & TL_PAGE_W)) stub_bytes += 32;
+                if (tv >= 0 && (size_t)tv < npages * PAGE && ((flags[(size_t)tv / PAGE] & TL_PAGE_W) || (go && !(flags[(size_t)tv / PAGE] & TL_PAGE_X)))) stub_bytes += 32;
             }
             else if (((v & 31u) == 18 || ((v >> 5) & 31u) == 18 || ((v >> 10) & 31u) == 18 || ((v >> 16) & 31u) == 18) && a64_uses_gpr(v, 18, NULL))
                 stub_bytes += X18_STUB_BYTES;
@@ -1848,6 +1882,8 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen)
     tl_lib *L = calloc(1, sizeof(*L));
     snprintf(L->name, sizeof(L->name), "%s", name);
     L->rx = rx; L->rw = rw; L->base_vaddr = base_vaddr; L->npages = npages; L->pflags = flags;
+    L->go_data = go;
+    if (go) tl_log_line("ld: %s is a Go library: its read-only data is reached through the writable view too", name);
     L->phdr = phs; L->phnum = eh->e_phnum;
     load_unwind_ranges(L, file, flen, phs, eh->e_phnum);
     if (has_tls) {
@@ -2045,9 +2081,18 @@ static bool init_locked(tl_lib *L)
     if (L->init_array) {
         const uint64_t *fns = at(L, L->init_array);
         size_t n = L->init_arraysz / 8;
+        static int trace = -1;
+        if (trace < 0) trace = getenv("TL_INIT_TRACE") ? 1 : 0;   /* each constructor before and after it runs */
+        if (trace) tl_log_line("ld: %s: rx %p rw %p (%zu pages)", L->name, (void *)L->rx, (void *)L->rw, L->npages);
         for (size_t i = 0; i < n; i++) {
             uint64_t f = fns[i];
-            if (f && f != ~0ull) ((init_fn)(uintptr_t)f)(argc, argv, envp);
+            if (!f || f == ~0ull) continue;
+            if (trace) tl_log_line("ld: %s: constructor %zu at +%#llx", L->name, i, (unsigned long long)(f - (uint64_t)(uintptr_t)L->rx + L->base_vaddr));
+            /* TL_INIT_BREAK=<library>: a debugger stops here with the constructor's address in x0 and the image base in x1 */
+            { const char *b = getenv("TL_INIT_BREAK");
+              if (b && !strcmp(b, L->name)) __asm__ volatile("mov x0, %0\n mov x1, %1\n brk #0xf00d" :: "r"(f), "r"((uint64_t)(uintptr_t)L->rx) : "x0", "x1"); }
+            ((init_fn)(uintptr_t)f)(argc, argv, envp);
+            if (trace) tl_log_line("ld: %s: constructor %zu returned", L->name, i);
         }
     }
     L->state = 4;

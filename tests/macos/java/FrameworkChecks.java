@@ -15,10 +15,28 @@ import android.view.View;
 import android.widget.TextView;
 
 final class FrameworkChecks {
+    private static volatile byte[] allocationProbe;
     private static void check(boolean condition, String why) {
         if (!condition) throw new IllegalStateException(why);
     }
     static void run(Context context) {
+        check(new 〇.例().value() == 42, "UTF-8 class names remain ordinary object references");
+        boolean missingNew=false, missingMethod=false, missingField=false, tooLarge=false;
+        try { new missing.optional.MissingOptional(); } catch (NoClassDefFoundError expected) { missingNew=true; }
+        try { missing.optional.MissingOptional.probe(); } catch (NoClassDefFoundError expected) { missingMethod=true; }
+        try { int n = missing.optional.MissingOptional.value; } catch (NoClassDefFoundError expected) { missingField=true; }
+        try { allocationProbe = new byte[268435457]; } catch (OutOfMemoryError expected) { tooLarge=true; }
+        check(missingNew, "missing new-instance must throw NoClassDefFoundError");
+        check(missingMethod, "missing method class must throw NoClassDefFoundError");
+        check(missingField, "missing field class must throw NoClassDefFoundError");
+        check(tooLarge, "oversized arrays must throw OutOfMemoryError");
+        android.net.wifi.WifiManager wifi = (android.net.wifi.WifiManager)context.getSystemService(Context.WIFI_SERVICE);
+        check(wifi != null && wifi.getConnectionInfo() != null, "Wi-Fi info object exists without a connected network");
+        java.io.File obb = context.getObbDir();
+        check(obb.getPath().equals("/sdcard/Android/obb/" + context.getPackageName()) && obb.isDirectory(), "Android OBB directory alias");
+        try (java.io.FileInputStream stream = new java.io.FileInputStream(new java.io.File(obb, "main.1.org.husk.lifecycle.obb"))) {
+            check(stream.read() == 79, "OBB installed beside the APK is readable through Context.getObbDir");
+        } catch (java.io.IOException e) { throw new IllegalStateException("OBB read", e); }
         Configuration config = new Configuration(context.getResources().getConfiguration());
         config.densityDpi = 480;
         Resources resources = new Resources(context.getAssets(), new DisplayMetrics(), config);
@@ -26,6 +44,9 @@ final class FrameworkChecks {
               "configuration density must override fresh metrics");
         check(resources.getDrawable(android.R.drawable.ic_menu_add, null).getIntrinsicWidth() > 0,
               "framework image at configured density");
+        Drawable image = resources.getDrawable(android.R.drawable.ic_menu_add, null);
+        check(image.getConstantState() != null && image.getConstantState().newDrawable(resources) != null,
+              "framework drawables can be cloned by Material menus");
         config.densityDpi = 160;
         resources.updateConfiguration(config, new DisplayMetrics());
         check(resources.getDrawable(android.R.drawable.ic_menu_add, null).getIntrinsicWidth() > 0,
