@@ -15,6 +15,15 @@
 
 static char **args;
 static int failed;
+static char document_paths[2][1400];
+static int document_requests;
+static void picked(const char *types,int multiple) {
+    int request=++document_requests;
+    if(request==1) {
+        if(strcmp(types,"text/plain")||!multiple)failed=1;
+    } else if(request==2) tl_javaapp_documents_picked(NULL,0);
+    // The final picker stays pending until the lifecycle cancellation.
+}
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL Java lifecycle line %d: %s (state %d)\n",__LINE__,#c,tl_javaapp_get_state()); failed=1; return NULL; } } while(0)
 static bool wait_state(tl_javaapp_state state) {
     for(int i=0;i<5000;i++) { if(tl_javaapp_get_state()==state)return true;if(tl_javaapp_get_state()==TL_JAVA_FAILED)return false;usleep(1000); } return false;
@@ -32,15 +41,35 @@ static void *run(void *unused)
     char data[1200],fw[1200],frames[1200];
     snprintf(data,sizeof(data),"%s/run-XXXXXX",args[4]);CHECK(mkdtemp(data));
     snprintf(fw,sizeof(fw),"%s/framework-res.apk",args[1]);snprintf(frames,sizeof(frames),"%s/frames",data);mkdir(frames,0700);
+    bool documents=!strcmp(args[5],"documents");
+    if(documents)for(int n=0;n<2;n++) {
+        char dir[1300];snprintf(dir,sizeof(dir),"%s/picked%d",data,n);mkdir(dir,0700);
+        snprintf(document_paths[n],sizeof(document_paths[n]),"%s/存档 %%.txt",dir);
+        FILE *file=fopen(document_paths[n],"w");CHECK(file);fputc(65+n,file);fclose(file);
+    }
     setenv("TL_AUDIO_MUTE","1",1);setenv("HUSK_JAVA_CASE",args[5],1);
     if(!strcmp(args[5],"storage-failed")) { char p[1400];snprintf(p,sizeof(p),"%s/shared_prefs",data);FILE *f=fopen(p,"w");CHECK(f);fclose(f); }
     CHECK(tl_dvm_boot(args[1],data));
     tl_egl_offscreen_windows(true);
     tl_javaapp_config config={.apk_path=args[2],.data_dir=data,.package_name="org.husk.lifecycle",.width=320,.height=240,
-        .density=1,.angle_egl=args[3],.framework_res=fw,.frame_dir=frames,.frame_every=-1};
+        .density=1,.angle_egl=args[3],.framework_res=fw,.frame_dir=frames,.frame_every=-1,.pick_documents=documents?picked:NULL};
     CHECK(tl_javaapp_start(&config));CHECK(wait_state(TL_JAVA_RUNNING));
     for(int i=0;i<3000&&!tl_javaapp_frames();i++)usleep(1000);
     CHECK(tl_javaapp_frames()>0);
+    if(documents) {
+        jvalue result={0};
+        for(int i=0;i<3000;i++) {
+            CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","documentResult","()I",NULL,&result));
+            if(result.i==2&&document_requests==1)break;usleep(1000);
+        }
+        CHECK(result.i==2&&document_requests==1);
+        const char *paths[]={document_paths[0],document_paths[1]};tl_javaapp_documents_picked(paths,2);
+        for(int i=0;i<3000;i++) {
+            CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","documentResult","()I",NULL,&result));
+            if(result.i==7&&document_requests==3)break;usleep(1000);
+        }
+        CHECK(result.i==7&&document_requests==3&&!failed);
+    }
     tl_javaapp_touch(0,0,80,180);tl_javaapp_touch(2,0,80,180);tl_javaapp_key(29,true);tl_javaapp_key(29,false);
     bool controller=!strcmp(args[5],"controller");
     if(controller){
@@ -65,9 +94,10 @@ static void *run(void *unused)
         }
         CHECK(result.i==1);
     }
-    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||!strcmp(args[5],"framework")||controller;
+    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||!strcmp(args[5],"framework")||controller||documents;
     CHECK(ok==success);CHECK(tl_javaapp_get_state()==(success?TL_JAVA_DESTROYED:TL_JAVA_FAILED));
     if(success){
+        if(documents){jvalue result;CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","documentResult","()I",NULL,&result));CHECK(result.i==15);}
         if(controller)CHECK(controller_result()==255);
         jvalue result;CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","result","()I",NULL,&result));CHECK(result.i==63);
         char p[1400],text[512]={0};snprintf(p,sizeof(p),"%s/shared_prefs/lifecycle.xml",data);FILE *f=fopen(p,"r");CHECK(f);fread(text,1,sizeof(text)-1,f);fclose(f);CHECK(strstr(text,"i destroyed 1"));

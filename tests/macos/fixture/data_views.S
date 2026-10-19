@@ -96,3 +96,20 @@ raw_syscall_registers:
     ldp q8, q9, [sp], #128
     ret
 .size raw_syscall_registers,.-raw_syscall_registers
+#ifdef MONO_DATA
+.hidden mono_code_end
+mono_code_end:
+.global mono_data_word
+.type mono_data_word,%object
+mono_data_word: .word 0xd4000001 /* metadata that looks like a syscall, never executable */
+.size mono_data_word,.-mono_data_word
+.data
+.p2align 3
+.global mono_aot_file_info
+.type mono_aot_file_info,%object
+mono_aot_file_info:
+    .zero 6*8
+    .xword view_address,mono_code_end
+    .zero 30*8
+.size mono_aot_file_info,.-mono_aot_file_info
+#endif

@@ -27,6 +27,17 @@ public class Bootstrap extends android.app.Application {
             java.lang.reflect.Field info = base.getClass().getDeclaredField("mPackageInfo");
             info.setAccessible(true);
             Object loaded = info.get(base);
+            Class<?> threadClass=Class.forName("android.app.ActivityThread");
+            Object thread=threadClass.getMethod("currentActivityThread").invoke(null);
+            java.lang.reflect.Field packages=threadClass.getDeclaredField("mPackages");packages.setAccessible(true);
+            java.util.Map<?,?> records=(java.util.Map<?,?>)packages.get(thread);
+            java.lang.ref.WeakReference<?> record=(java.lang.ref.WeakReference<?>)records.get(getPackageName());
+            if(record==null||record.get()!=loaded)throw new AssertionError("Context and ActivityThread disagree on LoadedApk");
+            java.lang.reflect.Field bound=threadClass.getDeclaredField("mBoundApplication");bound.setAccessible(true);
+            Object boundData=bound.get(thread);
+            java.lang.reflect.Field boundInfo=boundData.getClass().getDeclaredField("info");boundInfo.setAccessible(true);
+            if(boundInfo.get(boundData)!=loaded||threadClass.getMethod("currentApplication").invoke(null)!=this||
+                    threadClass.getMethod("getInstrumentation").invoke(thread)==null)throw new AssertionError("bound application state");
             java.lang.reflect.Field packageLoader = loaded.getClass().getDeclaredField("mClassLoader");
             packageLoader.setAccessible(true); packageLoader.set(loaded, loader);
             java.lang.reflect.Field contextLoader = base.getClass().getDeclaredField("mClassLoader");

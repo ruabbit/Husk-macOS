@@ -30,7 +30,20 @@ public final class AppRunner {
     private static ClassLoader sLoader;
     /** The app's class loader, as Android gives every app: a PathClassLoader over its APK and splits. Its classes say they come from
      *  it (Class.getClassLoader), and resources in the APKs are found through it. */
-    public static ClassLoader classLoader() { return sLoader != null ? sLoader : AppRunner.class.getClassLoader(); }
+    public static ClassLoader classLoader() {
+        // a packer's stub may have put a loader over the app's real code into LoadedApk.mClassLoader: components come from it
+        ClassLoader swapped = android.app.LoadedApk.self().getClassLoader();
+        if (swapped != baseClassLoader() && swapped != sAdopted) {
+            sAdopted = swapped;
+            Native.setAppClassLoader(swapped);
+            Thread.currentThread().setContextClassLoader(swapped);
+            android.util.Log.d("Husk", "the app installed a class loader of its own: " + swapped);
+        }
+        return swapped;
+    }
+    private static ClassLoader sAdopted;
+    /** The loader the app was launched with (its APK and splits, or what its component factory gave). */
+    public static ClassLoader baseClassLoader() { return sLoader != null ? sLoader : AppRunner.class.getClassLoader(); }
     private static void installClassLoader() {
         try {
             StringBuilder path = new StringBuilder(Native.apkPath());
@@ -79,6 +92,7 @@ public final class AppRunner {
         Manifest.read();
         installClassLoader();
         installComponentFactory();
+        android.app.LoadedApk.self().huskSetClassLoader(baseClassLoader());
         ContextImpl base = ContextImpl.app();
         String appCls = applicationClass != null ? applicationClass : Manifest.applicationClass;
         Application app;
@@ -89,6 +103,7 @@ public final class AppRunner {
 
         catch (ClassNotFoundException e) { android.util.Log.w("Husk", "no application class " + appCls); app = new Application(); }
         sApp = app;
+        android.app.ActivityThread.huskBind(app);
         Application.huskSet(app);
         ContextImpl.setApplication(app);
         app.huskAttach(base);
@@ -97,6 +112,7 @@ public final class AppRunner {
         ClassLoader attachedLoader = app.getClassLoader();
         if (attachedLoader != null) {
             sLoader = attachedLoader;
+            android.app.LoadedApk.self().huskSetClassLoader(attachedLoader);
             Native.setAppClassLoader(sLoader);
             Thread.currentThread().setContextClassLoader(sLoader);
         }
@@ -116,7 +132,23 @@ public final class AppRunner {
         Native.lifecycle(2); // RUNNING: launch/onResume returned
         Looper.loop();
     }
-    public static Application application() { return sApp; }
+    public static Application application() { Application a = android.app.ActivityThread.currentActivityThread().huskInitialApplication(); return a != null ? a : sApp; }
+    /** LoadedApk.makeApplication: the app's Application class (or the plain one) made through the loader and attached, not created
+     *  (whoever asked calls onCreate, as Instrumentation.callApplicationOnCreate does). */
+    public static Application makeApplication(String cls, ClassLoader loader) {
+        Application app;
+        try {
+            if (cls == null || cls.isEmpty()) app = new Application();
+            else if (usesFactory()) app = sFactory.instantiateApplication(loader, cls);
+            else app = (Application) Class.forName(cls, true, loader).newInstance();
+        } catch (Throwable t) {
+            android.util.Log.w("Husk", "makeApplication " + cls + ": " + t);
+            app = new Application();
+        }
+        if (app.getBaseContext() == null) app.huskAttach(ContextImpl.app());
+        android.app.ActivityThread.currentActivityThread().huskAddApplication(app);
+        return app;
+    }
     static final class UncaughtLogger implements Thread.UncaughtExceptionHandler {
         public void uncaughtException(Thread t, Throwable e) {
             android.util.Log.e("AndroidRuntime", "FATAL EXCEPTION: " + t.getName(), e);
@@ -134,7 +166,6 @@ public final class AppRunner {
             try {
                 ContentProvider cp = usesFactory() ? sFactory.instantiateProvider(classLoader(), p.name)
                         : (ContentProvider) Class.forName(p.name, true, classLoader()).newInstance();
-
                 ProviderInfo info = new ProviderInfo();
                 info.name = p.name; info.authority = p.authorities; info.packageName = Native.packageName(); info.exported = p.exported; info.metaData = p.metaData; info.grantUriPermissions = p.grantUriPermissions;
                 info.applicationInfo = app.getApplicationInfo();
@@ -157,9 +188,8 @@ public final class AppRunner {
         android.util.Log.d("Husk", "launch " + cls);
         Activity prev = top();
         Activity a = usesFactory() ? sFactory.instantiateActivity(classLoader(), cls, intent) : (Activity) Class.forName(cls, true, classLoader()).newInstance();
-
         ContextImpl base = ContextImpl.forActivity();
-        a.huskAttach(base, sApp, intent, info, caller, request);
+        a.huskAttach(base, application(), intent, info, caller, request);
         if (prev != null && prev.isResumedHusk()) prev.huskPause();
         sStack.add(a);
         a.huskCreate(null);
@@ -223,6 +253,12 @@ public final class AppRunner {
             if (text != null) Native.share(text);
             return;
         }
+        if (Documents.handles(i)) {
+            if (sEnding) return;
+            final Activity caller = from instanceof Activity ? (Activity) from : top();
+            sHandler.post(() -> Documents.pick(caller, i, request));
+            return;
+        }
         if ("android.intent.action.CHOOSER".equals(action)) { Intent inner = i.getParcelableExtra("android.intent.extra.INTENT"); if (inner != null) startActivity(from, inner, request, opts); return; }
         /* a screen of the system's (the account chooser, Settings pages, the permission dialog): Husk has none of them -- asked for a
            result, the caller hears the user backed out, as it would on a phone; otherwise nothing opens */
@@ -254,6 +290,7 @@ public final class AppRunner {
                 below.huskResume();
             }
         }
+        Documents.cancelFor(a);
         a.huskStop();
         a.huskDestroy();
         // the app ends with its last activity, unless one it started just before (finish(); startActivity(...)) is still to come
@@ -264,6 +301,7 @@ public final class AppRunner {
     private static void finishHost() {
         if (sEnding) return;
         sEnding = true;
+        Documents.cancel();
         while (!sStack.isEmpty()) finishNow(top(), false);
         android.webkit.WebView.finishForHost();
         Services.finishForHost();

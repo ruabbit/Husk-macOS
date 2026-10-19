@@ -1,32 +1,47 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "a3407fc7fc275efa6c7d346d3d61ef6c7367a470",
-  "integratedRevision": "cedb01ee0b93122fe3780fc55a1d9720b61fd2c8",
-  "checkedOn": "2026-10-18",
-  "commitCount": 64,
-  "integration": "Normal merge of the official 3.0 release through fork main 308793d; seven conflicts resolved by intent. macOS integrates legacy Unity IME, 48 APKs, streamed Play/OBB imports and runtime paths, AppComponentFactory, Java/Godot/external shader updates, home selection and optional log attachment. Corrected mixed-page ELF data address consistency. Default CTest 103/103 and bundle verification passed. Real games, Play authentication and PS4/VM gaps remain explicit in upstream-parity.md.",
+  "previousRevision": "cedb01ee0b93122fe3780fc55a1d9720b61fd2c8",
+  "integratedRevision": "2df074b3083ce2913922995f2f99249f1498b554",
+  "checkedOn": "2026-10-19",
+  "commitCount": 4,
+  "integration": "Normal merge of cedb01e..2df074b through fork main cc99757. Three Java conflicts resolved by shared LoadedApk state while retaining custom ClassLoader and NativeActivity lifecycle. macOS document picker and runtime adaptations packaged as build 13; all 107 default tests and bundle checks passed, exact Product relaunched once with main-window AX and screenshot verified. Commit/push and current CI pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "partial-platform-integration",
+  "deliveryStatus": "verified-local-awaiting-push",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
   },
   "candidate": {
     "version": "3.0.0",
-    "build": "12",
-    "defaultTests": 103,
-    "defaultTestSeconds": 82.65,
+    "build": "13",
+    "defaultTests": 107,
+    "defaultTestSeconds": 72.19,
     "bundleMachO": 18,
     "javaResources": 406,
-    "sourceRevision": "70c27644a34822286524216235a1d39ecf0b7773",
-    "appSHA256": "ca156721f8e0137e9ddd2e924033be1768616d098ca6ec404ba08d434b45fe6a",
-    "nativeRunnerSHA256": "6232396133282a2dbc40b088c14a3574dd89df74b4d95f1de4f3bb5035fd6909",
-    "frameworkSHA256": "5668fb5bc1444654996f4a81441afc9e225e2541a8e7f6d04b4361907aff9b68",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "CUA normally quit idle build 11, launched the exact build 12 Product once, and verified home screenshot, 11 apps and featured-game selection; PID 13331. Native pipe closed on details navigation and on one read retry, so details/log-picker UI acceptance remains open. No user game or VM launched.",
-    "ci": {
+    "appSHA256": "3abf83fe859e88fa3c18b5f669e4109d3bdb04a443346c56785a04ba56155d8b",
+    "nativeRunnerSHA256": "7ffb4af58be71798c32349b38babeeab30d71821ccf1902b15ee75cb9d2d3100",
+    "frameworkSHA256": "3a4cb76fe13b57fbaac6cd66e186a19c44641da6d0304ddfd88cceb41a503319",
+    "deliveryStatus": "verified-local-awaiting-push",
+    "gui": "Old idle build 12 was already exited at the final process recheck. CUA launched exact build 13 Product once; PID 39849, main-window AX and screenshot verified the existing 11 apps and icons. No user game or VM launched."
+  },
+  "lastCheck": {
+    "upstreamNewCommits": 4,
+    "upstreamChangedPaths": 29,
+    "originNewCommits": 0,
+    "mainRevision": "cc99757e65d3923851e4df383bef186c0d311cd5",
+    "macOSAdaptation": "Native NSOpenPanel, selected private file copies, read-only content grants, cancellation and lifecycle drain; LoadedApk reflection unification; Mono metadata, 96 shifted mappings, proc/signal/library IO, deep dlsym and HLE regressions. App/helpers and 57 independent targets built.",
+    "sourceTests": 84,
+    "sourceTestSeconds": 42.29,
+    "defaultSuiteTests": 107,
+    "candidateDependentTestsPending": 0,
+    "fullDefaultSuitePassed": true,
+    "newBundleVerified": true,
+    "newCandidateRestarted": true,
+    "pushed": false,
+    "blocker": null,
+    "previousCI": {
       "run": 39087010940,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39087010940",
       "statusAtDelivery": "completed",
@@ -35,19 +50,8 @@
       "conclusionAtLastCheck": "success",
       "hardware": "skipped",
       "hostedCoreTests": 29
-    }
-  },
-  "lastCheck": {
-    "upstreamNewCommits": 64,
-    "upstreamChangedPaths": 82,
-    "originNewCommits": 0,
-    "mainRevision": "308793d30b8ebc4d7247914bfaa8231e44aee101",
-    "macOSSourceRevision": "70c27644a34822286524216235a1d39ecf0b7773",
-    "macOSAdaptation": "19 focused regressions plus 103/103 default CTest (82.65 seconds), 18 Mach-O and 406 Java resources. Actual ELF data/code pointer and raw syscall checks, ANGLE shader compile, Godot 4 driver lifecycle, DEX factory/missing classes/Unicode/OOM/Wi-Fi/drawable/OBB and signed APK/OBB installation checks. Shared loader, Unity and Bionic iOS 15.5 syntax checks passed. No real game or device compatibility claim.",
-    "previousCI": {
-      "run": 39061615178,
-      "conclusion": "success"
-    }
+    },
+    "defaultTestSeconds": 72.19
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -106,5 +110,6 @@
       "Same-version expansion replacement and standalone OBB import need an installation transaction keyed by both APK and expansion generations.",
       "VM does not install OBB and rejects required expansions."
     ]
-  }
+  },
+  "idleExitPolicy": "User explicitly authorizes automatic termination of idle Husk after exact path/PID and absence of game/VM sessions are rechecked. Try normal quit; if unavailable or unresponsive, force quit only that idle Husk without asking. Never terminate an active game/VM or unrelated project process."
 }

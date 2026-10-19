@@ -24,6 +24,7 @@ public final class LifecycleActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); owner = Thread.currentThread(); events |= 1;
         if ("framework".equals(System.getenv("HUSK_JAVA_CASE"))) FrameworkChecks.run(this);
+        if ("documents".equals(System.getenv("HUSK_JAVA_CASE"))) DocumentChecks.start(this);
         View view = new View(this) {
             @Override protected void onDraw(Canvas canvas) { canvas.drawColor(0xff2864a0); }
             @Override public boolean onTouchEvent(MotionEvent e) { callback(); if (e.getActionMasked() == MotionEvent.ACTION_UP) events |= 2; return true; }
@@ -96,6 +97,8 @@ public final class LifecycleActivity extends Activity {
         super.onDestroy();
     }
     public static int result() { return wrongThread ? -1 : events; }
+    @Override protected void onActivityResult(int request,int code,android.content.Intent data) { DocumentChecks.receive(this,request,code,data); }
+    public static int documentResult() { return DocumentChecks.result; }
     public static int controllerResult() { return wrongThread || controllerErrors != 0 ? -1 : controllerEvents; }
     public static int controllerHeld() { return heldButtons; }
 }

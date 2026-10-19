@@ -1,5 +1,20 @@
 # 审计进度
 
+
+## 2026-10-19：4 个上游提交、文件选择器与运行时修复（build 13）
+
+从干净的 codex/macos-p0=b6eb031 开始，两远端地址正确、origin 无新提交。只有空闲 Product build 12/PID 13331；其他项目的构建/UTM 未触碰。fetch 得到 cedb01e..2df074b（4 提交 / 29 路径），普通 merge 到本地 main=cc99757，再合回 macOS。3 处 Java 冲突按共享 LoadedApk 的状态处理，保留 custom ClassLoader、provider/NativeActivity 桥与关闭回执。具体实现见 upstream-parity.md 顶部。
+
+macOS NSOpenPanel 与 Java GET_CONTENT/OPEN_DOCUMENT/PICK 已接线，复制到游戏缓存、只读 URI、取消/重复请求和关闭排空均有后台验证。.NET 文件/信号/AOT/dlsym 接入并修复映射记录溢出、部分 unmap 误释放和并发库提取问题；Native HLE 新增方法回归通过。57 个不依赖 PackageMac 的目标编译完成（含 App/Runner），预备 build 13。新测试首轮宏/未知 MIME/异步请求时序失败已定位并修正，未制造可见窗口或崩溃。
+
+先完成 **84/84 源码 CTest（42.29 秒）**及 5 个共享 C 文件 iOS 15.5 SDK 语法检查；候选更新后，最终 **默认 CTest 107/107（72.19 秒）**，没有排除项，原先暂缓的 23 项 Product 回归全部通过。包检查 **18 个 arm64 Mach-O / 406 个 Java 资源**通过。日志复用 current-upstream-build.log、current-upstream-targeted.log、current-upstream-runtime-recheck.log、current-upstream-ctest.log、current-upstream-bundle.log、current-upstream-ios-syntax.log；最终结果在 build/logs/current-upstream-validation.json 和 build/macos/bundle-verification.json。初次针对性正则意外跑到旧 build 12 的 NativeActivity session，未把该成功算入新候选验证。
+
+早期 CUA getApp 超时、重连 native pipe closed，没有发送退出。用户随后明确要求：确认没有游戏或 VM 时自行退出空闲 Husk，正常退出不可用就强制退出，不再请求 ⌘Q。继续时复查旧 Husk 已不在进程表，因此本次无需发送终止信号。保留 VM=ON 与缓存，在唯一 build/macos 原位完成 **3.0.0 / build 13**。CUA 按完整 Product 路径只启动一次，PID **39849**；主窗口 AX 和截图核对原有 **11 个应用**及图标，未启动游戏或 VM。每日任务 husk 已更新并读回，保持每天 09:00、ACTIVE 和原聊天，写明空闲主程序自动退出/强退规则。
+
+主程序 SHA-256 `3abf83fe859e88fa3c18b5f669e4109d3bdb04a443346c56785a04ba56155d8b`，NativeRunner `7ffb4af58be71798c32349b38babeeab30d71821ccf1902b15ee75cb9d2d3100`，framework DEX `3a4cb76fe13b57fbaac6cd66e186a19c44641da6d0304ddfd88cceb41a503319`。本地验证与候选更新完成，合并提交、两分支推送及本批远端 CI 结果待下方交付记录确认。
+
+没有运行 Egg/Hole.io/War/Clash 或其他用户游戏/VM，没有修改用户 APK/存档/Android 磁盘、检查 USB、向上游 PR/issue 写入。Egg 的真实 Play 密钥服务、WebView 保存阶段、真实游戏/实体 IME/手柄/Geode、PS4/VM/P6 等保持开放。
+
 ## 2026-10-18：正式 3.0 上游同步与 build 12
 
 从干净的 `codex/macos-p0=b9caa81` 开始，origin 地址和 upstream 地址符合任务要求；无其他合并/构建/游戏/VM。CUA 检查到空闲主窗口后正常退出旧 PID 7656。fetch 后 origin 两分支无外来提交，上游 `a3407fc..cedb01e` 有 64 个提交、82 个路径，正式 `3.0=cffaf8b`。先普通合并到 main **308793d**，再合回 macOS；七个冲突逐项处理，没有 ours 策略、stash、重置或上游写操作。前一提交 b9caa81 的 CI 39061615178 已确认 success。

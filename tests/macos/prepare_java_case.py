@@ -20,7 +20,7 @@ if not android:
 web = len(sys.argv) > 2 and sys.argv[2] == 'web'
 keystore = len(sys.argv) > 2 and sys.argv[2] == 'keystore'
 source = Path(__file__).parent/('java/WebStorageActivity.java' if web else 'java/KeyStoreActivity.java' if keystore else 'java/LifecycleActivity.java')
-sources = [source] if web or keystore else [source, Path(__file__).parent/'java/FrameworkChecks.java']
+sources = [source] if web or keystore else [source, Path(__file__).parent/'java/FrameworkChecks.java', Path(__file__).parent/'java/DocumentChecks.java']
 if not web and not keystore:
     sources += [Path(__file__).parent/'java/MissingOptional.java', Path(__file__).parent/'java/unicode/例.java']
 subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', *sources], check=True)

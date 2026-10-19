@@ -2,6 +2,8 @@
 #include "husk-tl-jni.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 void tl_mc_hle_install(const char *,const char *,const char *,int,int);
 void tl_hle_configure(const char *,const char *,const char *,int,int);
 void tl_jni_hle_install(void);
@@ -10,6 +12,24 @@ void tl_log_line(const char *format,...){(void)format;}
 int main(void) {
     tl_jni_init();tl_hle_configure("com.husk.text-test","","/tmp",1280,720);tl_jni_hle_install();
     tl_mc_hle_install("com.husk.text-test","","/tmp",1280,720);
+    int64_t elapsed=tl_jni_call(tl_jni_class_object("android/os/SystemClock"),"elapsedRealtimeNanos","()J",NULL).j;
+    usleep(2000);
+    CHECK(elapsed>0&&tl_jni_call(tl_jni_class_object("android/os/SystemClock"),"elapsedRealtimeNanos","()J",NULL).j>elapsed);
+    jobj *preferences=tl_jni_new_object(tl_jni_class("android/content/SharedPreferences"));
+    jvalue fallback[2]={{.l=tl_jni_new_string("volume")},{.f=.625f}};
+    CHECK(tl_jni_call(preferences,"getFloat","(Ljava/lang/String;F)F",fallback).f==.625f);
+    fallback[1].j=INT64_C(0x100000042);
+    CHECK(tl_jni_call(preferences,"getLong","(Ljava/lang/String;J)J",fallback).j==fallback[1].j);
+    char file[]="/tmp/husk-hle-output-XXXXXX";int fd=mkstemp(file);CHECK(fd>=0);close(fd);
+    jobj *output=tl_jni_new_object(tl_jni_class("java/io/FileOutputStream"));
+    jvalue path[2]={{.l=tl_jni_new_string(file)},{.z=0}};
+    tl_jni_call(output,"<init>","(Ljava/lang/String;Z)V",path);CHECK(!tl_jni_pending());
+    jvalue byte={.i=65};tl_jni_call(output,"write","(I)V",&byte);CHECK(!tl_jni_pending());
+    tl_jni_call(output,"close","()V",NULL);path[1].z=1;
+    tl_jni_call(output,"<init>","(Ljava/lang/String;Z)V",path);byte.i=66;tl_jni_call(output,"write","(I)V",&byte);
+    tl_jni_call(output,"close","()V",NULL);CHECK(!tl_jni_pending());
+    FILE *saved=fopen(file,"rb");CHECK(saved&&fgetc(saved)==65&&fgetc(saved)==66&&fgetc(saved)==EOF);fclose(saved);unlink(file);
+    tl_jni_call(output,"write","(I)V",&byte);CHECK(tl_jni_pending());tl_jni_clear();
     jvalue class_args[3]={{.l=tl_jni_new_string("java.lang.String")},{.z=1},{.l=NULL}};
     jobj *class_object=tl_jni_call(tl_jni_class_object("java/lang/Class"),"forName","(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",class_args).l;
     CHECK(class_object==tl_jni_class_object("java/lang/String")&&!tl_jni_pending());

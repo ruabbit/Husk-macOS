@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "husk-tl-ld.h"
+#include "husk-tl-bionic.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -32,6 +33,8 @@ int main(int argc, char **argv)
     int (*app_origin)(void) = tl_ld_sym_deep(game,"namespace_origin",&app_dependency);
     CHECK(runtime_origin && app_origin && runtime_dependency != app_dependency);
     CHECK(runtime_origin() == 22 && app_origin() == 11);
+    void *(*guest_dlsym)(void *,const char *)=tl_bionic_find("dlsym");
+    CHECK(guest_dlsym&&guest_dlsym(runtime,"namespace_origin")==runtime_origin&&guest_dlsym(game,"namespace_origin")==app_origin);
     CHECK(tl_ld_load(system) == runtime && tl_ld_load(app) == game);
     CHECK(tl_ld_load("libcrypto.so") == app_dependency);
     CHECK(tl_ld_unresolved_count() == 0);

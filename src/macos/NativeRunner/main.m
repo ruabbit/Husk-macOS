@@ -14,6 +14,7 @@
 #include "husk-tl-unity.h"
 #include "husk-tl-nativeactivity.h"
 #import "MacJavaRuntime.h"
+#import "MacDocumentPicker.h"
 #import "husk-tl-dvm-web-host.h"
 #import "MacNativeDrivers.h"
 #import "MacGeode.h"
@@ -74,6 +75,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property NSMutableSet<NSNumber *> *heldKeys;
 @property NSMapTable<GCController *,NSNumber *> *controllerSlots;
 @property MacTextInput *textInput;
+@property MacDocumentPicker *documentPicker;
 @property BOOL captureRequested, cursorCaptured;
 - (void)updateCursorCapture;
 - (void)releaseCursor;
@@ -88,6 +90,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (void)event:(NSString *)kind detail:(NSDictionary *)detail;
 - (void)statusForRequest:(id)request;
 - (void)stop:(NSString *)reason;
+- (void)stopRuntime:(NSString *)reason;
 - (void)togglePause:(id)sender;
 - (void)clearInput;
 @end
@@ -219,6 +222,24 @@ static char *javaGetClipboard(void) {
 static NSRange inputRange(int start,int end) {
     return start<0||end<start?NSMakeRange(NSNotFound,0):NSMakeRange((NSUInteger)start,(NSUInteger)(end-start));
 }
+static void javaPickDocuments(const char *mimeTypes, int multiple) {
+    NSString *types = [NSString stringWithUTF8String:mimeTypes ?: "*/*"] ?: @"*/*";
+    dispatch_async(dispatch_get_main_queue(), ^{
+        Runner *host = javaHost;
+        if (!host || [host.state isEqual:@"stopping"] || atomic_load(&finished)) return;
+        // An Activity may request a document in onCreate, before the first frame.
+        if (!headless && !hiddenWindow && host.window && !host.window.visible) {
+            [host.window makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
+        }
+        [host.documentPicker presentForWindow:(headless||hiddenWindow)?nil:host.window mimeTypes:types multiple:multiple!=0
+            completion:^(NSArray<NSString *> *paths) {
+                if ([host.state isEqual:@"stopping"] || atomic_load(&finished)) return;
+                const char **items = calloc(MAX((NSUInteger)1, paths.count), sizeof(*items));
+                for (NSUInteger n=0; n<paths.count; n++) items[n]=paths[n].fileSystemRepresentation;
+                tl_javaapp_documents_picked(items, (int)paths.count); free(items);
+            }];
+    });
+}
 static void hostTextState(void *context,const char *text,int start,int end,int cs,int ce) {
     Runner *runner=(__bridge Runner *)context;NSString *copy=[NSString stringWithUTF8String:text?:""]?:@"";
     dispatch_async(dispatch_get_main_queue(),^{[runner.textInput receiveText:copy selection:inputRange(start,end) marked:inputRange(cs,ce)];});
@@ -324,6 +345,12 @@ static int androidKey(unsigned code)
 {
     if(atomic_load(&finished)||[self.state isEqual:@"stopping"])return;
     [self transition:@"stopping" reason:reason];[self clearInput];
+    if(self.documentPicker) {
+        [self.documentPicker closeWithCompletion:^{[self stopRuntime:reason];}];
+    } else [self stopRuntime:reason];
+}
+- (void)stopRuntime:(NSString *)reason
+{
     if((unity||nativeactivity||javaapp||nativeDriver) && self.lifecycleQueue) {
         // Initialization and join share a queue, so stop during loading cannot
         // race the loader or miss a thread that has not been created yet.
@@ -698,6 +725,7 @@ static int androidKey(unsigned code)
         }
         if(javaapp){
             javaHost=self;
+            self.documentPicker=[[MacDocumentPicker alloc] initWithDataDirectory:data];
             if(!tl_web_set_host_store(javaWebStore)){[self finish:NO reason:@"Java Web 存档标识无效。"];return;}
             self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])tl_javaapp_text(text.UTF8String);};
             self.textInput.textCommand=^(unsigned code){
@@ -737,7 +765,8 @@ static int androidKey(unsigned code)
                         .metal_layer=configuration.metal_layer,.angle_egl=configuration.angle_egl,
                         .vulkan_library=[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"].fileSystemRepresentation,
                         .frame_dir=configuration.frame_dir,.frame_every=configuration.frame_every,.framework_res=fw.fileSystemRepresentation,
-                        .show_keyboard=javaKeyboard,.set_clipboard=javaSetClipboard,.get_clipboard=javaGetClipboard};
+                        .show_keyboard=javaKeyboard,.set_clipboard=javaSetClipboard,.get_clipboard=javaGetClipboard,
+                        .pick_documents=javaPickDocuments};
                     ok=mac_java_start(root,&javaConfiguration);
                 }else if(nativeactivity){
                     tl_ga_config nativeConfiguration={.apk_path=configuration.apk_path,.data_dir=configuration.data_dir,

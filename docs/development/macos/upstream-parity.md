@@ -1,5 +1,23 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-19：运行时与原生文件选择器，build 13
+
+已核对 `cedb01e..2df074b` 的 **4 个提交 / 29 个路径**，origin 两分支无外来提交。先普通合并到本地 main `cc99757`，再合回 macOS。LoadedApk、AppRunner、ContextImpl 三处冲突按意图解决：Context 与 ActivityThread 共用单一 LoadedApk，保留 component factory、自定义加载器、provider 顺序和 NativeActivity 双侧关闭。真 DEX 验证反射状态的一致性。
+
+当前唯一 Product 已更新为 **3.0.0 / build 13**，保留 VM=ON 和依赖缓存。最终 **默认 CTest 107/107（72.19 秒）**及 **18 Mach-O / 406 Java 资源**包检查通过。CUA 按完整路径单次启动，PID **39849**；主窗口 AX/截图确认原有 11 个应用与图标。早期 CUA 退出失败已解除，用户明确授权在无游戏/VM时自行强制退出空闲 Husk，每日任务已保存该规则；实际构建前旧 Husk 已自行退出，没有替换活动候选。推送和本批 CI 以 [progress.md](progress.md) 的交付记录为准。可见游戏内文件面板和真实应用兼容不由这些后台回归代替。
+
+| 本轮增量 | macOS 实际实现与验证边界 |
+| --- | --- |
+| Java 文件选择器 | GET_CONTENT / OPEN_DOCUMENT / 媒体 PICK 接到 NativeRunner 的 NSOpenPanel；支持 MIME 类型、多选和取消，启动期请求会显示实际游戏窗口。选择内容流式复制到该游戏 cache/picked，0600 文件、同名分目录；取消/失败整批回滚。Java 仅发只读 URI，拒绝未选择路径、写入和删除；重复请求拒绝新请求以防无 request-ID 的宿主回包串线；关闭先取消/排空复制再销毁 Android。真实 DEX 已验多选/读取/元数据/取消/重复请求/关闭，后台 Mac 复制与 MIME 回归已过。可见面板交互、真实应用，以及跨会话 persistable URI 尚未验收 |
+| Application / loader internals | 上游 ActivityThread、LoadedApk、Instrumentation 状态合入；既有 attachBaseContext 后加载器采用保留。NativeActivity 真 DEX 反射检查 mPackages/mBoundApplication/Context 指向同一 LoadedApk，currentApplication 与 Instrumentation 可用；未重跑 Egg，Play 密钥问题保持开放 |
+| .NET 基础运行时 | /proc access、APK 原生库读取、Linux arm64 信号上下文、Mono AOT 代码区限定、依赖库 dlsym 和 RX/RW 排序已进入 NativeRuntime。真实 ELF 验证 Mono 元数据不被当作 syscall 重写及代码仍可执行；运行时检查 96 个 4 KiB 偏移映射回收、proc、非崩溃信号、实际 ELF 文件内容及依赖符号查找。没有实际 .NET 应用兼容结论 |
+| 合并发现的映射/文件问题 | 修复上游固定 64 个映射表溢出后无法回收、部分 munmap 误删整个映射；改动态记录，暂不支持的部分释放明确 EINVAL 并保留整段。可执行映射拒绝时回收偏移记录；读取/mprotect 失败不再成功返回。原生库提取改唯一临时文件同步后原子替换，避免同名临时文件并发覆盖 |
+| Native HLE 与框架 | SystemClock、SharedPreferences 浮点/长整数默认值、FileOutputStream 已编入，新增 HLE 回归覆盖时钟、值与追加/关闭后写入异常。其他 Choreographer/ListView/NetworkSecurityPolicy 等共享 framework 变更纳入新 DEX；这不是完整 SharedPreferences HLE 持久化或真实游戏验收 |
+
+核对了 TLReport.nativeEngine、TLUnityView、project.yml、Play/登录和图形依赖。本轮没有新增引擎、Store 或图形依赖 pin；macOS 的 .NET/Java 分发已存在，新钩子在实际 Java profile 中连接。独立 Runner、固定画布、键鼠/手柄、默认失焦继续和 storage-closed 协议保留。WebView 卸载前保存、真实游戏保存重开、Play/VM/P6 等下文开放项未关闭。
+
+## 2026-10-18：已交付的 3.0 基线
+
 上游核对日期：2026-10-18（Asia/Shanghai）。本轮 `a3407fc..cedb01e` 共 **64 个提交、82 个路径**；正式 **3.0 tag = cffaf8b**，上游 iOS build 129。origin 两分支没有外来新提交；先普通合并到本地 fork main **308793d**，再合回 macOS。七个冲突按语义解决，保留自定义 Java ClassLoader、NativeActivity 关闭协议、Mac 报告来源和加载器混合页修复。
 
 本轮交付 **3.0.0 / build 12**，仍使用唯一 `build/macos`、VM=ON。以下新增接入已通过 **19 项针对性回归、默认 CTest 103/103（82.65 秒）**及 **18 Mach-O / 406 Java 资源**包校验。代码 **70c2764** 与 main **308793d** 已正常推送并读回 SHA；[CI 39087010940](https://github.com/ruabbit/Husk-macOS/actions/runs/39087010940) 构建/包检查/29 项 hosted 核心测试成功。CUA 单次重开 Product、首页截图和选择交互通过，详情导航后连接断开。完整交付在 [progress.md](progress.md) 最上方记录。构建和 fixture 通过不等于真实游戏兼容。

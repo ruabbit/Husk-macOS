@@ -140,13 +140,14 @@ add_custom_command(TARGET JavaAppProbe POST_BUILD COMMAND codesign --force --sig
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaAppProbe>" VERBATIM)
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
+    ${MAC}/NativeRunner/MacDocumentPicker.m
     ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m "${HUSK_ICON}")
 add_dependencies(NativeRunner MacIcon)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(NativeRunner PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(NativeRunner PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"
-    "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox")
+    "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox" "-framework UniformTypeIdentifiers")
 set_target_properties(NativeRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/NativeRunner/Info.plist.in)
 
 add_executable(WebRunner MACOSX_BUNDLE ${MAC}/WebRunner/main.swift ${MAC}/WebRunner/WebLifecycle.swift src/app/Husk/WebApp.swift "${HUSK_ICON}")
@@ -337,13 +338,18 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/LoaderTests/ready"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_loader_cases.py "${CMAKE_BINARY_DIR}/LoaderTests"
     DEPENDS tests/macos/prepare_loader_cases.py tests/macos/fixture/namespace.c tests/macos/fixture/data_views.S scripts/build_macos_fixture.py VERBATIM)
 add_custom_target(LoaderFixtures DEPENDS "${CMAKE_BINARY_DIR}/LoaderTests/ready")
+add_executable(RuntimeUpdateTests tests/macos/RuntimeUpdates.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_link_libraries(RuntimeUpdateTests PRIVATE NativeRuntime)
+add_dependencies(RuntimeUpdateTests LoaderFixtures)
+add_test(NAME core-runtime-updates COMMAND RuntimeUpdateTests "${CMAKE_BINARY_DIR}/LoaderTests/app.apk")
+set_tests_properties(core-runtime-updates PROPERTIES TIMEOUT 20)
 add_executable(LoaderDataViewTests tests/macos/LoaderDataViews.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(LoaderDataViewTests PRIVATE ${MAC}/NativeRunner)
 target_link_libraries(LoaderDataViewTests PRIVATE NativeRuntime)
 add_dependencies(LoaderDataViewTests LoaderFixtures)
 add_custom_command(TARGET LoaderDataViewTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:LoaderDataViewTests>" VERBATIM)
-foreach(mode go-data mixed-data go-mixed-data)
+foreach(mode go-data mixed-data go-mixed-data mono-data)
     add_test(NAME core-loader-${mode} COMMAND LoaderDataViewTests "${CMAKE_BINARY_DIR}/LoaderTests/${mode}.so")
     set_tests_properties(core-loader-${mode} PROPERTIES TIMEOUT 15 ENVIRONMENT "TL_XMEM_MIB=64")
 endforeach()
@@ -372,7 +378,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -380,7 +386,7 @@ target_link_libraries(JavaLifecycleTests PRIVATE NativeRuntime)
 add_dependencies(JavaLifecycleTests JavaRuntimeResources JavaLifecycleFixture)
 add_custom_command(TARGET JavaLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaLifecycleTests>" VERBATIM)
-foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework)
+foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework documents)
     add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
@@ -491,6 +497,12 @@ target_include_directories(MacTextInputTests PRIVATE ${MAC}/NativeRunner)
 target_compile_options(MacTextInputTests PRIVATE -fobjc-arc)
 target_link_libraries(MacTextInputTests PRIVATE "-framework AppKit")
 add_test(NAME macos-text-input COMMAND MacTextInputTests)
+add_executable(MacDocumentPickerTests tests/macos/DocumentPicker.m ${MAC}/NativeRunner/MacDocumentPicker.m)
+target_include_directories(MacDocumentPickerTests PRIVATE ${MAC}/NativeRunner)
+target_compile_options(MacDocumentPickerTests PRIVATE -fobjc-arc)
+target_link_libraries(MacDocumentPickerTests PRIVATE "-framework AppKit" "-framework UniformTypeIdentifiers")
+add_test(NAME macos-document-picker COMMAND MacDocumentPickerTests)
+set_tests_properties(macos-document-picker PROPERTIES TIMEOUT 15)
 add_executable(MacRenderSurfaceTests tests/macos/RenderSurface.m ${MAC}/NativeRunner/MacRenderView.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m)
 target_include_directories(MacRenderSurfaceTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include)
@@ -499,12 +511,13 @@ target_link_libraries(MacRenderSurfaceTests PRIVATE "-framework AppKit" "-framew
 add_test(NAME macos-render-surface COMMAND MacRenderSurfaceTests "${HUSK_DEPS}/lib/libANGLE-shared.dylib")
 set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
 add_executable(MacNativeMouseTests tests/macos/NativeMouse.m ${MAC}/NativeRunner/MacRenderView.m
+    ${MAC}/NativeRunner/MacDocumentPicker.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m ${MAC}/NativeRunner/MacAudio.m
     ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m)
 target_include_directories(MacNativeMouseTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(MacNativeMouseTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(MacNativeMouseTests PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"
-    "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox")
+    "-framework Metal" "-framework Security" "-framework GameController" "-framework AudioToolbox" "-framework UniformTypeIdentifiers")
 add_test(NAME macos-native-mouse COMMAND MacNativeMouseTests)
 set_tests_properties(macos-native-mouse PROPERTIES TIMEOUT 15)
 add_executable(QuadMathTests tests/macos/QuadMath.c)

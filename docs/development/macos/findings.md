@@ -1,5 +1,13 @@
 # 审计发现
 
+## 2026-10-19 上游运行时与文件选择器
+
+- 上游 4 提交 / 29 路径，main 本地普通 merge=cc99757；macOS 三处 Java 冲突与此前 Egg 启动桥重叠。自动合并还留下重复 mPackageInfo/mClassLoader，现统一到 LoadedApk.self() 并保留 attachBaseContext 后采用加载器。
+- 文件选择器回调原来没有 macOS 接线；已补 NSOpenPanel、所选文件隔离复制、只读 grants、并发请求拒绝和销毁前取消/排空。Context7 AppKit 文档确认 sheet completion 与多选 URLs；未知 MIME 在系统中生成动态 UTType，需要显式回退 item。
+- 新 .NET 映射代码的固定表满后失去记录，且部分 unmap 会释放整个 host span；动态记录与拒绝不支持的部分释放已通过 96 映射回归。Mono 的 .text 数据必须排除 syscall/ADRP 改写，真实 ELF fixture 已验证。
+- 首轮测试错误：Objective-C 宏未包住带逗号表达式，改可变参数宏；同步 fixture 过早返回首个选择结果，使“重叠请求”实际变成先后请求，现等待第二请求取消后再送首个结果。修复后的 5 项回归及追加 4 项复验通过。早期正则误包含 build 12 的 macos-java-nativeactivity-session，其通过不计为新候选证据。
+- CUA 首次 getApp 超时重置，重连 native pipe closed，没有取得绑定；后续按键尝试返回变量未定义，未向应用发送退出。用户纠正退出流程并明确授权：无游戏/VM时自行正常退出或强制退出空闲 Husk，不再要求用户操作。继续时旧 PID 13331 已消失；原位打包 build 13 后 CUA 单次启动 PID 39849，主窗口 AX/截图成功，107/107 默认测试和包检查通过。每日任务已更新并读回新规则；没有对不存在的进程发送信号，也没有触碰其他项目 UTM。
+
 ## 2026-10-13 三款游戏修复与剩余阻塞
 
 - 图标根因在 macOS 导入器：只从 base 读取资源，且把 binary adaptive XML 当图像存储。新实现跨 split 解析、合成 PNG 并按版本刷新旧缓存；真实 Egg、War、Clash 图标已解码并目视检查。刷新不重写资料库索引、名称、偏好或存档。

@@ -12,13 +12,6 @@ import java.util.HashMap;
 
 /** The app's base context: one for the process, as ContextImpl is on Android (activities and the application wrap it). */
 public final class ContextImpl extends Context {
-    private static android.app.LoadedApk sPackageInfo;
-    public final android.app.LoadedApk mPackageInfo = packageInfo();
-    private ClassLoader mClassLoader;
-    private static synchronized android.app.LoadedApk packageInfo() {
-        if (sPackageInfo == null) sPackageInfo = new android.app.LoadedApk(AppRunner.classLoader());
-        return sPackageInfo;
-    }
     private static ContextImpl sApp;
     private static Context sApplication;
     private static final HashMap<String, Object> sServices = new HashMap<>();
@@ -26,6 +19,11 @@ public final class ContextImpl extends Context {
     private static AssetManager sAssets;
     private static Resources sResources;
     private final Resources mResources;
+    /* AOSP's names, read by packers and loader shells: the APK record, the process's ActivityThread and a loader of the context's own */
+    public final android.app.LoadedApk mPackageInfo = android.app.LoadedApk.self();
+    final android.app.ActivityThread mMainThread = android.app.ActivityThread.currentActivityThread();
+    private ClassLoader mClassLoader;
+    private final String mBasePackageName = Native.packageName(), mOpPackageName = mBasePackageName;
     private Resources.Theme mTheme;
     private int mThemeId;
 
@@ -57,7 +55,7 @@ public final class ContextImpl extends Context {
     @Override public PackageManager getPackageManager() { return PackageManager.self(); }
     @Override public ContentResolver getContentResolver() { return ContentResolver.self(); }
     @Override public Looper getMainLooper() { return Looper.getMainLooper(); }
-    @Override public Context getApplicationContext() { return sApplication != null ? sApplication : this; }
+    @Override public Context getApplicationContext() { android.app.Application app = AppRunner.application(); return app != null ? app : sApplication != null ? sApplication : this; }
     @Override public void setTheme(int resid) { if (mThemeId != resid) { mThemeId = resid; mTheme = null; } }
     @Override public Resources.Theme getTheme() {
         if (mTheme == null) {
@@ -67,7 +65,7 @@ public final class ContextImpl extends Context {
         }
         return mTheme;
     }
-    @Override public ClassLoader getClassLoader() { return mClassLoader != null ? mClassLoader : mPackageInfo.getClassLoader(); }
+    @Override public ClassLoader getClassLoader() { return mClassLoader != null ? mClassLoader : AppRunner.classLoader(); }
     @Override public String getPackageName() { return Native.packageName(); }
     @Override public ApplicationInfo getApplicationInfo() { return ApplicationInfo.self(); }
     @Override public String getPackageResourcePath() { return getApplicationInfo().sourceDir; }

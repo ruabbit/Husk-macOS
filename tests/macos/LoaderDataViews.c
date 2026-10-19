@@ -18,5 +18,7 @@ int main(int argc,char **argv) {
     CHECK(*address()==UINT64_C(0x123456789abcdef));
     const uint64_t *(*indirect)(void)=(void *)code();CHECK(indirect&&indirect()==address());
     CHECK(syscall_registers(getpid()));
+    const uint32_t *metadata=tl_ld_sym(lib,"mono_data_word");
+    if(metadata)CHECK(*metadata==0xd4000001); // only the Mono code range may be rewritten
     puts("PASS ELF PC-relative and relocated data/code pointers; raw syscall NZCV and full q8-q15 preserved");return 0;
 }
