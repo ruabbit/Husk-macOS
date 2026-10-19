@@ -5,10 +5,10 @@
   "integratedRevision": "2df074b3083ce2913922995f2f99249f1498b554",
   "checkedOn": "2026-10-19",
   "commitCount": 4,
-  "integration": "Normal merge of cedb01e..2df074b through fork main cc99757. Three Java conflicts resolved by shared LoadedApk state while retaining custom ClassLoader and NativeActivity lifecycle. macOS document picker and runtime adaptations packaged as build 13; all 107 default tests and bundle checks passed, exact Product relaunched once with main-window AX and screenshot verified. Commit/push and current CI pending.",
+  "integration": "Normal merge of cedb01e..2df074b through fork main cc99757 and macOS merge ee5d553, normally pushed together and remote SHAs verified. Three Java conflicts resolved by shared LoadedApk state while retaining custom ClassLoader and NativeActivity lifecycle. macOS document picker and runtime adaptations packaged as build 13; all 107 default tests and bundle checks passed, exact Product relaunched once with main-window AX and screenshot verified.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-local-awaiting-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
@@ -23,8 +23,20 @@
     "appSHA256": "3abf83fe859e88fa3c18b5f669e4109d3bdb04a443346c56785a04ba56155d8b",
     "nativeRunnerSHA256": "7ffb4af58be71798c32349b38babeeab30d71821ccf1902b15ee75cb9d2d3100",
     "frameworkSHA256": "3a4cb76fe13b57fbaac6cd66e186a19c44641da6d0304ddfd88cceb41a503319",
-    "deliveryStatus": "verified-local-awaiting-push",
-    "gui": "Old idle build 12 was already exited at the final process recheck. CUA launched exact build 13 Product once; PID 39849, main-window AX and screenshot verified the existing 11 apps and icons. No user game or VM launched."
+    "deliveryStatus": "verified-and-pushed",
+    "gui": "Old idle build 12 was already exited at the final process recheck. CUA launched exact build 13 Product once; PID 39849, main-window AX and screenshot verified the existing 11 apps and icons. No user game or VM launched.",
+    "sourceRevision": "ee5d553d4d4eea553d1ff9af5394c0af6f756afb",
+    "ci": {
+      "run": 39185361624,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39185361624",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "hardware": "skipped",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hostedCoreTests": 33,
+      "hostedCoreTestSeconds": 18.11
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 4,
@@ -39,7 +51,7 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
+    "pushed": true,
     "blocker": null,
     "previousCI": {
       "run": 39087010940,
@@ -51,7 +63,9 @@
       "hardware": "skipped",
       "hostedCoreTests": 29
     },
-    "defaultTestSeconds": 72.19
+    "defaultTestSeconds": 72.19,
+    "macOSRevision": "ee5d553d4d4eea553d1ff9af5394c0af6f756afb",
+    "remoteSHAsVerified": true
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",

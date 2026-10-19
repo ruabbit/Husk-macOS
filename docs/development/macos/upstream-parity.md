@@ -4,7 +4,7 @@
 
 已核对 `cedb01e..2df074b` 的 **4 个提交 / 29 个路径**，origin 两分支无外来提交。先普通合并到本地 main `cc99757`，再合回 macOS。LoadedApk、AppRunner、ContextImpl 三处冲突按意图解决：Context 与 ActivityThread 共用单一 LoadedApk，保留 component factory、自定义加载器、provider 顺序和 NativeActivity 双侧关闭。真 DEX 验证反射状态的一致性。
 
-当前唯一 Product 已更新为 **3.0.0 / build 13**，保留 VM=ON 和依赖缓存。最终 **默认 CTest 107/107（72.19 秒）**及 **18 Mach-O / 406 Java 资源**包检查通过。CUA 按完整路径单次启动，PID **39849**；主窗口 AX/截图确认原有 11 个应用与图标。早期 CUA 退出失败已解除，用户明确授权在无游戏/VM时自行强制退出空闲 Husk，每日任务已保存该规则；实际构建前旧 Husk 已自行退出，没有替换活动候选。推送和本批 CI 以 [progress.md](progress.md) 的交付记录为准。可见游戏内文件面板和真实应用兼容不由这些后台回归代替。
+当前唯一 Product 已更新为 **3.0.0 / build 13**，保留 VM=ON 和依赖缓存。最终 **默认 CTest 107/107（72.19 秒）**及 **18 Mach-O / 406 Java 资源**包检查通过。CUA 按完整路径单次启动，PID **39849**；主窗口 AX/截图确认原有 11 个应用与图标。早期 CUA 退出失败已解除，用户明确授权在无游戏/VM时自行强制退出空闲 Husk，每日任务已保存该规则；实际构建前旧 Husk 已自行退出，没有替换活动候选。代码 **ee5d553** 与 main **cc99757** 已推送并读回；[CI 39185361624](https://github.com/ruabbit/Husk-macOS/actions/runs/39185361624) 构建/包检查/33 项 hosted 核心测试及 P0 memory/core 成功。完整证据见 [progress.md](progress.md)。可见游戏内文件面板和真实应用兼容不由这些后台回归代替。
 
 | 本轮增量 | macOS 实际实现与验证边界 |
 | --- | --- |

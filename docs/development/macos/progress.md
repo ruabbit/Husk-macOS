@@ -11,7 +11,9 @@ macOS NSOpenPanel 与 Java GET_CONTENT/OPEN_DOCUMENT/PICK 已接线，复制到�
 
 早期 CUA getApp 超时、重连 native pipe closed，没有发送退出。用户随后明确要求：确认没有游戏或 VM 时自行退出空闲 Husk，正常退出不可用就强制退出，不再请求 ⌘Q。继续时复查旧 Husk 已不在进程表，因此本次无需发送终止信号。保留 VM=ON 与缓存，在唯一 build/macos 原位完成 **3.0.0 / build 13**。CUA 按完整 Product 路径只启动一次，PID **39849**；主窗口 AX 和截图核对原有 **11 个应用**及图标，未启动游戏或 VM。每日任务 husk 已更新并读回，保持每天 09:00、ACTIVE 和原聊天，写明空闲主程序自动退出/强退规则。
 
-主程序 SHA-256 `3abf83fe859e88fa3c18b5f669e4109d3bdb04a443346c56785a04ba56155d8b`，NativeRunner `7ffb4af58be71798c32349b38babeeab30d71821ccf1902b15ee75cb9d2d3100`，framework DEX `3a4cb76fe13b57fbaac6cd66e186a19c44641da6d0304ddfd88cceb41a503319`。本地验证与候选更新完成，合并提交、两分支推送及本批远端 CI 结果待下方交付记录确认。
+主程序 SHA-256 `3abf83fe859e88fa3c18b5f669e4109d3bdb04a443346c56785a04ba56155d8b`，NativeRunner `7ffb4af58be71798c32349b38babeeab30d71821ccf1902b15ee75cb9d2d3100`，framework DEX `3a4cb76fe13b57fbaac6cd66e186a19c44641da6d0304ddfd88cceb41a503319`。
+
+代码合并 [ee5d553](https://github.com/ruabbit/Husk-macOS/commit/ee5d553d4d4eea553d1ff9af5394c0af6f756afb) 与 main [cc99757](https://github.com/ruabbit/Husk-macOS/commit/cc99757e65d3923851e4df383bef186c0d311cd5) 已普通原子推送，两个远端完整 SHA 读回一致。对应 [CI 39185361624](https://github.com/ruabbit/Husk-macOS/actions/runs/39185361624) 已确认 **completed / success**，build-and-core 用时 **4 分 10 秒**；构建、签名/依赖闭包、**33 项 hosted 核心测试（18.11 秒）**与 P0 memory/core 均通过，hardware job 按配置 skipped。CI JSON 和日志复用 current-upstream-ci.json/current-upstream-ci.log。最后仅补交来源锁与验证记录，不再次替换或重启当前候选；工作分支保持 codex/macos-p0。
 
 没有运行 Egg/Hole.io/War/Clash 或其他用户游戏/VM，没有修改用户 APK/存档/Android 磁盘、检查 USB、向上游 PR/issue 写入。Egg 的真实 Play 密钥服务、WebView 保存阶段、真实游戏/实体 IME/手柄/Geode、PS4/VM/P6 等保持开放。
 
