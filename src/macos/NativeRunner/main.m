@@ -354,11 +354,23 @@ static int androidKey(unsigned code)
     if((unity||nativeactivity||javaapp||nativeDriver) && self.lifecycleQueue) {
         // Initialization and join share a queue, so stop during loading cannot
         // race the loader or miss a thread that has not been created yet.
-        dispatch_async(self.lifecycleQueue,^{
+        dispatch_block_t stop = ^{
             tl_audio_set_muted(true);tl_audio_set_paused(false);
             if(nativeDriver)mac_driver_stop();else if(javaapp)tl_javaapp_stop();else if(nativeactivity)tl_na_stop();else tl_unity_stop();
             BOOL ok=nativeDriver?mac_driver_state()==TL_DRIVER_DESTROYED:javaapp?tl_javaapp_get_state()==TL_JAVA_DESTROYED:nativeactivity?tl_na_get_state()==TL_NA_DESTROYED:tl_unity_get_state()==TL_UNITY_DESTROYED;
             dispatch_async(dispatch_get_main_queue(),^{[self gameStopped:ok];});
+        };
+        dispatch_async(self.lifecycleQueue,^{
+            if (!javaapp) { stop(); return; }
+            // AppMain must keep polling phase 9 while page save handlers call
+            // Java plugins. Only request Android destruction after that stage.
+            dispatch_async(dispatch_get_main_queue(),^{
+                tl_audio_set_muted(true);
+                tl_web_prepare_for_host(^(BOOL prepared){
+                    [self event:@"web-save-stage" detail:@{@"prepared":@(prepared)}];
+                    dispatch_async(self.lifecycleQueue, stop);
+                });
+            });
         });return;
     }
     if(minecraft && self.loaded) {

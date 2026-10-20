@@ -5,6 +5,9 @@
 /* Call on the main thread before starting Java. A host-owned store is tied to
  * a save, not just a package. WebKit continues to own its database files. */
 bool tl_web_set_host_store(NSUUID *identifier);
+/* Run while AppMain/JavaBridge are still alive. Completion is bounded and a
+ * failure remains sticky through the later Android/WebKit close receipt. */
+void tl_web_prepare_for_host(void (^completion)(BOOL prepared));
 void tl_web_close_for_host(void (^completion)(BOOL detached, NSDictionary *receipt));
 /* Diagnostic protocol only; the caller must require its automation flag. */
 void tl_web_evaluate_for_host(int wid, NSString *script, void (^completion)(id, NSError *));

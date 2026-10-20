@@ -1,5 +1,16 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-20 WebView 卸载前保存
+
+- [x] 从干净的 4b1d5b5 开始，远端地址正确，无其他合并/构建/游戏/VM；只有空闲 Product build 13 PID 39849。
+- [x] fetch origin/upstream，双方均无新提交；upstream/main 仍为 2df074b，祖先与来源锁一致。
+- [x] 补 Java 内嵌 WebView 的受控卸载前保存，在 Java 桥仍可用时交付生命周期并排空，保留失败判定与关闭回执。
+- [x] 新增 8 项真实 WebKit/DEX 后台回归，验证单次事件、插件写入保存重开和失败场景；默认 115/115、包检查与 iOS 共享文件语法检查通过。
+- [x] 原位更新唯一候选 build 14，单次重开 PID 67505，主窗口 AX/截图显示原有 11 个应用；更新对齐与来源记录。
+- [ ] 提交推送自己的仓库并核对远端 SHA、精确代码提交的 CI。
+
+旧顺序先 Android destroy 再真实空白导航，WebKit 在卸载时压掉 prompt，插件无法保存。本轮加入独立保存阶段，仍保留 late-bridge 的失败检查。沿用 docs/development/macos 中的计划文件，不在仓库根新增笔记。
+
 ## 当前执行：2026-10-19 上游运行时与文件选择器
 
 - [x] 核对干净工作区、两远端和运行会话；origin 无新增提交，仅空闲 Product build 12 PID 13331。

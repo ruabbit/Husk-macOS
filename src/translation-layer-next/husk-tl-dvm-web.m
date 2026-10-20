@@ -135,25 +135,28 @@ static NSMutableDictionary<NSNumber *, HuskWebPending *> *g_pending;
 static int g_next_call = 1;
 static atomic_int g_visible_webs;
 static NSUUID *g_host_store;
-static BOOL g_host_closing, g_detach_failed;
+static BOOL g_host_preparing, g_host_prepared, g_host_closing, g_detach_failed;
 static dispatch_group_t g_detaching;
 
-static void cancel_pending(int wid)
+static void cancel_pending_except_bridge(int wid, BOOL preserveBridge)
 {
     for (NSNumber *key in g_pending.allKeys) {
         HuskWebPending *p = g_pending[key];
         if (wid && p.wid != wid) continue;
+        if (preserveBridge && p.kind == 'j') continue;
         [g_pending removeObjectForKey:key];
         [p.network cancel];
         switch (p.kind) {
         case 'o': ((void (^)(WKNavigationActionPolicy))p.value)(WKNavigationActionPolicyCancel); break;
         case 'A': ((void (^)(void))p.value)(); break;
         case 'C': ((void (^)(BOOL))p.value)(NO); break;
+        case 'j': if (g_host_store) g_detach_failed = YES; // accepted plugin work was abandoned
         case 'P': ((void (^)(NSString *))p.value)(nil); break;
         case 'r': [(id<WKURLSchemeTask>)p.value didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]]; break;
         }
     }
 }
+static void cancel_pending(int wid) { cancel_pending_except_bridge(wid, NO); }
 static dispatch_group_t cookie_writes(void)
 {
     static dispatch_group_t group;
@@ -260,6 +263,41 @@ static void cookies_put(NSArray<NSHTTPCookie *> *cs)
     }
 }
 
+/* Installed before application scripts. The early capture gate lets the
+ * controlled save phase deliver each lifecycle event once, then suppresses
+ * WebKit's later unload delivery after Android has gone away. It is enabled
+ * only for an independent host that explicitly calls prepare-for-close. */
+static NSString *save_stage_js(void)
+{
+    return @"(()=>{let preparing=false,sealed=false,expected=null,failed=false;"
+        "const timeout=setTimeout.bind(window),interval=setInterval.bind(window),raf=requestAnimationFrame.bind(window);"
+        "const ct=clearTimeout.bind(window),ci=clearInterval.bind(window),cr=cancelAnimationFrame.bind(window);"
+        "const timers=new Set(),intervals=new Set(),frames=new Set();"
+        "const bad=()=>{failed=true;window.webkit.messageHandlers.huskConsole.postMessage({saveFailed:true});};"
+        "window.setTimeout=(fn,ms,...args)=>{if(sealed)return 0;const id=timeout(()=>{timers.delete(id);if(!sealed){if(typeof fn==='function')fn.apply(window,args);else (0,eval)(String(fn));}},ms);timers.add(id);return id;};"
+        "window.clearTimeout=id=>{timers.delete(id);ct(id);};"
+        "window.setInterval=(fn,ms,...args)=>{if(preparing)return 0;const id=interval(()=>{if(!preparing){if(typeof fn==='function')fn.apply(window,args);else (0,eval)(String(fn));}},ms);intervals.add(id);return id;};"
+        "window.clearInterval=id=>{intervals.delete(id);ci(id);};"
+        "window.requestAnimationFrame=fn=>{if(preparing)return 0;const id=raf(t=>{frames.delete(id);if(!preparing)fn(t);});frames.add(id);return id;};"
+        "window.cancelAnimationFrame=id=>{frames.delete(id);cr(id);};"
+        "['beforeunload','visibilitychange','pagehide','unload'].forEach(type=>window.addEventListener(type,e=>{if(preparing&&e!==expected)e.stopImmediatePropagation();},true));"
+        "window.addEventListener('error',()=>{if(preparing&&!sealed)bad();},true);"
+        "window.addEventListener('unhandledrejection',()=>{if(preparing&&!sealed)bad();},true);"
+        "Object.defineProperty(window,'__huskPrepareClose',{value:async()=>{"
+        "if(preparing)throw new Error('Save stage already started');preparing=true;"
+        "timers.forEach(ct);intervals.forEach(ci);frames.forEach(cr);timers.clear();intervals.clear();frames.clear();"
+        "const waits=[];const send=(target,e)=>{Object.defineProperty(e,'waitUntil',{value:p=>{if(expected!==e)throw new Error('waitUntil outside lifecycle dispatch');waits.push(Promise.resolve(p));}});expected=e;try{target.dispatchEvent(e);}finally{expected=null;}};"
+        "try{"
+        "Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'});"
+        "document.getAnimations().forEach(a=>a.pause());"
+        "send(window,new Event('beforeunload',{cancelable:true}));send(document,new Event('visibilitychange'));"
+        "send(window,new PageTransitionEvent('pagehide',{persisted:false}));send(window,new Event('unload'));"
+        "for(let i=0;i<window.frames.length;i++){const f=window.frames[i];if(typeof f.__huskPrepareClose!=='function')throw new Error('Unprepared child frame');waits.push(f.__huskPrepareClose().then(ok=>{if(!ok)throw new Error('Child save failed');}));}"
+        "await Promise.all(waits);if(failed)throw new Error('Page save handler failed');return true;"
+        "}catch(e){bad();throw e;}finally{sealed=true;window.__huskClosing=true;timers.forEach(ct);timers.clear();}"
+        "}});})();";
+}
+
 static NSString *bridge_js(void)
 {
     /* Android's addJavascriptInterface objects call through prompt(); the console reaches WebChromeClient.onConsoleMessage */
@@ -283,10 +321,13 @@ static NSString *bridge_js(void)
 @property (nonatomic, strong) NSMutableArray<NSString *> *scripts;
 @property (nonatomic) bool edgeLinked;
 @property (nonatomic) BOOL closing;
+@property (nonatomic, copy) void (^prepareCompletion)(BOOL);
 @property (nonatomic) WKNavigation *blankNavigation;
 @property (nonatomic, copy) void (^closeCompletion)(BOOL);
 - (void)closeForHost:(void (^)(BOOL))completion;
 - (void)completeClose:(BOOL)ok;
+- (void)prepareForHost:(void (^)(BOOL))completion;
+- (void)completePrepare:(BOOL)ok;
 @end
 
 @implementation HuskWeb
@@ -301,6 +342,7 @@ static NSString *bridge_js(void)
     [c setURLSchemeHandler:self forURLScheme:@"huskapp"];
     c.userContentController = [[WKUserContentController alloc] init];
     [c.userContentController addScriptMessageHandler:self name:@"huskConsole"];
+    if (g_host_store) [c.userContentController addUserScript:[[WKUserScript alloc] initWithSource:save_stage_js() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO]];
     [c.userContentController addUserScript:[[WKUserScript alloc] initWithSource:bridge_js() injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO]];
 #if TARGET_OS_IPHONE
     c.allowsInlineMediaPlayback = YES;
@@ -363,6 +405,7 @@ static NSString *bridge_js(void)
 }
 - (void)closeForHost:(void (^)(BOOL))completion
 {
+    if (_prepareCompletion) [self completePrepare:NO];
     _closing = YES;
     _closeCompletion = completion;
     cancel_pending(_wid);
@@ -370,8 +413,8 @@ static NSString *bridge_js(void)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         [weak completeClose:NO];
     });
-    // A script barrier followed by real navigation dispatches pagehide once;
-    // a synthetic pagehide here would run the application's save handler twice.
+    // Prepared documents suppress the second lifecycle delivery. Guest-owned
+    // destruction that skipped preparation retains the late-bridge rejection.
     [_web evaluateJavaScript:@"window.__huskClosing=true; true" completionHandler:^(id value, NSError *error) {
         HuskWeb *h = weak;
         if (!h.closeCompletion) return;
@@ -380,6 +423,38 @@ static NSString *bridge_js(void)
             HuskWeb *h = weak;
             if (h.closeCompletion) h.blankNavigation = [h.web loadHTMLString:@"<!doctype html><title>Closed</title>" baseURL:nil];
         }];
+    }];
+}
+- (void)completePrepare:(BOOL)ok
+{
+    void (^completion)(BOOL) = _prepareCompletion;
+    if (!completion) return;
+    _prepareCompletion = nil;
+    if (!ok) g_detach_failed = YES;
+    completion(ok);
+}
+- (void)prepareForHost:(void (^)(BOOL))completion
+{
+    if (!_web || _closing || _prepareCompletion) { completion(NO); return; }
+    _prepareCompletion = completion;
+    // Settle an ordinary pending dialog/navigation, but keep accepted plugin
+    // calls alive: cancelling their prompt would silently discard a save.
+    cancel_pending_except_bridge(_wid, YES);
+    __weak HuskWeb *weak = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 6 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        HuskWeb *h = weak;
+        if (h.prepareCompletion) { tl_log_line("javaapp: WebView save stage timed out"); [h completePrepare:NO]; }
+    });
+    [_web setAllMediaPlaybackSuspended:YES completionHandler:^{
+        HuskWeb *h = weak;
+        if (!h.prepareCompletion) return;
+        [h.web callAsyncJavaScript:@"return await window.__huskPrepareClose();" arguments:@{} inFrame:nil inContentWorld:WKContentWorld.pageWorld
+            completionHandler:^(id result, NSError *error) {
+                HuskWeb *h = weak;
+                if (!h.prepareCompletion) return;
+                if (error) tl_log_line("javaapp: WebView save stage failed: %s", error.localizedDescription.UTF8String);
+                [h completePrepare:!error && [result isKindOfClass:NSNumber.class] && [result boolValue]];
+            }];
     }];
 }
 - (void)observeValueForKeyPath:(NSString *)kp ofObject:(id)o change:(NSDictionary *)ch context:(void *)ctx
@@ -405,6 +480,7 @@ static NSString *bridge_js(void)
 - (void)webView:(WKWebView *)w decidePolicyForNavigationAction:(WKNavigationAction *)act decisionHandler:(void (^)(WKNavigationActionPolicy))decide
 {
     if (_closing) { decide([act.request.URL.absoluteString isEqual:@"about:blank"] ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel); return; }
+    if (g_host_preparing) { decide(WKNavigationActionPolicyCancel); return; }
     NSURL *u = act.request.URL;
     NSString *scheme = u.scheme.lowercaseString ?: @"";
     bool main = act.targetFrame == nil || act.targetFrame.isMainFrame;
@@ -436,18 +512,18 @@ static NSString *bridge_js(void)
 }
 - (void)webView:(WKWebView *)w didFailNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else [self failed:e]; }
 - (void)webView:(WKWebView *)w didFailProvisionalNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else [self failed:e]; }
-- (void)webViewWebContentProcessDidTerminate:(WKWebView *)w { if (g_host_store) g_detach_failed = YES; if (_closing) [self completeClose:NO]; else emit(@"g", _wid, @[]); }
+- (void)webViewWebContentProcessDidTerminate:(WKWebView *)w { if (g_host_store) g_detach_failed = YES; [self completePrepare:NO]; if (_closing) [self completeClose:NO]; else emit(@"g", _wid, @[]); }
 
 /* dialogs and the bridge */
 - (void)webView:(WKWebView *)w runJavaScriptAlertPanelWithMessage:(NSString *)msg initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(void))done
 {
-    if (_closing || g_host_closing) { done(); return; }
+    if (_closing || g_host_closing || g_host_preparing) { done(); return; }
     int call = [self park:[done copy] kind:'A'];
     emit(@"A", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"" ]);
 }
 - (void)webView:(WKWebView *)w runJavaScriptConfirmPanelWithMessage:(NSString *)msg initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(BOOL))done
 {
-    if (_closing || g_host_closing) { done(NO); return; }
+    if (_closing || g_host_closing || g_host_preparing) { done(NO); return; }
     int call = [self park:[done copy] kind:'C'];
     emit(@"C", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"" ]);
 }
@@ -462,12 +538,18 @@ static NSString *bridge_js(void)
         }
         done(nil); return;
     }
-    int call = [self park:[done copy] kind:'P'];
-    if ([msg hasPrefix:@"husk:"]) emit(@"j", _wid, @[ [NSString stringWithFormat:@"%d", call], [msg substringFromIndex:5] ]);
+    BOOL bridge = [msg hasPrefix:@"husk:"];
+    if (g_host_preparing && (!bridge || g_host_prepared)) {
+        if (bridge) g_detach_failed = YES;
+        done(nil); return;
+    }
+    int call = [self park:[done copy] kind:bridge ? 'j' : 'P'];
+    if (bridge) emit(@"j", _wid, @[ [NSString stringWithFormat:@"%d", call], [msg substringFromIndex:5] ]);
     else emit(@"P", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"", def ?: @"" ]);
 }
 - (WKWebView *)webView:(WKWebView *)w createWebViewWithConfiguration:(WKWebViewConfiguration *)c forNavigationAction:(WKNavigationAction *)act windowFeatures:(WKWindowFeatures *)wf
 {
+    if (g_host_preparing || g_host_closing) return nil;
     [w loadRequest:act.request];
     return nil;
 }
@@ -475,15 +557,12 @@ static NSString *bridge_js(void)
 - (void)userContentController:(WKUserContentController *)ucc didReceiveScriptMessage:(WKScriptMessage *)m
 {
     NSDictionary *d = [m.body isKindOfClass:NSDictionary.class] ? m.body : @{};
-    if (_closing || g_host_closing) {
-        // WebKit suppresses prompt dialogs during unload before consulting its
-        // UI delegate. The JS bridge must report this rejected call explicitly.
-        if (g_host_store && [d[@"closing"] boolValue]) {
-            g_detach_failed = YES;
-            tl_log_line("javaapp: WebView requested a Java bridge call during document unload");
-        }
+    if (g_host_store && ([d[@"saveFailed"] boolValue] || [d[@"closing"] boolValue])) {
+        g_detach_failed = YES;
+        tl_log_line("javaapp: WebView save or late Java bridge call failed");
         return;
     }
+    if (_closing || g_host_closing) return;
     emit(@"c", _wid, @[ [NSString stringWithFormat:@"%@", d[@"l"] ?: @0], [NSString stringWithFormat:@"%@", d[@"m"] ?: @""],
                         [NSString stringWithFormat:@"%@", d[@"s"] ?: @""], [NSString stringWithFormat:@"%@", d[@"n"] ?: @0] ]);
 }
@@ -491,7 +570,7 @@ static NSString *bridge_js(void)
 /* the app's own content */
 - (void)webView:(WKWebView *)w startURLSchemeTask:(id<WKURLSchemeTask>)task
 {
-    if (_closing || g_host_closing) { [task didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]]; return; }
+    if (_closing || g_host_closing || g_host_preparing) { [task didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]]; return; }
     int call = [self park:task kind:'r'];
     NSURLRequest *r = task.request;
     NSMutableArray *f = [NSMutableArray arrayWithArray:@[ [NSString stringWithFormat:@"%d", call], r.URL.absoluteString ?: @"", r.HTTPMethod ?: @"GET",
@@ -558,6 +637,7 @@ NAT(W_create)
     (void)self; (void)ret;
     int wid = a[0].i;
     on_main(^{
+        if (g_host_preparing) { g_detach_failed = YES; return; }
         if (!g_views) { g_views = [NSMutableDictionary dictionary]; g_pending = [NSMutableDictionary dictionary]; }
         if (!g_views[@(wid)]) g_views[@(wid)] = [[HuskWeb alloc] initWithId:wid];
     });
@@ -613,6 +693,7 @@ NAT(W_load)
     NSArray *hdr = nstrs(a[2].l);
     NSData *body = nbytes(a[3].l);
     on_main(^{
+        if (g_host_preparing) return;
         HuskWeb *h = view_of(wid);
         NSURL *u = url ? [NSURL URLWithString:url] : nil;
         if (!h || !u) { tl_log_line("web: cannot load %s", url.UTF8String ?: "(null)"); return; }
@@ -632,6 +713,7 @@ NAT(W_loadData)
     NSData *data = nbytes(a[1].l);
     NSString *mime = nstr(a[2].l) ?: @"text/html", *enc = nstr(a[3].l) ?: @"utf-8", *base = nstr(a[4].l);
     on_main(^{
+        if (g_host_preparing) return;
         HuskWeb *h = view_of(wid);
         if (!h) return;
         h.apiLoad = true;
@@ -700,6 +782,7 @@ NAT(W_go)
     (void)self; (void)ret;
     int wid = a[0].i, cmd = a[1].i;
     on_main(^{
+        if (g_host_preparing) return;
         HuskWeb *h = view_of(wid);
         if (!h) return;
         switch (cmd) {
@@ -745,6 +828,14 @@ NAT(W_reply)
         case 'o': ((void (^)(WKNavigationActionPolicy))thing)([r isEqualToString:@"\x01nav-allow"] ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel); break;
         case 'A': ((void (^)(void))thing)(); break;
         case 'C': ((void (^)(BOOL))thing)([r isEqualToString:@"\x01yes"]); break;
+        case 'j': {
+            if (g_host_preparing) {
+                NSData *data = [r dataUsingEncoding:NSUTF8StringEncoding];
+                id reply = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+                if (![reply isKindOfClass:NSDictionary.class] || reply[@"e"]) g_detach_failed = YES;
+            }
+            ((void (^)(NSString *))thing)(isNull ? nil : r); break;
+        }
         case 'P': ((void (^)(NSString *))thing)(isNull ? nil : r); break;
         }
     });
@@ -942,6 +1033,26 @@ bool tl_web_set_host_store(NSUUID *identifier)
     return true;
 }
 
+void tl_web_prepare_for_host(void (^completion)(BOOL))
+{
+    NSCAssert(NSThread.isMainThread, @"WebKit preparation must run on main");
+    if (!g_host_store || g_host_preparing || g_host_closing) { g_detach_failed = YES; completion(NO); return; }
+    g_host_preparing = YES;
+    dispatch_group_t preparing = dispatch_group_create();
+    for (HuskWeb *h in g_views.allValues) {
+        dispatch_group_enter(preparing);
+        [h prepareForHost:^(BOOL ok) {
+            if (!ok) g_detach_failed = YES;
+            dispatch_group_leave(preparing);
+            (void)h;
+        }];
+    }
+    dispatch_group_notify(preparing, dispatch_get_main_queue(), ^{
+        g_host_prepared = YES;
+        completion(!g_detach_failed);
+    });
+}
+
 /* This is a document-detach + WebKit ownership acknowledgement, not a disk
  * fsync claim. The caller separately checks Android destruction and storage. */
 void tl_web_close_for_host(void (^completion)(BOOL, NSDictionary *))
@@ -963,7 +1074,8 @@ void tl_web_close_for_host(void (^completion)(BOOL, NSDictionary *))
         g_cookie_watch = nil;
         tl_web_attach(NULL, NULL, 1, true);
         NSDictionary *receipt = @{@"lifecycle":used ? @"detached" : @"unused",
-            @"storage":used ? @"webkit-managed" : @"unused", @"store":g_host_store.UUIDString};
+            @"storage":used ? @"webkit-managed" : @"unused", @"store":g_host_store.UUIDString,
+            @"saveStage":g_host_prepared ? @"prepared" : @"not-requested"};
         callback(ok && !g_detach_failed, receipt);
     };
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 12 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ finish(NO); });
@@ -984,7 +1096,7 @@ void tl_web_close_for_host(void (^completion)(BOOL, NSDictionary *))
 void tl_web_evaluate_for_host(int wid, NSString *script, void (^completion)(id, NSError *))
 {
     HuskWeb *h = wid ? g_views[@(wid)] : g_views.count == 1 ? g_views.allValues.firstObject : nil;
-    if (g_host_closing || !h.web || h.closing) {
+    if (g_host_preparing || g_host_closing || !h.web || h.closing) {
         completion(nil, [NSError errorWithDomain:@"HuskWeb" code:1 userInfo:@{NSLocalizedDescriptionKey:@"WebView unavailable"}]); return;
     }
     [h.web evaluateJavaScript:script completionHandler:completion];

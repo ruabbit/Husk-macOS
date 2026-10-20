@@ -25,6 +25,10 @@ async function readSave() {
     });
     return {local: localStorage.getItem('value'), indexed, hidden: localStorage.getItem('pagehide')};
 }
-addEventListener('pagehide', () => localStorage.setItem('pagehide', 'saved'));
+addEventListener('pagehide', () => {
+    localStorage.setItem('pagehide', 'saved');
+    localStorage.setItem('pagehideCount', String(Number(localStorage.getItem('pagehideCount') || 0) + 1));
+});
+addEventListener('unload', () => localStorage.setItem('unloadCount', String(Number(localStorage.getItem('unloadCount') || 0) + 1)));
 window.fixtureReady = true;
 </script>

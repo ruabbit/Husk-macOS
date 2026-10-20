@@ -1,5 +1,16 @@
 # 审计发现
 
+## 2026-10-20 WebView 卸载前保存
+
+- 两远端 fetch 无变化，upstream/main=2df074b，main=cc99757，macOS=4b1d5b5；工作区初始干净，无进行中的 Git 操作或构建，仅空闲 Husk PID 39849。
+- 当前 NativeRunner 先 tl_javaapp_stop，再 tl_web_close_for_host；WebKit 真实 unload 压掉 prompt，已记录的 late-bridge 回归如实拒绝组合存储回执。新阶段必须先保留 AppMain/JavaBridge，再销毁，不能以 WebKit 独立 detach 代替 Android 完成。
+- Context7 WebKit 官方文档确认 callAsyncJavaScript 会等待返回 Promise 的解析/拒绝，nil frame 指向主 frame。应用的普通异步页面任务没有自动完成保证；生命周期阶段需要明确边界、超时与拒绝路径。
+- 初次查找假定 javaapp 为 .c、fixture 为 WebActivity.java，实际文件名需以 rg --files 为准；该只读查询没有修改源码。
+
+- 首轮 11 项 WebView 回归全部通过；复核后把媒体停止提前、按顶层 JSON 错误字段判定插件失败，并补暂停关闭/Promise 拒绝；最终默认 115/115，其中 WebView 13/13。真实 Java UI 消息在输入轮询前排队，phase 10 改为向同一 Handler 投递销毁，避免越过已经接受的插件 UI 写入。
+- Context7 同时确认 setAllMediaPlaybackSuspended 的 completion 在媒体暂停状态完成后执行，页面不能自行恢复。该步骤与保存脚本共用 6 秒期限；超时仍销毁资源但拒绝成功存储回执。事件是合成的、waitUntil 为 Husk 扩展；跨来源 frame、未登记异步任务、guest 主动销毁与实际 HTTP 应用仍有验收缺口。
+- CUA 退出后再次观察得到新空闲 PID 55410，精确路径和无 Runner/VM 复核后已自动 SIGTERM。最终单次 getApp 超时但启动了 PID 67505，复查该进程后通过旧绑定只读 AX/截图成功；不能把超时当成“未启动”而重复启动。
+
 ## 2026-10-19 上游运行时与文件选择器
 
 - 上游 4 提交 / 29 路径，main 本地普通 merge=cc99757；macOS 三处 Java 冲突与此前 Egg 启动桥重叠。自动合并还留下重复 mPackageInfo/mClassLoader，现统一到 LoadedApk.self() 并保留 attachBaseContext 后采用加载器。

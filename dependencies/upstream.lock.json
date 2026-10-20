@@ -1,32 +1,56 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "cedb01ee0b93122fe3780fc55a1d9720b61fd2c8",
+  "previousRevision": "2df074b3083ce2913922995f2f99249f1498b554",
   "integratedRevision": "2df074b3083ce2913922995f2f99249f1498b554",
-  "checkedOn": "2026-10-19",
-  "commitCount": 4,
-  "integration": "Normal merge of cedb01e..2df074b through fork main cc99757 and macOS merge ee5d553, normally pushed together and remote SHAs verified. Three Java conflicts resolved by shared LoadedApk state while retaining custom ClassLoader and NativeActivity lifecycle. macOS document picker and runtime adaptations packaged as build 13; all 107 default tests and bundle checks passed, exact Product relaunched once with main-window AX and screenshot verified.",
+  "checkedOn": "2026-10-20",
+  "commitCount": 0,
+  "integration": "Both remotes fetched on 2026-10-20 with no new commits. upstream/main 2df074b remains an ancestor of fork main cc99757 and macOS. Continue the platform backlog: controlled Java WebView pre-unload save, live Java bridge and AppMain write barrier, sticky failures, single lifecycle delivery, packaged as build 14. Default 115 tests and bundle checks passed; exact Product launched once and main-window AX/screenshot verified.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-awaiting-push",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
   },
   "candidate": {
     "version": "3.0.0",
-    "build": "13",
-    "defaultTests": 107,
-    "defaultTestSeconds": 72.19,
+    "build": "14",
+    "defaultTests": 115,
+    "defaultTestSeconds": 110.75,
     "bundleMachO": 18,
     "javaResources": 406,
-    "appSHA256": "3abf83fe859e88fa3c18b5f669e4109d3bdb04a443346c56785a04ba56155d8b",
-    "nativeRunnerSHA256": "7ffb4af58be71798c32349b38babeeab30d71821ccf1902b15ee75cb9d2d3100",
-    "frameworkSHA256": "3a4cb76fe13b57fbaac6cd66e186a19c44641da6d0304ddfd88cceb41a503319",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Old idle build 12 was already exited at the final process recheck. CUA launched exact build 13 Product once; PID 39849, main-window AX and screenshot verified the existing 11 apps and icons. No user game or VM launched.",
-    "sourceRevision": "ee5d553d4d4eea553d1ff9af5394c0af6f756afb",
+    "appSHA256": "2b4760ff3f14b6c983c0b7e1d337acb0558e67df1838748368c1c8fdc8cde055",
+    "nativeRunnerSHA256": "5d7bf937614fa10cf2d9ceadc4c2960e2523a37efd3a4288311983fcf32f67cd",
+    "frameworkSHA256": "c5a68af371f3d5f22621315243cd9a4b5a44ff7dc6be39e9926b0674e1358268",
+    "deliveryStatus": "locally-verified-awaiting-push",
+    "gui": "Idle Product was checked with CUA; normal quit did not leave the app exited. After rechecking exact path/PID 55410 and absence of runners/games/VMs, SIGTERM exited only that Husk. Build 14 exact Product was launched once with CUA; initial observation timed out, but PID 67505 was running. Existing binding then read main-window AX/screenshot with the original 11 apps and icons. No user game or VM launched.",
+    "sourceRevision": null,
     "ci": {
+      "statusAtDelivery": "not-submitted",
+      "conclusionAtDelivery": null
+    }
+  },
+  "lastCheck": {
+    "upstreamNewCommits": 0,
+    "upstreamChangedPaths": 0,
+    "originNewCommits": 0,
+    "mainRevision": "cc99757e65d3923851e4df383bef186c0d311cd5",
+    "macOSBaseRevision": "4b1d5b52fe45028e50f16344e60399f96b6b5499",
+    "macOSRevision": null,
+    "macOSAdaptation": "Java WebView controlled pre-unload save while AppMain/JavaBridge are alive; registered promises and immediate UI writes drain before Android destruction; same-origin frames save, cross-origin frames fail closed; single lifecycle delivery; plugin/script/promise/timeout/late-call failure preservation.",
+    "defaultSuiteTests": 115,
+    "defaultTestSeconds": 110.75,
+    "webSuiteTests": 13,
+    "webSuiteTestSeconds": 36.77,
+    "candidateDependentTestsPending": 0,
+    "fullDefaultSuitePassed": true,
+    "newBundleVerified": true,
+    "newCandidateRestarted": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
+    "blocker": null,
+    "previousCI": {
       "run": 39185361624,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39185361624",
       "statusAtLastCheck": "completed",
@@ -37,35 +61,6 @@
       "hostedCoreTests": 33,
       "hostedCoreTestSeconds": 18.11
     }
-  },
-  "lastCheck": {
-    "upstreamNewCommits": 4,
-    "upstreamChangedPaths": 29,
-    "originNewCommits": 0,
-    "mainRevision": "cc99757e65d3923851e4df383bef186c0d311cd5",
-    "macOSAdaptation": "Native NSOpenPanel, selected private file copies, read-only content grants, cancellation and lifecycle drain; LoadedApk reflection unification; Mono metadata, 96 shifted mappings, proc/signal/library IO, deep dlsym and HLE regressions. App/helpers and 57 independent targets built.",
-    "sourceTests": 84,
-    "sourceTestSeconds": 42.29,
-    "defaultSuiteTests": 107,
-    "candidateDependentTestsPending": 0,
-    "fullDefaultSuitePassed": true,
-    "newBundleVerified": true,
-    "newCandidateRestarted": true,
-    "pushed": true,
-    "blocker": null,
-    "previousCI": {
-      "run": 39087010940,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39087010940",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 29
-    },
-    "defaultTestSeconds": 72.19,
-    "macOSRevision": "ee5d553d4d4eea553d1ff9af5394c0af6f756afb",
-    "remoteSHAsVerified": true
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -92,15 +87,16 @@
     "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
   },
   "javaWebIntegration": {
-    "status": "packaged-fixture-verified",
+    "status": "pre-unload-save-packaged-fixture-verified",
     "marker": "Saves/<id>/java-web-store.json",
-    "receipt": "Native lifecycle=destroyed plus web.lifecycle=detached and web.storage=webkit-managed; explicit unused when no WebKit data store was opened.",
+    "receipt": "Native lifecycle=destroyed plus web.lifecycle=detached, web.storage=webkit-managed and host-stop web.saveStage=prepared; explicit unused when no WebKit data store was opened. Failed preparation remains sticky through final detach.",
     "legacyPolicy": "Existing native data without a marker retains the old package UUID. Clearing that save drops its binding and uses a fresh UUID on next launch; shared legacy WebKit bytes are retained to protect other libraries.",
     "remaining": [
-      "Real application/plugin and HTTP-page persistence; no fsync claim for system WebKit databases.",
-      "Java plugin calls during pagehide after Android destruction are rejected. WebKit suppresses unload prompt(), so merely moving the existing close earlier is insufficient. A controlled pre-unload save stage must retain AppMain/bridge dispatch, deliver lifecycle once, drain plugin work, then destroy Android and acknowledge both owners.",
-      "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit failure recovery and cancellation timeouts remain unverified."
-    ]
+      "Real HTTP application/plugin persistence and guest-initiated Activity destruction; no fsync claim for system WebKit databases.",
+      "Cross-origin child frame saving is unsupported and fails closed. Synthetic lifecycle has isTrusted=false; event.waitUntil is a Husk extension. Unregistered asynchronous work and code requiring trusted browser unload are not guaranteed.",
+      "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit process failure recovery and network-cancellation timeouts remain unverified."
+    ],
+    "saveStage": "Host-requested close keeps Java bridge dispatch alive, suspends media, blocks new navigation and ordinary recurring tasks, delivers synthetic lifecycle once, awaits event.waitUntil promises and same-origin child frames within six seconds, then drains immediate AppMain messages before Android destruction. Later actual unload is gated; late bridge calls and all observed save failures reject storage-closed."
   },
   "sourceVersion": "3.0.0",
   "legacyUnityTextInput": {

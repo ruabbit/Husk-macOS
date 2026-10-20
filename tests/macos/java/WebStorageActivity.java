@@ -15,10 +15,18 @@ import android.view.KeyEvent;
 public final class WebStorageActivity extends Activity {
     private WebView web;
     private boolean failDestroy;
+    private volatile boolean lateBridgeDestroy;
     public final class SaveBridge {
+        private int calls;
         @JavascriptInterface public void store() {
-            getSharedPreferences("web", 0).edit().putBoolean("bridge_saved", true).apply();
+            final int count = ++calls;
+            getSharedPreferences("web", 0).edit().putBoolean("bridge_saved", true).putInt("bridge_calls", count).apply();
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
+                getSharedPreferences("web", 0).edit().putInt("bridge_main_calls", count).apply());
         }
+        @JavascriptInterface public int previous() { return getSharedPreferences("web", 0).getInt("bridge_calls", 0); }
+        @JavascriptInterface public void fail() { throw new IllegalStateException("Expected fixture save failure"); }
+        @JavascriptInterface public void armLateDestroy() { lateBridgeDestroy = true; }
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -52,8 +60,10 @@ public final class WebStorageActivity extends Activity {
         return super.onKeyDown(code, event);
     }
     @Override public void onDestroy() {
+        if (lateBridgeDestroy) web.evaluateJavascript("nativeSave.store()", null);
         CookieManager.getInstance().setCookie("https://husk.invalid/", "retained=1; Max-Age=86400; Path=/; Secure");
         getSharedPreferences("web", 0).edit().putInt("destroyed", 1).apply();
+        getSharedPreferences("web", 0).edit().putInt("main_at_destroy", getSharedPreferences("web", 0).getInt("bridge_main_calls", 0)).apply();
         web.destroy();
         if (failDestroy) throw new IllegalStateException("Expected fixture destroy failure");
         super.onDestroy();

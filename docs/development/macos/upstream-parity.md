@@ -1,5 +1,13 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-20：WebView 关闭前保存，build 14
+
+两远端 fetch 后没有新提交，upstream/main 仍是 `2df074b`；main 保持 `cc99757`，无重复合并或冲突。本轮继续平台待办，在 Java 桥仍存活时交付受控保存阶段，再完成 Android 和 WebKit 双侧关闭。原先的“尚缺保存阶段”已落地，剩余范围见下方 Web 存档协议与开放项。
+
+唯一候选 **3.0.0 / build 14** 通过默认 **115/115（110.75 秒）**、**18 Mach-O / 406 Java 资源**包检查，共享 Web host 的 iOS 语法检查也通过。WebView 的 13 项后台回归验证插件与即时 UI 写入、显式异步保存重开、暂停关闭和各类失败；真实应用兼容仍需另验。CUA 单次启动后核对 PID **67505** 与完整 Product 路径，已有绑定只读 AX/截图确认原有 11 个应用。代码推送/CI 状态以 [progress.md](progress.md) 最新记录为准。
+
+本轮再次对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake/资料库/Runner、Store/Play 与图形依赖；没有新引擎/Store/图形增量。AppKit 窗口、固定画布、输入/手柄、默认失焦继续与原有正常关闭检查保留。
+
 ## 2026-10-19：运行时与原生文件选择器，build 13
 
 已核对 `cedb01e..2df074b` 的 **4 个提交 / 29 个路径**，origin 两分支无外来提交。先普通合并到本地 main `cc99757`，再合回 macOS。LoadedApk、AppRunner、ContextImpl 三处冲突按意图解决：Context 与 ActivityThread 共用单一 LoadedApk，保留 component factory、自定义加载器、provider 顺序和 NativeActivity 双侧关闭。真 DEX 验证反射状态的一致性。
@@ -79,7 +87,7 @@ fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 P
 | Unreal | UE4 profile 复用真实 NativeActivity/UE JNI 驱动，配置 Vulkan，解析 manifest 与分包 | 含 libUE4 的 Android ELF fixture 走完整打包路径，回调/输入/保存退出通过；真实 Unreal 游戏未验收 |
 | NativeActivity | 库名/方向/alias、分包、真实 Java Application/ClassLoader/JNI→NDK 桥、触摸/键盘/手柄；同线程失败清理及 Java/原生双侧关闭 | DEX/ELF 和签名分包的生产会话回归通过。Egg 已安装自定义加载器并完成 PairIP JNI_OnLoad，但缺 Play 加密密钥/传输服务，未进入游戏原生入口；不能声称旧 PLT 初始化或真实游戏已通过 |
 | Capacitor / Cordova / Ionic | 独立无 JIT 权限的 WebRunner，复用上游 WebAppRuntime 桥；APK 资源校验/受限提取、原生窗口/IME、返回、暂停定时器/动画/媒体和输入屏蔽 | 两种引擎的真实 WebKit fixture 通过 localStorage/IndexedDB 退出重开、清除后不复现；本地自定义 scheme 的 document.cookie 为空，不宣称 cookie 或 service worker 兼容 |
-| Java 内嵌 WebView | 保留固定画布/透明合成/Java Web 桥；按存档绑定 WebKit UUID，完整卸载文档与回收 IO/桥接 worker，等待 cookie 写入与 WebKit 回调，组合 Android 销毁和 WebKit 托管回执 | 真实 DEX + 打包 NativeRunner 验证 localStorage/IndexedDB/最终 cookie/进程重开、旧 UUID 关联、同包隔离、删除/失败保留；Android 销毁失败、标识改变、卸载时迟到 Java 插件调用均拒绝成功回执。真实应用另验 |
+| Java 内嵌 WebView | 保留固定画布/透明合成和按存档 UUID；主程序请求关闭时先在 Java 桥存活期间交付受控保存事件并等待显式异步保存，再销毁 Android、卸载 WebKit、等待 cookie/网络回调，组合两侧回执 | 真实 DEX + 打包 NativeRunner 验证插件/UI 队列写入、localStorage/IndexedDB/最终 cookie/进程重开、暂停关闭、事件单次交付、旧 UUID/同包隔离及删除；插件异常、脚本/Promise 拒绝、超时、跨来源子 frame 与迟到桥接均拒绝成功回执。真实应用另验 |
 | Minecraft / GameActivity | 既有独立 Runner、固定画布、鼠标修复、存储关闭保留 | 旧的真实样本证据仍有效，但本轮没有启动用户游戏 |
 | Geode | 共用上游版本索引，Geometry Dash 每游戏开关、下载/取消/更新、Geode 4 内嵌资源和 5+ 独立资源；完整缓存可离线启动；原子安装、APK 版本/摘要和缓存 SHA 校验；独立 Cocos Runner 注入 | 离线缓存、Android ELF 构造函数/JNI、同大小更新、输入/暂停/关闭和真实打包会话通过；启用后加载失败会阻止启动，不静默关闭 Geode。真实 Geometry Dash/Geode 模组、实际网络下载和前台开关未验收 |
 | 图形依赖 | 固定 MoltenVK 1.4.2 / SPIRV-Cross，并实际应用上游 zero-init-stride 补丁 | 缓存记录补丁 SHA，打包前拒绝旧缓存，包内附构建记录/补丁；针对随包 MoltenVK 的 workgroup 零初始化 shader 编译回归通过 |
@@ -93,13 +101,15 @@ fork [PR #1](https://github.com/ruabbit/Husk-macOS/pull/1) 已合并；[上游 P
 
 Java 内嵌 WebView 使用 `Saves/<id>/java-web-store.json`，数据归 NativeRunner 的 WebKit bundle 所有。新存档使用独立 UUID；升级前已有 Android `data` 的存档沿用原来的包名 UUID，并记录 `legacyPackage`，避免换标识后失去旧数据。旧包级存储可能被其他资料库共用，因此清除这类存档只解除当前关联并删除 Android 数据，保留旧 WebKit 共享字节；下一次启动分配独立新 UUID。普通独立存档通过 NativeRunner 删除该 UUID，成功才移除存档目录，失败保留目录与标识。测试核对旧哈希的固定 UUID、进程重开与真正删除后的 store 枚举结果。
 
-Java 关闭先等待 Activity/框架 worker/preferences/SQLite，WebView 自身销毁同时开始异步文档卸载：结清待回复对话框/导航/资源请求，停止媒体，通过真实空白导航触发一次 pagehide，释放 WKWebView 的 scheme-handler 引用环，等待网络取消完成及 cookie 写入，再读取 cookie/data records。只有 Android 销毁与 WebKit 两部分都完成，才写带 `web` 子回执的 `storage-closed`；未使用 WebKit 的会话显式写 `unused`。监督器核对启动时、磁盘上及事件中的 UUID。WebKit 部分仍是 `webkit-managed`，不是数据库 fsync 或断电持久性承诺。
+Java 主程序请求关闭时，先保持 AppMain 与 JavaBridge 消息循环可用，取消普通对话框/导航/资源请求，保留已接受的插件请求，停止媒体和旧定时器/动画；再运行受控保存阶段。文档启动时安装的 capture gate 只允许该阶段的 `beforeunload`、`visibilitychange`、`pagehide`、`unload`，后续真实空白导航不重复交付。同步 Java 插件可在此阶段执行；应用通过事件上的 Husk 扩展 `event.waitUntil(promise)` 登记异步保存，宿主用 WebKit `callAsyncJavaScript` 等待它。插件已投递的即时 AppMain 消息排在 Activity 销毁前。每个 WebView 的媒体停止和保存阶段共用 6 秒上限，失败状态保留到最终关闭；没有延长监督器原来的 30 秒停止期限。
 
-真实 JavaScript 插件在运行时可写入 preferences，但销毁后 pagehide 再调用插件仍不支持：WebKit 会压掉卸载期间的 prompt，因此共享 JS 桥在调用前明确报告拒绝，避免丢失保存调用却返回成功。`macos-java-web-late-bridge` 单独确认 Android 已成功销毁，再拒绝组合回执。上游通用 `Thread.interrupt0` 仍为空；本轮只让框架自己的 WebView 线程池采用有界空闲等待，并从 SharedPreferences 串行 writer 内发起 shutdown，等待真实退出，没有宣称任意 guest worker 的中断已实现。
+阶段完成后才停止 Android：等待 Activity、框架 worker、preferences 和 SQLite；WebView 销毁发起真实文档卸载，回收 scheme-handler 引用环，等待网络取消、cookie 写入及 data-record 回调。只有两侧完成，才写含 `web.saveStage=prepared` 的 `storage-closed`；未使用 WebKit 的会话仍显式写 `unused`。监督器继续核对启动、磁盘和事件中的 UUID。WebKit 存储仍为 `webkit-managed`，不是系统数据库 fsync 或断电持久性保证。
+
+这是宿主生成的生命周期事件（`isTrusted=false`），`waitUntil` 是 Husk 扩展；未登记的任意异步任务、依赖真实浏览器 trusted unload 的代码及跨来源 child frame 尚未支持。同源子 frame 递归保存；无法读取的跨来源 frame 明确失败。保存阶段完成后仍调用 Java 插件、Java 插件抛错、脚本/登记的 Promise 拒绝和超时均不能获得成功回执，即使 Android 销毁本身成功。`macos-java-web-late-bridge` 保留这一反例。guest 自行销毁 Activity、真实 HTTP 应用和插件链仍须另验。通用 `Thread.interrupt0`/阻塞唤醒并未因此实现；框架线程池退出与 guest worker 检查继续保留。
 
 ## 后续开放项
 
-1. Java 内嵌 WebView：基础存储/关闭/删除已完成上述 build 8 接入与 fixture 验证。下一步以真实应用验证插件、HTTP 页面和完整保存重开。2026-10-17 复核确认：WebKit 会在真实卸载时压掉 prompt，因此仅将现有 tl_web_close_for_host 提前到 tl_javaapp_stop 之前仍不能支持 pagehide 的同步 Java 桥。需要先设计受控的卸载前保存阶段，保持 AppMain/bridge 消息循环可用，保证页面生命周期只交付一次、停止新导航/普通任务、排空已接收的插件任务，然后销毁 Android、回收 WebKit 并组合回执。现有失败检查不能删除；该实现继续开放。通用 Java Thread.interrupt/等待唤醒语义仍开放，不能取消 guest worker 检查或仅延长超时。macOS 14 实机、网络取消超时和系统 WebKit 异常恢复也尚未实测。
+1. Java 内嵌 WebView：受控卸载前保存阶段已在 2026-10-20 接入，基础存储/组合关闭/删除及真 DEX 插件保存重开已有后台回归。下一步是实际 HTTP 应用/插件的持久化、guest 主动销毁的顺序、跨来源 frame 的受控保存，以及未登记异步任务的明确策略；不能把合成生命周期或 fixture 当作真实应用验收。通用 Java Thread.interrupt/等待唤醒、macOS 14 实机、网络取消超时与 WebKit 进程异常恢复仍开放，保留 worker 检查和失败回执。
 2. Geode：下载、配置、启动注入和存储关闭回归已进入 build 6。下一步使用独立存档验证真实 Geometry Dash、官方 Geode 发布包和模组，从设置开关、版本匹配下载到交互、保存重开；不要把自建 ELF 的通过当作这些外部程序已兼容。共享 GeodeUtils 的剪贴板、选文件/文件夹、openWebview、restartGame 仍继承上游的空实现/拒绝行为，需要实际使用证据后逐项适配。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
 4. Egg：2026-10-18 已完成 Application/自定义 ClassLoader/provider/JNI/NativeActivity 桥、ContextImpl/LoadedApk 反射状态及 Android APK 安装路径映射。真实样本已记录 `Custom ClassLoader attached successfully`、`libpairipcore.so JNI_OnLoad -> 0x10006` 和成功打开 base.apk；最新阻塞为 `Encryption key not found in keystore`、绑定 `com.android.vending.securedatatransfer.IAntiTamperKeyTransferService` 失败。已出现游戏自带 Google Play 错误页，未进入游戏 ANativeActivity_onCreate，原先构造函数/PLT 的最终结果仍未知。最终 probe exit 0 与 Java 错误页正常关闭不能当作游戏通过。本地软件 AES/GCM 的 `setEntry(SecretKeyEntry, KeyProtection)`、用途/有效期/IV 检查和原子持久化已补齐，真实 DEX 跨进程回归通过；硬件包装密钥与真实 Play 下发服务仍缺。下一步核对合法安装的密钥下发及实际 Play Binder 环境，或完整 Play Android 对照环境；不得用假密钥/保护绕过/猜测地址补丁，不在缺少相关修复时重跑。详见 [Egg 启动调查与修复](2026-10-18_reverse-egg-startup-report.md)。

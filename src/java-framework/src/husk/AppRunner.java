@@ -340,7 +340,9 @@ public final class AppRunner {
             int phase = ev[1 + 4 * k], id = ev[2 + 4 * k];
             float x = Float.intBitsToFloat(ev[3 + 4 * k]), y = Float.intBitsToFloat(ev[4 + 4 * k]);
             try {
-                if (phase == 10) { finishHost(); return; }
+                // Save plugins can post UI work before returning to WebKit.
+                // Queue destruction behind those already accepted messages.
+                if (phase == 10) { sHandler.post(() -> finishHost()); return; }
                 if (phase == 5) { back(); continue; }
                 if (phase == 6) { hostPause(id != 0); continue; }
                 if (phase == 7) { InputMethods.deliverPending(); continue; }

@@ -1,5 +1,18 @@
 # 审计进度
 
+## 2026-10-20：WebView 关闭前保存与 build 14
+
+从干净的 `codex/macos-p0=4b1d5b5` 开始，远端地址正确，没有其他合并/构建或本项目游戏/VM。fetch origin/upstream 后均无新增，`upstream/main=2df074b` 已是两条分支的祖先，来源锁一致；`main=cc99757` 保持不变，没有重复合并。本轮推进已记录的 Java 内嵌 WebView 保存阶段。
+
+NativeRunner 现在先在 AppMain/JavaBridge 存活时停止 Web 媒体，保留已接受的插件请求，交付受控保存生命周期并等待显式 `event.waitUntil(promise)`；即时 Java UI 写入先于 Activity 销毁。后续真实卸载抑制重复事件，仍等待 Android worker/preferences/SQLite、WebKit 文档/网络/cookie 与两侧关闭回执。脚本、插件、Promise 错误和超时保留为失败，跨来源 child frame 也明确拒绝，不能凭 Android 已销毁就报保存成功。相应协议与剩余边界见 [upstream-parity.md](upstream-parity.md)。
+
+唯一 `build/macos` 原位更新为 **3.0.0 / build 14**，保留 VM=ON 和缓存。最终 **默认 CTest 115/115（110.75 秒）**、**18 个 arm64 Mach-O / 406 个 Java 资源**包检查通过。新增 8 项 WebView 回归，连同原有 5 项共 **13/13（36.77 秒）**，覆盖真实 DEX/Java 插件与 UI 队列写入、localStorage/IndexedDB 进程重开、单次事件、暂停关闭、插件/Promise/脚本拒绝、6 秒超时、同源与跨来源 frame；迟到桥接的失败检查仍在。完整默认套件同时复验 NativeActivity/Java 生命周期、文件选择器、手柄与其他引擎。共享 Objective-C Web host 使用已安装的 iOS 27 SDK、iOS 15 deployment target 语法检查通过，仅有原先 javaScriptEnabled 弃用警告；不是完整 iOS 构建或真机验收。
+
+本轮先用 CUA 检查空闲主窗口并尝试正常退出；复查时看到相同 Product 路径的新 PID 55410，再确认无 Runner/游戏/VM后自动 SIGTERM，进程退出，未使用 SIGKILL，也未要求用户操作。交付时仅调用一次 CUA getApp 完整路径；该调用超时但实际启动 PID **67505**。确认进程路径后，用已有绑定只读获取 AX/截图成功，主窗口显示原有 **11 个应用**及图标，没有第二次启动。未运行任何用户游戏/Android VM，未修改用户 APK/存档/Android 磁盘、检查 USB 或向上游写入。
+
+主程序 SHA-256 `2b4760ff3f14b6c983c0b7e1d337acb0558e67df1838748368c1c8fdc8cde055`，NativeRunner `5d7bf937614fa10cf2d9ceadc4c2960e2523a37efd3a4288311983fcf32f67cd`，framework DEX `c5a68af371f3d5f22621315243cd9a4b5a44ff7dc6be39e9926b0674e1358268`。证据复用 `build/logs/current-upstream-build.log`、`current-upstream-web-tests.log`（首轮 11 项）、`current-upstream-ctest.log`（最终 115 项）、`current-upstream-bundle.log`、`current-upstream-ios-syntax.log` 与 `build/macos/bundle-verification.json`。
+
+本地构建、默认验证与单次重开已完成，代码待提交/推送及 CI 读回。真实 HTTP 应用/插件、guest 自行销毁、跨来源保存、未登记异步任务和 trusted unload 仍开放；Hole.io 保存重开、Egg Play 密钥、真实 Geode/实体手柄/IME、PS4/VM/P6 没有因本次 fixture 而获得兼容结论。
 
 ## 2026-10-19：4 个上游提交、文件选择器与运行时修复（build 13）
 
