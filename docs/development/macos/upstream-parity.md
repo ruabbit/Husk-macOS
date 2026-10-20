@@ -4,7 +4,7 @@
 
 两远端 fetch 后没有新提交，upstream/main 仍是 `2df074b`；main 保持 `cc99757`，无重复合并或冲突。本轮继续平台待办，在 Java 桥仍存活时交付受控保存阶段，再完成 Android 和 WebKit 双侧关闭。原先的“尚缺保存阶段”已落地，剩余范围见下方 Web 存档协议与开放项。
 
-唯一候选 **3.0.0 / build 14** 通过默认 **115/115（110.75 秒）**、**18 Mach-O / 406 Java 资源**包检查，共享 Web host 的 iOS 语法检查也通过。WebView 的 13 项后台回归验证插件与即时 UI 写入、显式异步保存重开、暂停关闭和各类失败；真实应用兼容仍需另验。CUA 单次启动后核对 PID **67505** 与完整 Product 路径，已有绑定只读 AX/截图确认原有 11 个应用。代码推送/CI 状态以 [progress.md](progress.md) 最新记录为准。
+唯一候选 **3.0.0 / build 14** 通过默认 **115/115（110.75 秒）**、**18 Mach-O / 406 Java 资源**包检查，共享 Web host 的 iOS 语法检查也通过。WebView 的 13 项后台回归验证插件与即时 UI 写入、显式异步保存重开、暂停关闭和各类失败；真实应用兼容仍需另验。CUA 单次启动后核对 PID **67505** 与完整 Product 路径，已有绑定只读 AX/截图确认原有 11 个应用。代码 [ee26f7f](https://github.com/ruabbit/Husk-macOS/commit/ee26f7f0bd49b8bb0380e58a65aee8646d04accf) 已推送并读回，CI [39371120881](https://github.com/ruabbit/Husk-macOS/actions/runs/39371120881) 构建、包检查与 33 项 hosted 核心回归成功；完整交付在 [progress.md](progress.md)。
 
 本轮再次对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake/资料库/Runner、Store/Play 与图形依赖；没有新引擎/Store/图形增量。AppKit 窗口、固定画布、输入/手柄、默认失焦继续与原有正常关闭检查保留。
 

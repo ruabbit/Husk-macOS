@@ -12,7 +12,7 @@ NativeRunner 现在先在 AppMain/JavaBridge 存活时停止 Web 媒体，保留
 
 主程序 SHA-256 `2b4760ff3f14b6c983c0b7e1d337acb0558e67df1838748368c1c8fdc8cde055`，NativeRunner `5d7bf937614fa10cf2d9ceadc4c2960e2523a37efd3a4288311983fcf32f67cd`，framework DEX `c5a68af371f3d5f22621315243cd9a4b5a44ff7dc6be39e9926b0674e1358268`。证据复用 `build/logs/current-upstream-build.log`、`current-upstream-web-tests.log`（首轮 11 项）、`current-upstream-ctest.log`（最终 115 项）、`current-upstream-bundle.log`、`current-upstream-ios-syntax.log` 与 `build/macos/bundle-verification.json`。
 
-本地构建、默认验证与单次重开已完成，代码待提交/推送及 CI 读回。真实 HTTP 应用/插件、guest 自行销毁、跨来源保存、未登记异步任务和 trusted unload 仍开放；Hole.io 保存重开、Egg Play 密钥、真实 Geode/实体手柄/IME、PS4/VM/P6 没有因本次 fixture 而获得兼容结论。
+代码 [ee26f7f](https://github.com/ruabbit/Husk-macOS/commit/ee26f7f0bd49b8bb0380e58a65aee8646d04accf) 已正常推送到 origin/codex/macos-p0，main 仍为 cc99757，两条远端完整 SHA 读回一致。对应 [CI 39371120881](https://github.com/ruabbit/Husk-macOS/actions/runs/39371120881) 已确认 **completed / success**，build-and-core 用时 **3 分 43 秒**；构建、包检查、**33 项 hosted 核心回归（12.66 秒）**与 P0 memory/core 通过，hardware job 按配置 skipped。每日 husk 任务已更新并从配置读回，保留每日 09:00、原聊天和全部权限/保护约束；不再把已交付保存阶段整项列为待办。最后仅补交来源与交付记录，不重复构建或重开候选。真实 HTTP 应用/插件、guest 自行销毁、跨来源保存、未登记异步任务和 trusted unload 仍开放；Hole.io 保存重开、Egg Play 密钥、真实 Geode/实体手柄/IME、PS4/VM/P6 没有因本次 fixture 而获得兼容结论。
 
 ## 2026-10-19：4 个上游提交、文件选择器与运行时修复（build 13）
 
