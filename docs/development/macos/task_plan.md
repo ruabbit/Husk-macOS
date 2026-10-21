@@ -1,5 +1,14 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-21 应用主动关闭前保存
+
+- [x] 干净 f40ae23 起步，地址/分支正确，无其他 Git 操作或本项目构建/游戏/VM；空闲 Product PID 67505，CUA 主窗口显示 11 个应用。
+- [x] 依次 fetch origin/upstream，均无变化；upstream 2df074b、main cc99757、macOS f40ae23，远端无分歧。
+- [x] 为应用最后 Activity 的 finish/finishAffinity 增加宿主保存交接，保留 Activity 切换与无宿主模式、销毁失败/存储回执检查。
+- [x] 真实 DEX + 打包 Runner 回归覆盖 guest finish、重复请求、保存/销毁失败及 Activity 替换；默认 127/127、24 项 WebView 与包检查通过。
+- [x] CUA 正常退出空闲 Husk，唯一 build/macos 原位更新 build 15、单次启动 PID 18451，主窗口 AX/截图确认 11 个应用。
+- [x] 代码 c549924 已推送、远端读回一致，CI 39541085280 success；交付记录/来源锁已更新，每日任务保持 09:00 和原有约束。
+
 ## 当前执行：2026-10-20 WebView 卸载前保存
 
 - [x] 从干净的 4b1d5b5 开始，远端地址正确，无其他合并/构建/游戏/VM；只有空闲 Product build 13 PID 39849。

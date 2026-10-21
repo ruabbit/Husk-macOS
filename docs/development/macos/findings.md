@@ -1,5 +1,18 @@
 # 审计发现
 
+## 2026-10-21 主动 finish 与宿主关闭顺序
+
+- 两远端没有新增，工作区干净，前轮 build 14 与 CI 已交付。存在其他项目 UTM/QEMU 进程，未触碰；本项目只有空闲 Husk。
+- AppRunner.finish 当前先 finishNow（会销毁 Activity/WebView），空栈后才 finishHost；NativeRunner 到 TL_JAVA_STOPPING 才获知 guest 退出，已经错过 WebView 保存阶段。需要在最后 Activity 销毁前交给宿主，保持 AppMain/桥接可用，宿主保存完成后仍通过原 phase 10 完成销毁。
+- 保留 finish(); startActivity(...) 的既有行为：最后 Activity 的判断必须在已排队启动完成后复查；非最后 Activity 关闭不应结束整个 Runner。iOS/无宿主配置继续走原本生命周期；Process.killProcess 不属于正常 finish，仍失败。
+- 新增 opt-in request_finish 回调，由 AppMain 在最后 Activity 销毁前交给 Mac 主线程；旧配置 NULL 仍走 guest 销毁。交接后不再接受新的 Activity 启动/重建，Web 保存插件与已接受 UI 写入仍能排空，后续沿用 phase 10 和原有双侧销毁确认。
+- SessionController 过去只在主程序 stop() 时启动 30 秒退出期限，guest/window 自行停止即使持续 heartbeat 也可能永久等待。现改为收到首个合法 stopping 事件即启动同一期限，后续事件不延期；真实子进程测试 30.36 秒被正常 SIGTERM 回收，无存储成功回执。
+- 首轮针对性 12/13 通过。暂停用例在 paused 状态发送 evaluate，而正式诊断协议只接受 running，故测试超时；不是保存阶段失败。已改为真实 Activity.onPause 发起 finish，保持协议约束。首次编译的测试 Task.sleep 未处理 throws 已修正，未改变产品 API。
+- 暂停、双 Activity finishAffinity 与关闭阶段再次启动的 3 项复核全过。首轮默认 125/127，唯一失败是两个既有 Vulkan compositor；该测试二进制仍为 10-19、共享 Vulkan 源码和依赖 pin 未变。系统日志记录 Metal Internal Error (00000206) 与 5 秒 GPU timeout。隔离使用 CPU semaphore style=3 和默认 style=1（关闭错误隐藏）的诊断均通过，随后不带覆盖环境的原始四项 Vulkan 顺序回归 4/4 通过。未改变图形代码/配置/断言，未终止其他项目进程；只能记录本轮瞬时 GPU 执行失败，不能宣称底层根因已修复。保留首次完整日志与系统日志后重跑默认套件。
+- 只读查询一度假定头文件 husk-tl-javaapp.h，实际为 husk-tl-dvm-javaapp.h，已按 rg 结果修正，没有修改不存在文件。
+
+- 最终原配置默认 127/127（143.77 秒），24 项 WebView（63.07 秒）与包检查通过；CUA 单次启动 build 15/PID 18451，AX/截图确认原有 11 个应用。c549924 已推送并核对远端，CI 39541085280 completed/success，34 项 hosted 核心回归（42.14 秒）、构建/包检查与 P0 memory/core 通过。
+
 ## 2026-10-20 WebView 卸载前保存
 
 - 两远端 fetch 无变化，upstream/main=2df074b，main=cc99757，macOS=4b1d5b5；工作区初始干净，无进行中的 Git 操作或构建，仅空闲 Husk PID 39849。

@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-10-21：上游无变化，guest finish 保存与 build 15
+
+从干净的 `codex/macos-p0=f40ae23` 开始，两远端地址正确，没有其他 Git 操作或本项目构建/游戏/VM。依次 fetch origin/upstream 均无新增，`upstream/main=2df074b` 已是两条分支祖先、来源锁一致，`main=cc99757` 保持不变，没有重复合并或冲突。本轮对照了上游 TLReport.nativeEngine、TLUnityView、project.yml、共享 PlayAPI/登录与固定 ANGLE/MoltenVK 依赖，以及 macOS 的 CMake、能力判断、Runner/输入/暂停/关闭链路；没有新增引擎/Store/图形增量。
+
+最后 Activity 的 `finish()` 和整栈 `finishAffinity()` 现在先交给 NativeRunner 执行既有 Web 保存阶段，再走 phase 10 销毁。AppMain/JavaBridge 继续服务已接受的插件与即时 UI 写入；重复关闭只交接一次。先让已经排队的 Activity 启动完成再复查，保留 `finish(); startActivity(...)`、反向顺序及子 Activity 返回结果。保存开始后拒绝新 Activity 启动/重建。无回调的旧驱动路径保留，`Process.killProcess` 仍是失败。监督器收到首个合法 `stopping` 事件就启动原有 30 秒期限，持续 heartbeat 不延期。
+
+唯一 `build/macos` 原位更新为 **3.0.0 / build 15**，保留 VM=ON 与依赖缓存。最终 **默认 CTest 127/127（143.77 秒）**、**18 个 arm64 Mach-O / 406 个 Java 资源**包检查通过；其中 **24 项 Java WebView 真 DEX 后台回归（63.07 秒）**，新增 11 项覆盖主动关闭/整栈/重复/暂停、插件及 Web 存储重开、保存拒绝/超时/销毁失败、两种替换顺序与子页返回。另有真实子进程验证 30 秒 guest stop 期限，已纳入 hosted CI 核心集合。旧无回调 NativeActivity guest-finish 与打包 Java/NativeActivity 会话也通过。共享 Java C driver 的 iOS 27 SDK / iOS 15 deployment target 语法检查通过，不等于 iOS 构建/真机验收。
+
+首轮针对性 12/13：暂停测试错误地在 paused 状态使用仅供 running 的 evaluate，改为 Activity.onPause 自行 finish 后通过；首次测试编译漏处理 Task.sleep throws 已修正。首轮默认 **125/127（170.01 秒）**，两个既有 Vulkan compositor 因 Metal Internal Error (00000206) 和 GPU timeout 未出合成帧。该二进制仍为 10-19，图形源码/依赖 pin 本轮未变；隔离诊断后，原配置四项 Vulkan **4/4（0.52 秒）**及完整默认复跑通过。没有修改图形实现、默认环境或测试断言，也没有终止其他项目 UTM。底层瞬时 GPU 错误的根因仍未确定，首次证据保留，不写成“已修复 GPU”。
+
+CUA 重新核对空闲 build 14/PID 67505 的主窗口后正常 ⌘Q，进程退出，不需强退。完成验证后按完整 Product 路径只启动一次 **PID 18451**，AX/截图确认原有 **11 个应用**及图标。没有启动用户游戏/Android VM、修改用户 APK/存档/Android 磁盘、检查 USB 或向上游写入。App SHA-256 `b5ef3b893809b617db08c5faf41d71ffcfc6157d6c616f93131ca898e0a1ef2f`，NativeRunner `fc6339195003872a65f0d57cc9b1fd666e30e8f9a85375922946d77b747f4488`，framework DEX `e18716a0f8f890aa78adbcc000fd90d1e9636580c045b8c9ea32c17b3924ec79`。
+
+代码 [c549924](https://github.com/ruabbit/Husk-macOS/commit/c54992447ec80e59de9fd995b3258c2a476e888d) 已正常推送自己的 macOS 分支；main 保持 cc99757。两条远端完整 SHA 已读回一致；[CI 39541085280](https://github.com/ruabbit/Husk-macOS/actions/runs/39541085280) 已确认 **completed / success**，源码 head 正是 c549924；build-and-core 用时 **3 分 38 秒**，构建、包检查、**34 项 hosted 核心回归（42.14 秒）**与 P0 memory/core 均通过，hardware job 按配置 skipped。每日 husk 提示已更新并读回，保持每天 09:00、原聊天与全部保护约束，后续直接读取最新交付记录。最后仅补交文档与来源锁，不重复构建或重开候选。证据复用 `current-upstream-build.log`、`current-upstream-guest-tests.log` / `guest-recheck.log`、`current-upstream-ctest.log` / `ctest-first.log`、`current-upstream-vulkan-*`、`current-upstream-bundle.log`、`current-upstream-ios-syntax.log`、`current-upstream-validation.json` 和 `build/macos/bundle-verification.json`。
+
+最后 Activity/整栈主动 finish 已落地，不再整项列为未实现。仍开放：真实 HTTP 应用/插件、会话继续时直接 WebView.destroy()/页面替换/recreate 的逐视图保存、跨来源 frame、未登记异步任务与 trusted unload。真实游戏保存重开、Hole.io killProcess、Egg Play 密钥、真实 Geode/实体手柄/IME、Play/VM/P6 均未因 fixture 通过获得兼容结论。
+
 ## 2026-10-20：WebView 关闭前保存与 build 14
 
 从干净的 `codex/macos-p0=4b1d5b5` 开始，远端地址正确，没有其他合并/构建或本项目游戏/VM。fetch origin/upstream 后均无新增，`upstream/main=2df074b` 已是两条分支的祖先，来源锁一致；`main=cc99757` 保持不变，没有重复合并。本轮推进已记录的 Java 内嵌 WebView 保存阶段。
