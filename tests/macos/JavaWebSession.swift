@@ -65,14 +65,17 @@ import SharedLibrary
                 }
                 try check(ready, "real Java WebView loaded APK assets")
             }
-            func stop(success: Bool = true) async throws {
-                session.stop(); try await session.wait(until: { !session.active }, timeout: 35)
+            func waitForStop(success: Bool = true) async throws {
+                try await session.wait(until: { !session.active }, timeout: 35)
                 let receipts = session.events.filter { $0["event"] as? String == "storage-closed" }
                 if success {
                     try check(session.state == "exited" && session.error == nil, session.error ?? "Android destroyed, WebKit detached, child reaped")
                     let web = receipts.first?["web"] as? [String: Any]
                     try check(receipts.count == 1 && web?["lifecycle"] as? String == "detached" && web?["storage"] as? String == "webkit-managed" && web?["saveStage"] as? String == "prepared", "one composite receipt retains native, save-stage and WebKit ownership")
                 } else { try check(session.state == "failed" && session.error != nil, "incomplete or mismatched shutdown rejected") }
+            }
+            func stop(success: Bool = true) async throws {
+                session.stop(); try await waitForStop(success: success)
             }
             if scenario == "legacy" {
                 _ = try await repository.prepare(imported.id)
@@ -81,7 +84,56 @@ import SharedLibrary
             try await start(repository, imported, paths)
             let identity = try WebStorage.readJavaStore(in: save)
             _ = try await javascriptAsync("return await persist('retained');")
-            if scenario == "save-bridge" || scenario == "save-paused" {
+            if scenario.hasPrefix("guest-") {
+                if scenario == "guest-replace-first" || scenario == "guest-replace-last" {
+                    _ = try await evaluate("nativeSave.replace(\(scenario == "guest-replace-first" ? "true" : "false"));true")
+                    var replaced = false
+                    for _ in 0..<120 {
+                        if try await evaluate("window.fixtureReady===true && nativeSave.generation()===1", optional: true) as? Bool == true { replaced = true; break }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    try check(replaced && session.state == "running", "queued replacement Activity survives finishing the old Activity")
+                    try check(!session.events.contains { $0["state"] as? String == "stopping" }, "Activity replacement never requests whole-session stop")
+                } else if scenario == "guest-child" {
+                    _ = try await evaluate("nativeSave.child();true")
+                    try await session.wait(until: { preferences(save).contains("b child_destroyed true") || !session.active }, timeout: 10)
+                    try check(session.state == "running" && preferences(save).contains("i child_result 7"), "child finish delivers result and preserves the parent session")
+                    try check(try await evaluate("nativeSave.generation()===0") as? Bool == true, "parent WebView survives child finish")
+                }
+                let failure = ["guest-rejected", "guest-timeout", "guest-destroy-failed"].contains(scenario)
+                let handler = scenario == "guest-rejected" ? "e.waitUntil(Promise.reject(new Error('Guest save failure')));" : scenario == "guest-timeout" ? "e.waitUntil(new Promise(()=>{}));" : "nativeSave.store();e.waitUntil(new Promise(resolve=>setTimeout(resolve,20)).then(()=>persist('from-guest-finish')).then(()=>nativeSave.store()));"
+                _ = try await evaluate("window.addEventListener('pagehide',e=>{\(handler)});true")
+                if scenario == "guest-duplicate" {
+                    _ = try await evaluate("window.addEventListener('pagehide',()=>nativeSave.replace(false));true")
+                }
+                if scenario == "guest-paused" {
+                    _ = try await evaluate("nativeSave.closeOnPause();true")
+                    session.togglePause()
+                } else if scenario == "guest-affinity-stack" {
+                    _ = try await evaluate("nativeSave.affinityChild();true")
+                } else {
+                    let mode = scenario == "guest-affinity" ? "affinity" : scenario == "guest-duplicate" ? "duplicate" : scenario == "guest-destroy-failed" ? "destroy-failed" : "normal"
+                    _ = try await evaluate("nativeSave.close('\(mode)');true")
+                }
+                // The guest alone triggers this shutdown. Do not send host stop.
+                try await waitForStop(success: !failure)
+                if scenario == "guest-paused" { try check(preferences(save).contains("b finished_while_paused true"), "Activity onPause initiated the guest finish") }
+                if scenario == "guest-affinity-stack" { try check(preferences(save).contains("b child_destroyed true"), "top Activity affinity closes both child and saved parent") }
+                try check(session.events.filter { $0["event"] as? String == "state" && $0["state"] as? String == "stopping" && $0["reason"] as? String == "guest-quit" }.count == 1, "one guest-initiated stop handoff")
+                if failure {
+                    try check(!session.events.contains { $0["event"] as? String == "storage-closed" }, "guest save/destroy failure never acknowledges storage")
+                } else {
+                    try check(preferences(save).contains("i bridge_calls 2") && preferences(save).contains("i main_at_destroy 2"), "guest save plugins and queued UI writes finish before Activity destruction")
+                    try await start(repository, imported, paths)
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    let previous = try await evaluate("nativeSave.previous()") as? Int
+                    try check(restored["local"] as? String == "from-guest-finish" && restored["indexed"] as? String == "from-guest-finish" && previous == 2, "guest-initiated save persists across a real process reopen")
+                    if !scenario.hasPrefix("guest-replace") {
+                        try check(try await evaluate("localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('unloadCount')==='1'") as? Bool == true, "guest close delivers lifecycle once")
+                    }
+                    try await stop()
+                }
+            } else if scenario == "save-bridge" || scenario == "save-paused" {
                 try check(try await evaluate("typeof nativeSave.store==='function'") as? Bool == true, "real JavaScript interface is installed")
                 _ = try await evaluate("window.addEventListener('pagehide',e=>{nativeSave.store();e.waitUntil(new Promise(resolve=>setTimeout(resolve,20)).then(()=>persist('from-save-stage')).then(()=>nativeSave.store()));});true")
                 if scenario == "save-paused" {

@@ -37,6 +37,10 @@ typedef struct tl_javaapp_config {
     void (*pick_documents)(const char *mime_types, int multiple);
     int insets[4];                   /* left, top, right, bottom: the screen's notch and home indicator, in pixels */
     bool night_mode;                 /* the phone is in dark mode: the app's configuration says UI_MODE_NIGHT_YES */
+    /* Optional last-Activity finish handoff, called on AppMain before destroy.
+       Return promptly; prepare host-owned storage, then call tl_javaapp_stop
+       from a lifecycle worker. NULL retains guest-driven teardown. */
+    void (*request_finish)(void);
 } tl_javaapp_config;
 
 bool tl_javaapp_manifest(const char *apk, char *pkg, size_t pn, char *activity, size_t an, char *application, size_t apn);

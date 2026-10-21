@@ -16,6 +16,7 @@ public final class WebStorageActivity extends Activity {
     private WebView web;
     private boolean failDestroy;
     private volatile boolean lateBridgeDestroy;
+    private volatile boolean finishOnPause;
     public final class SaveBridge {
         private int calls;
         @JavascriptInterface public void store() {
@@ -27,6 +28,57 @@ public final class WebStorageActivity extends Activity {
         @JavascriptInterface public int previous() { return getSharedPreferences("web", 0).getInt("bridge_calls", 0); }
         @JavascriptInterface public void fail() { throw new IllegalStateException("Expected fixture save failure"); }
         @JavascriptInterface public void armLateDestroy() { lateBridgeDestroy = true; }
+        @JavascriptInterface public int generation() { return getIntent().getIntExtra("generation", 0); }
+        @JavascriptInterface public void closeOnPause() { finishOnPause = true; }
+        @JavascriptInterface public void close(String mode) {
+            // Let the JavaScript call return before the Activity starts closing.
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                if ("destroy-failed".equals(mode)) failDestroy = true;
+                if ("affinity".equals(mode)) { finishAffinity(); finishAffinity(); }
+                else {
+                    finish();
+                    if ("duplicate".equals(mode)) { finish(); finishAffinity(); finishAffinity(); }
+                }
+            }, 100);
+        }
+        @JavascriptInterface public void replace(boolean finishFirst) {
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                android.content.Intent next = new android.content.Intent(WebStorageActivity.this, WebStorageActivity.class);
+                next.putExtra("generation", 1);
+                if (finishFirst) finish();
+                startActivity(next);
+                if (!finishFirst) finish();
+            });
+        }
+        @JavascriptInterface public void child() {
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
+                startActivityForResult(new android.content.Intent(WebStorageActivity.this, Child.class), 42));
+        }
+        @JavascriptInterface public void affinityChild() {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() ->
+                startActivity(new android.content.Intent(WebStorageActivity.this, Child.class).putExtra("affinity", true)), 100);
+        }
+    }
+    public static final class Child extends Activity {
+        @Override public void onCreate(Bundle state) {
+            super.onCreate(state);
+            if (getIntent().getBooleanExtra("affinity", false)) finishAffinity();
+            else { setResult(7); finish(); }
+        }
+        @Override public void onDestroy() {
+            getSharedPreferences("web", 0).edit().putBoolean("child_destroyed", true).apply();
+            super.onDestroy();
+        }
+    }
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        if (request == 42) getSharedPreferences("web", 0).edit().putInt("child_result", result).apply();
+    }
+    @Override public void onPause() {
+        super.onPause();
+        if (finishOnPause) {
+            getSharedPreferences("web", 0).edit().putBoolean("finished_while_paused", true).apply();
+            finish();
+        }
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);

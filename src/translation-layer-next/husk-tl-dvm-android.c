@@ -287,6 +287,13 @@ NAT(N_exit) {
     tl_log_line("javaapp: process exit without lifecycle acknowledgement");
     atomic_store(&A.state, TL_JAVA_FAILED); atomic_store(&A.ended, true); return true;
 }
+NAT(N_requestHostFinish) {
+    (void)self; (void)a;
+    if (!pthread_equal(pthread_self(), A.app_owner)) return false;
+    *ret = I(A.cfg.request_finish != NULL);
+    if (A.cfg.request_finish) A.cfg.request_finish();
+    return true;
+}
 NAT(N_lifecycle) {
     (void)self; (void)ret;
     if (!pthread_equal(pthread_self(), A.app_owner)) return false;
@@ -556,6 +563,7 @@ static const struct { const char *name, *sig; dvm_native_fn fn; } k_native[] = {
     { "vibrate", "(J)V", N_vibrate },
     { "openUrl", "(Ljava/lang/String;)V", N_openUrl },
     { "exit", "()V", N_exit },
+    { "requestHostFinish", "()Z", N_requestHostFinish },
     { "lifecycle", "(I)V", N_lifecycle },
     { "uptimeNanos", "()J", N_uptimeNanos },
     { "readApkFile", "(ILjava/lang/String;)[B", N_readApkFile },

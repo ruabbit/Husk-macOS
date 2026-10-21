@@ -38,6 +38,7 @@ strings = ['manifest','package','org.husk.lifecycle','application','activity','n
 if web:
     strings[2] = 'org.husk.webstorage'
     strings[6] = 'org.husk.webstorage.WebStorageActivity'
+    strings.append('org.husk.webstorage.WebStorageActivity$Child')
 if keystore:
     strings[2] = 'org.husk.keystore'
     strings[6] = 'org.husk.keystore.KeyStoreActivity'
@@ -56,7 +57,10 @@ def begin(name, attrs=()):
 def end(name): return struct.pack('<HHIIIII',0x103,16,24,1,0xffffffff,0xffffffff,strings.index(name))
 body=pool+begin('manifest',[('package',3,2)])+begin('uses-feature',[('glEsVersion',0x11,0x20000)])+end('uses-feature')
 body+=begin('application')+begin('activity',[('name',3,6)])+begin('intent-filter')+begin('action',[('name',3,9)])+end('action')
-body+=begin('category',[('name',3,11)])+end('category')+end('intent-filter')+end('activity')+end('application')+end('manifest')
+body+=begin('category',[('name',3,11)])+end('category')+end('intent-filter')+end('activity')
+if web:
+    body+=begin('activity',[('name',3,len(strings)-1)])+end('activity')
+body+=end('application')+end('manifest')
 manifest=struct.pack('<HHI',3,8,len(body)+8)+body
 with zipfile.ZipFile(output/('WebStorage.apk' if web else 'KeyStore.apk' if keystore else 'Lifecycle.apk'),'w') as archive:
     archive.writestr('AndroidManifest.xml',manifest)

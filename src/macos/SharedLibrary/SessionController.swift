@@ -224,6 +224,9 @@ final class PipeReader: @unchecked Sendable {
                 checkpointReceived = true
             }
             if phase == "failed" { error = event["reason"] as? String ?? "游戏启动失败。" }
+            // A guest/window-initiated close needs the same bounded deadline as
+            // the library's Stop button. Heartbeats must not extend it.
+            if phase == "stopping" { startStopDeadline() }
             if phase == "exited" || phase == "failed" { terminalEvent = phase }
             else { state = phase }
         }

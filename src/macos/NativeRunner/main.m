@@ -195,6 +195,11 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @end
 
 static __weak Runner *javaHost;
+static void javaRequestFinish(void) {
+    // AppMain stays live for WebView save plugins until the lifecycle worker
+    // requests phase 10. Never join AppMain from its own callback.
+    dispatch_async(dispatch_get_main_queue(), ^{ [javaHost stop:@"guest-quit"]; });
+}
 static void javaKeyboard(int show,int inputType,int imeOptions) {
     (void)inputType;(void)imeOptions;
     dispatch_async(dispatch_get_main_queue(),^{javaHost.textInput.textInputActive=show!=0;});
@@ -778,7 +783,7 @@ static int androidKey(unsigned code)
                         .vulkan_library=[frameworks stringByAppendingPathComponent:@"MoltenVK.framework/MoltenVK"].fileSystemRepresentation,
                         .frame_dir=configuration.frame_dir,.frame_every=configuration.frame_every,.framework_res=fw.fileSystemRepresentation,
                         .show_keyboard=javaKeyboard,.set_clipboard=javaSetClipboard,.get_clipboard=javaGetClipboard,
-                        .pick_documents=javaPickDocuments};
+                        .pick_documents=javaPickDocuments,.request_finish=javaRequestFinish};
                     ok=mac_java_start(root,&javaConfiguration);
                 }else if(nativeactivity){
                     tl_ga_config nativeConfiguration={.apk_path=configuration.apk_path,.data_dir=configuration.data_dir,

@@ -26,6 +26,7 @@ public final class AppRunner {
     private static long downTime;
     private static boolean sPausedByHost;
     private static boolean sEnding;
+    private static boolean sHostFinishRequested;
 
     private static ClassLoader sLoader;
     /** The app's class loader, as Android gives every app: a PathClassLoader over its APK and splits. Its classes say they come from
@@ -208,6 +209,7 @@ public final class AppRunner {
     }
     /** Context.startActivity: an activity of the app's own, or something the host can open (a web page, mail, the store). */
     public static void startActivity(Context from, Intent i, int request, Bundle opts) {
+        if (sEnding || sHostFinishRequested) return;
         Manifest.Component c = Manifest.resolve(i);
         android.util.Log.d("Husk", "startActivity " + i + (c != null ? " -> " + c.name : " (not an activity of this app)"));
         if (c != null) {
@@ -215,6 +217,7 @@ public final class AppRunner {
             final Intent intent = new Intent(i);
             if (intent.getComponent() == null) intent.setComponent(new ComponentName(Native.packageName(), c.name));
             sHandler.post(() -> {
+                if (sEnding || sHostFinishRequested) return;
                 try {
                     if ((intent.getFlags() & Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0) {
                         for (int k = sStack.size() - 1; k >= 0; k--) if (startedAs(sStack.get(k)).equals(intent.getComponent().getClassName())) {
@@ -256,7 +259,7 @@ public final class AppRunner {
         if (Documents.handles(i)) {
             if (sEnding) return;
             final Activity caller = from instanceof Activity ? (Activity) from : top();
-            sHandler.post(() -> Documents.pick(caller, i, request));
+            sHandler.post(() -> { if (!sEnding && !sHostFinishRequested) Documents.pick(caller, i, request); });
             return;
         }
         if ("android.intent.action.CHOOSER".equals(action)) { Intent inner = i.getParcelableExtra("android.intent.extra.INTENT"); if (inner != null) startActivity(from, inner, request, opts); return; }
@@ -273,7 +276,28 @@ public final class AppRunner {
         throw new ActivityNotFoundException("No Activity found to handle " + i);
     }
     /** Activity.finish: the one below comes back (with the result when it asked for one). */
-    public static void finish(Activity a) { sHandler.post(() -> finishNow(a, true)); }
+    public static void finish(Activity a) { sHandler.post(() -> finishRequested(a, false, true)); }
+    private static boolean handOffFinish() {
+        if (!Native.requestHostFinish()) return false;
+        sHostFinishRequested = true;
+        return true;
+    }
+    private static void finishRequested(Activity a, boolean affinity, boolean deferLast) {
+        if (sEnding || sHostFinishRequested) return;
+        int idx = sStack.indexOf(a);
+        if (idx < 0) return;
+        boolean last = affinity ? idx == sStack.size() - 1 : sStack.size() == 1;
+        // Let launches already queued by finish(); startActivity(...) run first.
+        // Recheck the stack before committing the whole session to host stop.
+        if (last && deferLast) {
+            sHandler.post(() -> finishRequested(a, affinity, false));
+            return;
+        }
+        if (last && handOffFinish()) return;
+        if (affinity) {
+            for (int k = idx; k >= 0; k--) finishNow(sStack.get(k), sStack.size() - 1 == k);
+        } else finishNow(a, true);
+    }
     private static void finishNow(Activity a, boolean resumeBelow) {
         android.util.Log.d("Husk", "finish " + a.getClass().getName());
         int idx = sStack.indexOf(a);
@@ -296,7 +320,10 @@ public final class AppRunner {
         // the app ends with its last activity, unless one it started just before (finish(); startActivity(...)) is still to come
         if (sStack.isEmpty()) sHandler.post(() -> { if (sStack.isEmpty()) finishHost(); });
     }
-    public static void finishAll() { sHandler.post(() -> { while (!sStack.isEmpty()) finishNow(top(), false); }); }
+    public static void finishAll() { sHandler.post(() -> {
+        if (sEnding || sHostFinishRequested || handOffFinish()) return;
+        finishHost();
+    }); }
     /** On the app main thread. No receipt if any callback or pending write fails. */
     private static void finishHost() {
         if (sEnding) return;
@@ -312,14 +339,11 @@ public final class AppRunner {
     }
     /** Activity.finishAffinity(): the activity and those under it in the task go; activities it started, above it, stay. */
     public static void finishAffinity(Activity a) {
-        sHandler.post(() -> {
-            int i = sStack.indexOf(a);
-            if (i < 0) return;
-            for (int k = i; k >= 0; k--) if (k < sStack.size()) finishNow(sStack.get(k), sStack.size() - 1 == k);
-        });
+        sHandler.post(() -> finishRequested(a, true, true));
     }
     public static void recreate(Activity a) {
         sHandler.post(() -> {
+            if (sEnding || sHostFinishRequested) return;
             int idx = sStack.indexOf(a);
             if (idx < 0) return;
             Bundle state = new Bundle();

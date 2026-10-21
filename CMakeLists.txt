@@ -65,6 +65,8 @@ add_executable(MacSessionDiagnosticsTests tests/macos/SessionDiagnostics.swift)
 target_compile_options(MacSessionDiagnosticsTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacSessionDiagnosticsTests PRIVATE SharedLibrary)
 add_test(NAME macos-session-diagnostics COMMAND MacSessionDiagnosticsTests)
+add_test(NAME macos-session-guest-stop COMMAND MacSessionDiagnosticsTests --guest-stop)
+set_tests_properties(macos-session-guest-stop PROPERTIES TIMEOUT 45)
 set_tests_properties(macos-apk-icons macos-session-diagnostics PROPERTIES TIMEOUT 30)
 
 add_library(GameActivityRuntime STATIC
@@ -438,7 +440,8 @@ add_executable(MacJavaWebSessionTests tests/macos/JavaWebSession.swift)
 target_compile_options(MacJavaWebSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacJavaWebSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacJavaWebSessionTests PackageMac JavaWebFixture)
-foreach(case persistence legacy destroy-failed identity late-bridge save-bridge save-paused save-rejected save-promise-rejected save-script-failed save-timeout child-save cross-origin-save)
+foreach(case persistence legacy destroy-failed identity late-bridge save-bridge save-paused save-rejected save-promise-rejected save-script-failed save-timeout child-save cross-origin-save
+    guest-finish guest-affinity guest-affinity-stack guest-duplicate guest-paused guest-rejected guest-timeout guest-destroy-failed guest-replace-first guest-replace-last guest-child)
     add_test(NAME macos-java-web-${case} COMMAND MacJavaWebSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk" "${CMAKE_BINARY_DIR}/TestResults" ${case})
     set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)
 endforeach()

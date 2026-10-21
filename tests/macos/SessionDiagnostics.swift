@@ -9,6 +9,17 @@ import Darwin
         if args.contains("--session") {
             func argument(_ key: String) -> String { args[args.firstIndex(of: key)! + 1] }
             let title = argument("--title")
+            if title == "guest-stop" {
+                // Healthy heartbeats must not hide a guest-initiated teardown
+                // that never returns its storage receipt. Normal SIGTERM exit.
+                for sequence in 1...400 {
+                    let event: [String: Any] = ["protocol": 1, "session": argument("--session"),
+                        "seq": sequence, "pid": getpid(), "state": "stopping", "event": "heartbeat"]
+                    try! FileHandle.standardOutput.write(contentsOf: JSONSerialization.data(withJSONObject: event) + Data([10]))
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                exit(24)
+            }
             try! FileHandle.standardError.write(contentsOf: Data("INITIAL DIAGNOSTIC\n".utf8))
             if title == "flood" {
                 let chunk = Data(repeating: 65, count: 65536)
@@ -28,18 +39,27 @@ import Darwin
         }
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            for title in ["flood", "short"] {
+            for title in args.contains("--guest-stop") ? ["guest-stop"] : ["flood", "short"] {
                 let object: [String: Any] = ["id": String(repeating: "a", count: 64), "title": title, "importedAt": 0,
                     "sourceName": "test.apk", "apkNames": ["test.apk"], "digest": "test", "engine": "NativeActivity",
                     "abis": ["arm64-v8a"], "settings": ["muted": true]]
                 let game = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: object))
                 try session.start(executable: URL(fileURLWithPath: args[0]), game: game, apk: root.appendingPathComponent("test.apk"),
                                   checkpoint: root.appendingPathComponent("checkpoint.json"), logs: root, headless: true)
-                try await session.wait(until: { !session.active }, timeout: 10)
+                let started = Date()
+                try await session.wait(until: { !session.active }, timeout: title == "guest-stop" ? 36 : 10)
                 let log = root.appendingPathComponent(session.sessionID!)
                 let tail = try Data(contentsOf: log.appendingPathComponent("stderr.log"))
                 let first = try String(contentsOf: log.appendingPathComponent("stderr.first.log"), encoding: .utf8)
                 let status = try JSONSerialization.jsonObject(with: Data(contentsOf: log.appendingPathComponent("supervisor.json"))) as! [String: Any]
+                if title == "guest-stop" {
+                    try check(session.state == "failed" && status["terminationReason"] as? String == "signal" &&
+                              status["storageClosed"] as? Bool == false && session.error?.contains("未及时保存退出") == true,
+                              "guest stop without a receipt is bounded and fails closed")
+                    try check(session.events.count > 100 && (29...35).contains(Date().timeIntervalSince(started)),
+                              "repeated stopping heartbeats do not restart the 30-second deadline")
+                    continue
+                }
                 try check(String(decoding: tail, as: UTF8.self).contains("FINAL FAILURE EVIDENCE") && first.hasPrefix("INITIAL DIAGNOSTIC"), "\(title)-preserves-first-and-final-diagnostics")
                 try check(status["exitStatus"] as? Int == 23 && status["terminationReason"] as? String == "exit" &&
                           status["phase"] as? String == "finished" && status["storageClosed"] as? Bool == false &&

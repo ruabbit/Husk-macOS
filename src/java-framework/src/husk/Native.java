@@ -43,6 +43,8 @@ public final class Native {
     public static native void vibrate(long ms);
     public static native void openUrl(String url);
     public static native void exit();
+    /** AppMain only: true if the host will prepare storage and request teardown. */
+    public static native boolean requestHostFinish();
     /** AppRunner only: callback completion on the owning app thread. */
     public static native void lifecycle(int state);
     public static native long uptimeNanos();
