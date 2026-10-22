@@ -12,7 +12,7 @@
 
 CUA 先核对空闲 build 15/PID 18451 的主窗口并正常退出，OS 确认进程消失，无需强退。完整验证后仅启动一次当前 Product，PID **52520**；AX/截图确认首页、原有 **11 个应用**及可见图标。App SHA-256 `b067f8f2ef4bd502bd7c680615d251f2ac17598ebf5226193be97dca0dbf32ec`，NativeRunner `be8f521f82ba4a96ac7063cafa66c3fdc98bd593681f3c67d7459acd52262656`，framework DEX `fd3b65fb0ea00e8feba909a4c91b15d8336f6d65201ec0e3ec5e45c191e4ecc6`。没有启动用户游戏/Android VM、修改用户 APK/存档/Android 磁盘、检查 USB 或向上游写入；其他项目 UTM/构建未触碰。
 
-本地验证与候选更新已完成，正在提交/推送 fork 并等待本批 CI，最终 SHA/CI 将补在本节。继续开放：真实 HTTP 应用/第三方插件、同 WebView 的导航/页面替换、Activity 替换/recreate 销毁前自动保存、加载中文档、跨来源 frame、未登记异步任务及 trusted unload。真实游戏保存重开、Hole.io killProcess、Egg Play 密钥、Geode/实体手柄/IME、Play/VM/P6 均没有因 fixture 通过获得兼容结论。
+代码 [54910cc](https://github.com/ruabbit/Husk-macOS/commit/54910cce15f12f4a4def176010c7a04a1686f2d8) 已正常推送自己的 macOS 分支；main 保持 cc99757，两条远端完整 SHA 已读回一致。本批 [CI 39705343544](https://github.com/ruabbit/Husk-macOS/actions/runs/39705343544) 已确认 **completed / success**，源码 head 为 54910cc，build-and-core 用时 **3 分 46 秒**；构建、包检查、**34 项 hosted 核心回归（43.44 秒）**与 P0 memory/core 通过，hardware job 按配置 skipped。每日提示更新并精确读回，保持每天 09:00、原聊天、空闲自动退出及全部边界。最后仅补交文档与来源锁，不重复构建或启动候选。继续开放：真实 HTTP 应用/第三方插件、同 WebView 的导航/页面替换、Activity 替换/recreate 销毁前自动保存、加载中文档、跨来源 frame、未登记异步任务及 trusted unload。真实游戏保存重开、Hole.io killProcess、Egg Play 密钥、Geode/实体手柄/IME、Play/VM/P6 均没有因 fixture 通过获得兼容结论。
 
 ## 2026-10-21：上游无变化，guest finish 保存与 build 15
 

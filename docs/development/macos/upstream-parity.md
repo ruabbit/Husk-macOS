@@ -6,7 +6,7 @@
 
 会话内直接 WebView.destroy 现在保留原 Java 对象和插件，先执行受控保存，再经过 JavaBridge 与 AppMain 排空回执后卸载 WebKit。替代视图可继续运行；整场停止会等待正在回收的视图。重复销毁不重复保存，失败/超时保持为最终 storage-closed 的否决条件。AndroidX WebMessageListener 在 AppMain 实际投递后回执，ReplyProxy 可完成保存回复；listener 异常不会静默成功。空白卸载文档不再重新注入应用启动脚本。
 
-唯一 build/macos 已原位更新 **3.0.0 / build 16**：默认 **137/137（190.34 秒）**、**34 项 Java WebView（97.65 秒）**、**18 Mach-O / 406 Java 资源**包检查通过。CUA 单次启动当前 Product/PID **52520**，AX/截图确认原有 11 个应用与可见图标；提交/CI 收尾见 [progress.md](progress.md)。新增 10 项真实 DEX 回归覆盖 direct destroy、无替代视图、重复/暂停、失败/超时、整场停止交叠与 AndroidX listener/ReplyProxy。构建和 fixture 不代表真实游戏或第三方插件验收。
+唯一 build/macos 已原位更新 **3.0.0 / build 16**：默认 **137/137（190.34 秒）**、**34 项 Java WebView（97.65 秒）**、**18 Mach-O / 406 Java 资源**包检查通过。CUA 单次启动当前 Product/PID **52520**，AX/截图确认原有 11 个应用与可见图标；代码 [54910cc](https://github.com/ruabbit/Husk-macOS/commit/54910cce15f12f4a4def176010c7a04a1686f2d8) 已推送并读回，CI [39705343544](https://github.com/ruabbit/Husk-macOS/actions/runs/39705343544) 已 completed/success，构建/包检查、34 项 hosted 核心回归及 P0 memory/core 通过。完整交付见 [progress.md](progress.md)。新增 10 项真实 DEX 回归覆盖 direct destroy、无替代视图、重复/暂停、失败/超时、整场停止交叠与 AndroidX listener/ReplyProxy。构建和 fixture 不代表真实游戏或第三方插件验收。
 
 ## 2026-10-21：应用主动关闭保存，build 15
 

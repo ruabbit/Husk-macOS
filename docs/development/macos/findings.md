@@ -2,6 +2,8 @@
 
 ## 2026-10-22 单个 WebView 销毁
 
+- 最终默认 137/137（190.34 秒），其中 34 项 WebView（97.65 秒）；CUA 单次启动 build 16/PID 52520，AX/截图确认 11 个应用。54910cc 已推送并读回远端，CI 39705343544 completed/success，构建/包检查、34 项 hosted 核心回归（43.44 秒）和 P0 memory/core 通过。每日任务已更新，精确 prompt/时间/线程读回一致；最初断言误用了旧句式“禁止在没有相关修复时重复启动”，实际原文“没有相关修复时不重复启动这些失败样本”完整保留，未改变规则。
+
 - 修正空白页插件重启后，listener 成功/失败、无替代视图和既有 late-bridge 4/4（12.25 秒）。build 16 的包检查为 18 arm64 Mach-O、406 Java 资源。共享 Web host 在 iOS 27 SDK / iOS 15 deployment target 语法检查通过，仅有既有 javaScriptEnabled 弃用警告；不代表 iOS 完整构建或真机验收。
 
 - AndroidX 回归首轮 8/9，实际 listener 与 ReplyProxy/存储已执行，但关闭空白文档再次注入插件启动脚本，触发迟到 bridge 检查。现仅在保存完成、即将加载 teardown 空白页时移除未来 userScripts；原文档已有的生命周期 gate 保留，未关闭迟到调用检查。首次日志保留为 current-upstream-view-final.log。

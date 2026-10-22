@@ -7,7 +7,8 @@
 - [x] 补 direct WebView.destroy 的独立保存、Java bridge/UI 排空与最终关闭协调；保留逐 Activity/导航及跨来源开放项。
 - [x] 真 DEX 后台验证保存重开、重复销毁、其他视图继续、保存拒绝/超时、host-stop 交叠及 AndroidX listener；默认 137/137（190.34 秒）、34 项 WebView 与包检查通过。
 - [x] 原位更新唯一 build/macos/build 16，CUA 单次启动 PID 52520，主窗口 AX/截图确认 11 个应用。
-- [ ] 文档、来源锁、fork 提交推送、远端与 CI 读回。
+- [x] 代码 54910cc 已正常推送、两条远端 SHA 读回一致；每日提示更新并精确读回，保持原聊天/每天 09:00/空闲自动退出及全部边界。
+- [x] CI 39705343544 completed/success：构建、包检查、34 项 hosted 核心回归（43.44 秒）和 P0 memory/core 通过；仅补交交付记录，不重复构建/重启。
 
 ## 当前执行：2026-10-21 应用主动关闭前保存
 
