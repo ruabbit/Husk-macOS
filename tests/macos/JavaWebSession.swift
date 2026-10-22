@@ -84,7 +84,64 @@ import SharedLibrary
             try await start(repository, imported, paths)
             let identity = try WebStorage.readJavaStore(in: save)
             _ = try await javascriptAsync("return await persist('retained');")
-            if scenario.hasPrefix("guest-") {
+            if scenario.hasPrefix("view-") {
+                let failed = ["view-rejected", "view-plugin-failed", "view-timeout", "view-message-failed"].contains(scenario)
+                if scenario.hasPrefix("view-message") {
+                    try check(try await evaluate("nativeSave.installListener(\(scenario == "view-message-failed" ? "true" : "false"))") as? Bool == true, "APK AndroidX boundary listener installed")
+                    _ = try await javascriptAsync("while(typeof nativeMessage==='undefined')await new Promise(r=>setTimeout(r,10));return true;")
+                    _ = try await evaluate("addEventListener('pagehide',e=>{e.waitUntil(new Promise(resolve=>{nativeMessage.onmessage=()=>resolve();nativeMessage.postMessage('from-listener');}));});true")
+                }
+                let work = scenario == "view-rejected" ? "e.waitUntil(Promise.reject(new Error('View save rejected')));" :
+                    scenario == "view-plugin-failed" ? "try{nativeSave.fail();}catch(e){}" :
+                    scenario == "view-timeout" ? "e.waitUntil(new Promise(()=>{}));" :
+                    "nativeSave.store();e.waitUntil(new Promise(resolve=>setTimeout(resolve,1500)).then(()=>persist('from-view-destroy')).then(()=>{nativeSave.store();nativeSave.recordUI();}));"
+                _ = try await evaluate("addEventListener('pagehide',e=>{\(work)});nativeSave.retire('\(scenario == "view-duplicate" ? "duplicate" : scenario == "view-only" ? "only" : "normal")');true")
+                try await session.wait(until: { preferences(save).contains("b view_retired true") || !session.active }, timeout: 10)
+                try check(session.state == "running", "destroying one WebView preserves the running Activity")
+                var replaced = scenario == "view-only"
+                for _ in 0..<(scenario == "view-only" ? 0 : 120) {
+                    if try await evaluate("window.fixtureReady===true && nativeSave.viewGeneration()===1", optional: true) as? Bool == true { replaced = true; break }
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+                try check(replaced && session.state == "running", scenario == "view-only" ? "Activity continues with no WebView" : "new WebView loads and bridges while its predecessor retires")
+                try check(!session.events.contains { $0["state"] as? String == "stopping" }, "per-view retirement does not stop the session")
+                if scenario == "view-stop-race" {
+                    try check(!preferences(save).contains("b view_ui_saved true"), "old document is still in its asynchronous save at host stop")
+                    try await stop()
+                } else {
+                    if scenario == "view-paused" {
+                        session.togglePause()
+                        try await session.wait(until: { session.state == "paused" || !session.active }, timeout: 10)
+                        try check(session.state == "paused", "replacement Activity pauses while its old WebView saves")
+                    }
+                    if !failed {
+                        try await session.wait(until: { preferences(save).contains("b view_ui_saved true") || !session.active }, timeout: 10)
+                        if scenario == "view-paused" {
+                            session.togglePause()
+                            try await session.wait(until: { session.state == "running" || !session.active }, timeout: 10)
+                        }
+                        if scenario != "view-only" {
+                            let state = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                            try check(state["local"] as? String == "from-view-destroy" && state["indexed"] as? String == "from-view-destroy", "retired document saved localStorage and IndexedDB while session continued")
+                            try check(try await evaluate("localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('unloadCount')==='1'") as? Bool == true, "destroyed document delivers save lifecycle once")
+                        }
+                    }
+                    try await stop(success: !failed)
+                }
+                if failed {
+                    try check(!session.events.contains { $0["event"] as? String == "storage-closed" }, "retired view failure stays sticky through successful replacement and final shutdown")
+                } else {
+                    try check(preferences(save).contains("i bridge_calls 2") && preferences(save).contains("b view_ui_saved true"), "retired Java plugin and queued UI writes completed")
+                    if scenario == "view-message" {
+                        try check(preferences(save).contains("listener_saved") && preferences(save).contains("from-listener") && preferences(save).contains("b listener_ui_saved true"), "AndroidX listener delivered and replied before detach")
+                    }
+                    try await start(repository, imported, paths)
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(restored["local"] as? String == "from-view-destroy" && restored["indexed"] as? String == "from-view-destroy", "per-view saved state survives process reopen")
+                    try check(try await evaluate("nativeSave.previous()") as? Int == 2, "per-view Java save survives process reopen")
+                    try await stop()
+                }
+            } else if scenario.hasPrefix("guest-") {
                 if scenario == "guest-replace-first" || scenario == "guest-replace-last" {
                     _ = try await evaluate("nativeSave.replace(\(scenario == "guest-replace-first" ? "true" : "false"));true")
                     var replaced = false

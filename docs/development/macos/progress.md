@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-22：上游无变化，单个 WebView 保存与 build 16
+
+从干净的 codex/macos-p0=15c8f1b 开始，两远端 fetch 均无新增；upstream/main=2df074b 已是 main/macOS 祖先，来源锁一致，main=cc99757 保持不变，没有冲突或重复合并。初始 Git 刷新产生的临时 index.lock 已自然消失，未删除锁。对照 TLReport.nativeEngine、TLUnityView、project.yml、macOS CMake/能力判断/Runner、Store/登录和固定图形依赖，没有新引擎或 Store/图形增量。
+
+修复会话继续时直接 WebView.destroy 先移除 Java 对象、导致页面插件失去保存入口的问题。现在普通 WebView API 立即停止，原 Java 对象/插件保留到受控保存完成，再经过 JavaBridge → AppMain 排空回执后卸载。新视图可以继续工作，重复销毁不重复保存，整场停止等待已移出活动视图表但仍在保存的视图；失败/超时不因换了视图而清除。AndroidX WebMessageListener 在 AppMain 实际执行后回执，ReplyProxy 在保存期间仍能回复页面，异常不再被吞掉。空白卸载页不再重新注入插件启动脚本。
+
+唯一 build/macos 原位更新为 **3.0.0 / build 16**，保留 VM=ON 与所有固定缓存。最终默认 **CTest 137/137（190.34 秒）**、其中 **34 项 Java WebView（97.65 秒）**通过；新增 10 项覆盖 direct destroy、无替代视图、重复调用、暂停、保存/插件拒绝、超时、host-stop 交叠及 AndroidX listener 成功/失败，验证真实 DEX/Java 插件和 localStorage/IndexedDB 保存重开。包检查 **18 个 arm64 Mach-O / 406 个 Java 资源**通过。共享 Web host 的 iOS 27 SDK / iOS 15 deployment target 语法检查通过，只有既有弃用警告，不代表 iOS 完整构建或真机验收。
+
+首轮逐视图测试 6/7：stop-race 在替代页尚未加载时关闭，保存脚本未注入而被正确拒绝；该用例改为先确认新页 ready，同时断言旧页仍在异步保存。加载中文档的保存仍开放。加入 AndroidX 后首轮 8/9，定位到空白卸载页重复注入插件启动脚本；修复后 listener/无视图/late-bridge 四项复核 4/4（12.25 秒），随后完整默认套件一次通过。没有更改图形代码/环境/断言，本轮既有 Vulkan 测试均通过。首次证据保留 current-upstream-view-tests.log、view-final.log，最终见 current-upstream-view-message-recheck.log、current-upstream-ctest.log、current-upstream-bundle.log、current-upstream-ios-syntax.log、current-upstream-validation.json 和 build/macos/bundle-verification.json。
+
+CUA 先核对空闲 build 15/PID 18451 的主窗口并正常退出，OS 确认进程消失，无需强退。完整验证后仅启动一次当前 Product，PID **52520**；AX/截图确认首页、原有 **11 个应用**及可见图标。App SHA-256 `b067f8f2ef4bd502bd7c680615d251f2ac17598ebf5226193be97dca0dbf32ec`，NativeRunner `be8f521f82ba4a96ac7063cafa66c3fdc98bd593681f3c67d7459acd52262656`，framework DEX `fd3b65fb0ea00e8feba909a4c91b15d8336f6d65201ec0e3ec5e45c191e4ecc6`。没有启动用户游戏/Android VM、修改用户 APK/存档/Android 磁盘、检查 USB 或向上游写入；其他项目 UTM/构建未触碰。
+
+本地验证与候选更新已完成，正在提交/推送 fork 并等待本批 CI，最终 SHA/CI 将补在本节。继续开放：真实 HTTP 应用/第三方插件、同 WebView 的导航/页面替换、Activity 替换/recreate 销毁前自动保存、加载中文档、跨来源 frame、未登记异步任务及 trusted unload。真实游戏保存重开、Hole.io killProcess、Egg Play 密钥、Geode/实体手柄/IME、Play/VM/P6 均没有因 fixture 通过获得兼容结论。
+
 ## 2026-10-21：上游无变化，guest finish 保存与 build 15
 
 从干净的 `codex/macos-p0=f40ae23` 开始，两远端地址正确，没有其他 Git 操作或本项目构建/游戏/VM。依次 fetch origin/upstream 均无新增，`upstream/main=2df074b` 已是两条分支祖先、来源锁一致，`main=cc99757` 保持不变，没有重复合并或冲突。本轮对照了上游 TLReport.nativeEngine、TLUnityView、project.yml、共享 PlayAPI/登录与固定 ANGLE/MoltenVK 依赖，以及 macOS 的 CMake、能力判断、Runner/输入/暂停/关闭链路；没有新增引擎/Store/图形增量。

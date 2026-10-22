@@ -1,5 +1,20 @@
 # 审计发现
 
+## 2026-10-22 单个 WebView 销毁
+
+- 修正空白页插件重启后，listener 成功/失败、无替代视图和既有 late-bridge 4/4（12.25 秒）。build 16 的包检查为 18 arm64 Mach-O、406 Java 资源。共享 Web host 在 iOS 27 SDK / iOS 15 deployment target 语法检查通过，仅有既有 javaScriptEnabled 弃用警告；不代表 iOS 完整构建或真机验收。
+
+- AndroidX 回归首轮 8/9，实际 listener 与 ReplyProxy/存储已执行，但关闭空白文档再次注入插件启动脚本，触发迟到 bridge 检查。现仅在保存完成、即将加载 teardown 空白页时移除未来 userScripts；原文档已有的生命周期 gate 保留，未关闭迟到调用检查。首次日志保留为 current-upstream-view-final.log。
+
+- 复查 AndroidX WebMessageListener 原先在 mDestroyed 后跳过已接受回调并吞异常。现在等待 AppMain 真实投递、保持保存期间 ReplyProxy 可回页；异常明确回 JavaScript/native 错误，不再静默成功。Context7 AndroidX 文档确认该回调必须在 UI 线程、replyProxy 用于回页；测试携带边界接口形状并运行实际 DEX/反射分发，不等于真实第三方插件验收。
+
+- 首轮针对性 6/7，通过 direct/重复销毁、暂停、Promise/插件拒绝及超时；stop-race 在新视图尚未注入文档时立即关闭，按现有策略返回 JS 保存异常，没有虚报成功。保存首次日志。调整该用例先确认新页面 ready，同时明确断言旧页面异步保存仍进行中，再验证 host-stop 汇合；未注入/加载中的文档可靠保存仍不在通过范围。
+
+- 两远端无新增；macOS=15c8f1b、main=cc99757、upstream=2df074b。旧候选 build 15，空闲 PID 18451；CUA 看到首页 11 个应用，其他项目 UTM 不属于 Husk 会话。
+- 当前 WebView.destroy 立即移除 Java sViews，native W_destroy 直接 retire_view/closeForHost；页面保存插件此时成为 orphan，未走逐视图准备。
+- 拟保留销毁中 Java 对象的桥接能力，异步保存后通过 AppMain 回执排空已接受的 bridge/UI 工作，再脱离 WebKit。全局 stop 必须等待这些视图且保存失败保持 sticky；不能仅延迟 WKWebView 释放。
+- Context7 官方 WebKit 文档确认 callAsyncJavaScript 等待 thenable 成功/拒绝，nil frame 是 main frame；本轮继续用既有有期限保存阶段，不宣称普通 unload 自动等待异步工作。
+
 ## 2026-10-21 主动 finish 与宿主关闭顺序
 
 - 两远端没有新增，工作区干净，前轮 build 14 与 CI 已交付。存在其他项目 UTM/QEMU 进程，未触碰；本项目只有空闲 Husk。

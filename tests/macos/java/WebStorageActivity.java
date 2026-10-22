@@ -15,10 +15,54 @@ import android.view.KeyEvent;
 public final class WebStorageActivity extends Activity {
     private WebView web;
     private boolean failDestroy;
+    private int webGeneration;
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
     private volatile boolean lateBridgeDestroy;
     private volatile boolean finishOnPause;
+    public interface BoundaryFactory { java.lang.reflect.InvocationHandler createWebView(WebView view); }
+    public interface BoundaryProvider {
+        void addWebMessageListener(String name, String[] origins, java.lang.reflect.InvocationHandler listener);
+    }
     public final class SaveBridge {
         private int calls;
+        private final int generation = webGeneration;
+        @JavascriptInterface public int viewGeneration() { return generation; }
+        @JavascriptInterface public void retire(String mode) {
+            main.postDelayed(() -> {
+                WebView old = web;
+                old.destroy();
+                if ("duplicate".equals(mode)) { old.destroy(); old.destroy(); }
+                webGeneration++;
+                if ("only".equals(mode)) setContentView(new android.widget.FrameLayout(WebStorageActivity.this));
+                else installWeb();
+                getSharedPreferences("web", 0).edit().putBoolean("view_retired", true).apply();
+            }, 100);
+        }
+        @JavascriptInterface public boolean installListener(boolean fail) {
+            try {
+                java.lang.reflect.InvocationHandler factory = (java.lang.reflect.InvocationHandler)
+                    Class.forName("android.webkit.HuskSupportLib").getMethod("factory").invoke(null);
+                java.lang.reflect.InvocationHandler provider = (java.lang.reflect.InvocationHandler)
+                    factory.invoke(null, BoundaryFactory.class.getMethod("createWebView", WebView.class), new Object[] {web});
+                java.lang.reflect.InvocationHandler listener = (proxy, method, args) -> {
+                    if (fail) throw new IllegalStateException("Expected listener failure");
+                    java.lang.reflect.InvocationHandler message = (java.lang.reflect.InvocationHandler)args[1];
+                    String data = (String)message.invoke(null,
+                        org.chromium.support_lib_boundary.WebMessageBoundaryInterface.class.getMethod("getData"), null);
+                    getSharedPreferences("web", 0).edit().putString("listener_saved", data).apply();
+                    main.post(() -> getSharedPreferences("web", 0).edit().putBoolean("listener_ui_saved", true).apply());
+                    java.lang.reflect.InvocationHandler reply = (java.lang.reflect.InvocationHandler)args[4];
+                    reply.invoke(null, org.chromium.support_lib_boundary.JavaScriptReplyProxyBoundaryInterface.class.getMethod("postMessage", String.class), new Object[] {"saved"});
+                    return null;
+                };
+                provider.invoke(null, BoundaryProvider.class.getMethod("addWebMessageListener", String.class, String[].class, java.lang.reflect.InvocationHandler.class),
+                    new Object[] {"nativeMessage", new String[] {"*"}, listener});
+                return true;
+            } catch (Throwable error) { throw new IllegalStateException("Cannot install fixture listener", error); }
+        }
+        @JavascriptInterface public void recordUI() {
+            main.post(() -> getSharedPreferences("web", 0).edit().putBoolean("view_ui_saved", true).apply());
+        }
         @JavascriptInterface public void store() {
             final int count = ++calls;
             getSharedPreferences("web", 0).edit().putBoolean("bridge_saved", true).putInt("bridge_calls", count).apply();
@@ -82,6 +126,9 @@ public final class WebStorageActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        installWeb();
+    }
+    private void installWeb() {
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);

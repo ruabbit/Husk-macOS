@@ -102,7 +102,7 @@ public final class HuskSupportLib {
     }
 
     /** A page's postMessage, to the app's WebMessageListener (on the main thread). */
-    static void deliver(WebView w, final String name, InvocationHandler listener, final String data, Uri origin, boolean mainFrame) {
+    static boolean deliver(WebView w, final String name, InvocationHandler listener, final String data, Uri origin, boolean mainFrame) {
         if (TRACE) Log.d(TAG, "listener " + name + " page -> app (" + origin + "): " + clip(data));
         InvocationHandler message = new Boundary() {
             Object call(String n, Object[] a) {
@@ -130,9 +130,15 @@ public final class HuskSupportLib {
                 return NONE;
             }
         };
-        callBack(listener, "WebMessageListenerBoundaryInterface", "onPostMessage",
-                 new Class<?>[] { WebView.class, InvocationHandler.class, Uri.class, boolean.class, InvocationHandler.class },
-                 w, message, origin, mainFrame, reply);
+        try {
+            Class<?> c = Class.forName(BOUNDARY + "WebMessageListenerBoundaryInterface", false, listener.getClass().getClassLoader());
+            listener.invoke(null, c.getMethod("onPostMessage", WebView.class, InvocationHandler.class, Uri.class, boolean.class, InvocationHandler.class),
+                new Object[] { w, message, origin, mainFrame, reply });
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "androidx.webkit: WebMessageListener delivery failed", t);
+            return false;
+        }
     }
     private static InvocationHandler payload(final String s) {
         return new Boundary() {

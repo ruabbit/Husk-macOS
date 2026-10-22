@@ -131,6 +131,7 @@ static void set_screen_opaque(bool opaque)
 @implementation HuskWebPending
 @end
 static NSMutableDictionary<NSNumber *, HuskWeb *> *g_views;
+static NSMutableDictionary<NSNumber *, HuskWeb *> *g_retiring;
 static NSMutableDictionary<NSNumber *, HuskWebPending *> *g_pending;
 static int g_next_call = 1;
 static atomic_int g_visible_webs;
@@ -321,6 +322,8 @@ static NSString *bridge_js(void)
 @property (nonatomic, strong) NSMutableArray<NSString *> *scripts;
 @property (nonatomic) bool edgeLinked;
 @property (nonatomic) BOOL closing;
+@property (nonatomic) BOOL prepareStarted, prepareFinished, prepareSucceeded;
+@property (nonatomic) BOOL waitingForDestroyAck;
 @property (nonatomic, copy) void (^prepareCompletion)(BOOL);
 @property (nonatomic) WKNavigation *blankNavigation;
 @property (nonatomic, copy) void (^closeCompletion)(BOOL);
@@ -421,7 +424,12 @@ static NSString *bridge_js(void)
         if (error) { [h completeClose:NO]; return; }
         [h.web setAllMediaPlaybackSuspended:YES completionHandler:^{
             HuskWeb *h = weak;
-            if (h.closeCompletion) h.blankNavigation = [h.web loadHTMLString:@"<!doctype html><title>Closed</title>" baseURL:nil];
+            if (h.closeCompletion) {
+                // The empty teardown document must not bootstrap application
+                // plugins again. Existing document handlers remain installed.
+                [h.web.configuration.userContentController removeAllUserScripts];
+                h.blankNavigation = [h.web loadHTMLString:@"<!doctype html><title>Closed</title>" baseURL:nil];
+            }
         }];
     }];
 }
@@ -430,12 +438,22 @@ static NSString *bridge_js(void)
     void (^completion)(BOOL) = _prepareCompletion;
     if (!completion) return;
     _prepareCompletion = nil;
+    _prepareFinished = YES;
+    _prepareSucceeded = ok;
     if (!ok) g_detach_failed = YES;
     completion(ok);
 }
 - (void)prepareForHost:(void (^)(BOOL))completion
 {
-    if (!_web || _closing || _prepareCompletion) { completion(NO); return; }
+    if (_prepareFinished) { completion(_prepareSucceeded); return; }
+    if (_prepareCompletion) {
+        // A whole-session stop can join a direct WebView.destroy in progress.
+        void (^previous)(BOOL) = _prepareCompletion;
+        _prepareCompletion = ^(BOOL ok) { previous(ok); completion(ok); };
+        return;
+    }
+    if (!_web || _closing) { g_detach_failed = YES; completion(NO); return; }
+    _prepareStarted = YES;
     _prepareCompletion = completion;
     // Settle an ordinary pending dialog/navigation, but keep accepted plugin
     // calls alive: cancelling their prompt would silently discard a save.
@@ -480,7 +498,7 @@ static NSString *bridge_js(void)
 - (void)webView:(WKWebView *)w decidePolicyForNavigationAction:(WKNavigationAction *)act decisionHandler:(void (^)(WKNavigationActionPolicy))decide
 {
     if (_closing) { decide([act.request.URL.absoluteString isEqual:@"about:blank"] ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel); return; }
-    if (g_host_preparing) { decide(WKNavigationActionPolicyCancel); return; }
+    if (g_host_preparing || _prepareStarted) { decide(WKNavigationActionPolicyCancel); return; }
     NSURL *u = act.request.URL;
     NSString *scheme = u.scheme.lowercaseString ?: @"";
     bool main = act.targetFrame == nil || act.targetFrame.isMainFrame;
@@ -517,13 +535,13 @@ static NSString *bridge_js(void)
 /* dialogs and the bridge */
 - (void)webView:(WKWebView *)w runJavaScriptAlertPanelWithMessage:(NSString *)msg initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(void))done
 {
-    if (_closing || g_host_closing || g_host_preparing) { done(); return; }
+    if (_closing || g_host_closing || g_host_preparing || _prepareStarted) { done(); return; }
     int call = [self park:[done copy] kind:'A'];
     emit(@"A", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"" ]);
 }
 - (void)webView:(WKWebView *)w runJavaScriptConfirmPanelWithMessage:(NSString *)msg initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(BOOL))done
 {
-    if (_closing || g_host_closing || g_host_preparing) { done(NO); return; }
+    if (_closing || g_host_closing || g_host_preparing || _prepareStarted) { done(NO); return; }
     int call = [self park:[done copy] kind:'C'];
     emit(@"C", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"" ]);
 }
@@ -539,7 +557,7 @@ static NSString *bridge_js(void)
         done(nil); return;
     }
     BOOL bridge = [msg hasPrefix:@"husk:"];
-    if (g_host_preparing && (!bridge || g_host_prepared)) {
+    if ((g_host_preparing && (!bridge || g_host_prepared)) || (_prepareStarted && (!bridge || _prepareFinished))) {
         if (bridge) g_detach_failed = YES;
         done(nil); return;
     }
@@ -549,7 +567,7 @@ static NSString *bridge_js(void)
 }
 - (WKWebView *)webView:(WKWebView *)w createWebViewWithConfiguration:(WKWebViewConfiguration *)c forNavigationAction:(WKNavigationAction *)act windowFeatures:(WKWindowFeatures *)wf
 {
-    if (g_host_preparing || g_host_closing) return nil;
+    if (g_host_preparing || g_host_closing || _prepareStarted) return nil;
     [w loadRequest:act.request];
     return nil;
 }
@@ -570,7 +588,7 @@ static NSString *bridge_js(void)
 /* the app's own content */
 - (void)webView:(WKWebView *)w startURLSchemeTask:(id<WKURLSchemeTask>)task
 {
-    if (_closing || g_host_closing || g_host_preparing) { [task didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]]; return; }
+    if (_closing || g_host_closing || g_host_preparing || _prepareStarted) { [task didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled userInfo:nil]]; return; }
     int call = [self park:task kind:'r'];
     NSURLRequest *r = task.request;
     NSMutableArray *f = [NSMutableArray arrayWithArray:@[ [NSString stringWithFormat:@"%d", call], r.URL.absoluteString ?: @"", r.HTTPMethod ?: @"GET",
@@ -643,17 +661,58 @@ NAT(W_create)
     });
     return true;
 }
+static void complete_guest_destroy(HuskWeb *h)
+{
+    if (!h.waitingForDestroyAck) return;
+    h.waitingForDestroyAck = NO;
+    [h closeForHost:^(BOOL ok) {
+        if (!ok) g_detach_failed = YES;
+        [g_retiring removeObjectForKey:@(h.wid)];
+        dispatch_group_leave(g_detaching);
+    }];
+}
+
 NAT(W_destroy)
+{
+    (void)self;
+    int wid = a[0].i;
+    // The host store is installed before AppMain starts and never changes.
+    // Other hosts retain the original synchronous Java registry removal.
+    *ret = Z(g_host_store != nil);
+    forget_hits(wid);
+    on_main(^{
+        if (g_retiring[@(wid)]) return;
+        HuskWeb *h = view_of(wid);
+        [g_views removeObjectForKey:@(wid)];
+        if (atomic_load(&g_visible_webs) == 0) set_screen_opaque(true);
+        if (!h || !g_host_store || g_host_prepared) {
+            retire_view(h);
+            if (g_host_store) emit(@"d", wid, @[]);
+            return;
+        }
+        // Keep the Java object and its plugins reachable until preparation
+        // and the JavaBridge -> AppMain barrier acknowledge accepted work.
+        g_retiring[@(wid)] = h;
+        dispatch_group_enter(g_detaching);
+        [h prepareForHost:^(BOOL ok) {
+            if (!ok) g_detach_failed = YES;
+            h.waitingForDestroyAck = YES;
+            emit(@"d", wid, @[]);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                if (!h.waitingForDestroyAck) return;
+                tl_log_line("javaapp: WebView Java destroy acknowledgement timed out");
+                g_detach_failed = YES;
+                complete_guest_destroy(h);
+            });
+        }];
+    });
+    return true;
+}
+NAT(W_destroyReady)
 {
     (void)self; (void)ret;
     int wid = a[0].i;
-    forget_hits(wid);
-    on_main(^{
-        HuskWeb *h = view_of(wid);
-        retire_view(h);
-        [g_views removeObjectForKey:@(wid)];
-        if (atomic_load(&g_visible_webs) == 0) set_screen_opaque(true);
-    });
+    on_main(^{ complete_guest_destroy(g_retiring[@(wid)]); });
     return true;
 }
 NAT(W_frame)
@@ -732,8 +791,9 @@ NAT(W_eval)
     int wid = a[0].i, cb = a[2].i;
     NSString *js = nstr(a[1].l) ?: @"";
     on_main(^{
-        HuskWeb *h = view_of(wid);
+        HuskWeb *h = view_of(wid) ?: g_retiring[@(wid)];
         if (!h) return;
+        if (g_retiring[@(wid)] && h.prepareFinished) { g_detach_failed = YES; return; }
         if (!cb) { [h.web evaluateJavaScript:js completionHandler:nil]; return; }
         /* Android hands the callback the result as JSON */
         NSData *q = [NSJSONSerialization dataWithJSONObject:@[ js ] options:0 error:nil];
@@ -829,7 +889,8 @@ NAT(W_reply)
         case 'A': ((void (^)(void))thing)(); break;
         case 'C': ((void (^)(BOOL))thing)([r isEqualToString:@"\x01yes"]); break;
         case 'j': {
-            if (g_host_preparing) {
+            HuskWeb *owner = g_views[@(pending.wid)] ?: g_retiring[@(pending.wid)];
+            if (g_host_preparing || owner.prepareStarted) {
                 NSData *data = [r dataUsingEncoding:NSUTF8StringEncoding];
                 id reply = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
                 if (![reply isKindOfClass:NSDictionary.class] || reply[@"e"]) g_detach_failed = YES;
@@ -970,7 +1031,8 @@ NAT(W_cookieAny)
 
 static const struct { const char *name, *sig; dvm_native_fn fn; } k_web[] = {
     { "create", "(I)V", W_create },
-    { "destroy", "(I)V", W_destroy },
+    { "destroy", "(I)Z", W_destroy },
+    { "destroyReady", "(I)V", W_destroyReady },
     { "frame", "(IIIIIZZ)V", W_frame },
     { "load", "(ILjava/lang/String;[Ljava/lang/String;[B)V", W_load },
     { "loadData", "(I[BLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", W_loadData },
@@ -1030,6 +1092,7 @@ bool tl_web_set_host_store(NSUUID *identifier)
     if (!NSThread.isMainThread || !identifier || g_store || g_host_store) return false;
     g_host_store = identifier;
     g_detaching = dispatch_group_create();
+    g_retiring = [NSMutableDictionary dictionary];
     return true;
 }
 
@@ -1048,8 +1111,12 @@ void tl_web_prepare_for_host(void (^completion)(BOOL))
         }];
     }
     dispatch_group_notify(preparing, dispatch_get_main_queue(), ^{
-        g_host_prepared = YES;
-        completion(!g_detach_failed);
+        // Directly destroyed views can be absent from g_views while their
+        // plugins/UI writes are still saving. Android must remain alive.
+        dispatch_group_notify(g_detaching, dispatch_get_main_queue(), ^{
+            g_host_prepared = YES;
+            completion(!g_detach_failed);
+        });
     });
 }
 

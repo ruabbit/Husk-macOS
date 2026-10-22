@@ -434,14 +434,17 @@ add_test(NAME macos-java-nativeactivity-session COMMAND MacJavaSessionTests "${H
 set_tests_properties(macos-java-nativeactivity-session PROPERTIES TIMEOUT 95)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaWebTests" web
-    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/WebStorageActivity.java tests/macos/java/storage.html scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/WebStorageActivity.java tests/macos/java/storage.html
+        tests/macos/java/webkit/WebMessageListenerBoundaryInterface.java tests/macos/java/webkit/WebMessageBoundaryInterface.java
+        tests/macos/java/webkit/JavaScriptReplyProxyBoundaryInterface.java scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaWebFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk")
 add_executable(MacJavaWebSessionTests tests/macos/JavaWebSession.swift)
 target_compile_options(MacJavaWebSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacJavaWebSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacJavaWebSessionTests PackageMac JavaWebFixture)
 foreach(case persistence legacy destroy-failed identity late-bridge save-bridge save-paused save-rejected save-promise-rejected save-script-failed save-timeout child-save cross-origin-save
-    guest-finish guest-affinity guest-affinity-stack guest-duplicate guest-paused guest-rejected guest-timeout guest-destroy-failed guest-replace-first guest-replace-last guest-child)
+    guest-finish guest-affinity guest-affinity-stack guest-duplicate guest-paused guest-rejected guest-timeout guest-destroy-failed guest-replace-first guest-replace-last guest-child
+    view-destroy view-only view-duplicate view-paused view-rejected view-plugin-failed view-timeout view-stop-race view-message view-message-failed)
     add_test(NAME macos-java-web-${case} COMMAND MacJavaWebSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk" "${CMAKE_BINARY_DIR}/TestResults" ${case})
     set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)
 endforeach()

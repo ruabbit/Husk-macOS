@@ -8,7 +8,9 @@ package husk;
 public final class Web {
     private Web() {}
     public static native void create(int id);
-    public static native void destroy(int id);
+    /** True keeps the Java view registered until the host's save barrier. */
+    public static native boolean destroy(int id);
+    public static native void destroyReady(int id);
     public static native void frame(int id, int x, int y, int w, int h, boolean visible, boolean touchable);   // screen pixels
     public static native void load(int id, String url, String[] headers, byte[] postBody);
     public static native void loadData(int id, byte[] data, String mime, String encoding, String baseUrl);
@@ -50,12 +52,12 @@ public final class Web {
         }
     }
     /** An event for a WebView that is gone: let whatever waits on the host go. */
-    private static void orphan(String[] f) {
+    /** @hide */ public static void orphan(String[] f) {
         if (f.length < 3) return;
         int call;
         try { call = Integer.parseInt(f[2]); } catch (NumberFormatException x) { return; }
         switch (f[0]) {
-        case "o": reply(call, "\u0001nav-allow"); break;
+        case "o": reply(call, "\u0001nav-cancel"); break;
         case "A": reply(call, "\u0001alert"); break;
         case "C": reply(call, "\u0001no"); break;
         case "P": case "j": reply(call, null); break;

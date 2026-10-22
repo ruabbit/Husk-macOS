@@ -3,30 +3,53 @@
   "branch": "main",
   "previousRevision": "2df074b3083ce2913922995f2f99249f1498b554",
   "integratedRevision": "2df074b3083ce2913922995f2f99249f1498b554",
-  "checkedOn": "2026-10-21",
+  "checkedOn": "2026-10-22",
   "commitCount": 0,
-  "integration": "Both remotes fetched on 2026-10-21 with no new commits. upstream/main 2df074b remains an ancestor of fork main cc99757 and macOS; no merge or conflict. Add last-Activity guest finish/affinity handoff to the existing WebView save stage, preserve replacement/child activities, and bound guest-initiated stop. Build 15 passed 127 default tests and bundle checks, then exact Product was CUA-launched once and its main window verified.",
+  "integration": "Both remotes fetched on 2026-10-22 with no new commits. upstream/main 2df074b remains an ancestor of fork main cc99757 and macOS; no merge or conflict. Direct WebView.destroy now saves before releasing Java plugins, drains JavaBridge/AppMain, and joins whole-session stop. AndroidX listener delivery/replies and errors are retained. Build 16 passed 137 default tests and bundle checks; exact Product CUA-launched once and main window verified.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "verified-local-push-pending",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
   },
   "candidate": {
     "version": "3.0.0",
-    "build": "15",
-    "defaultTests": 127,
-    "defaultTestSeconds": 143.77,
+    "build": "16",
+    "defaultTests": 137,
+    "defaultTestSeconds": 190.34,
     "bundleMachO": 18,
     "javaResources": 406,
-    "appSHA256": "b5ef3b893809b617db08c5faf41d71ffcfc6157d6c616f93131ca898e0a1ef2f",
-    "nativeRunnerSHA256": "fc6339195003872a65f0d57cc9b1fd666e30e8f9a85375922946d77b747f4488",
-    "frameworkSHA256": "e18716a0f8f890aa78adbcc000fd90d1e9636580c045b8c9ea32c17b3924ec79",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "CUA refreshed the idle build 14 home screen, quit PID 67505 normally, and OS checks confirmed no Husk runner/game/VM. After validation, CUA launched build 15 exact Product once; PID 18451 and full executable path matched, and AX/screenshot showed the original 11 apps and icons. No user game or VM launched.",
-    "sourceRevision": "c54992447ec80e59de9fd995b3258c2a476e888d",
+    "appSHA256": "b067f8f2ef4bd502bd7c680615d251f2ac17598ebf5226193be97dca0dbf32ec",
+    "nativeRunnerSHA256": "be8f521f82ba4a96ac7063cafa66c3fdc98bd593681f3c67d7459acd52262656",
+    "frameworkSHA256": "fd3b65fb0ea00e8feba909a4c91b15d8336f6d65201ec0e3ec5e45c191e4ecc6",
+    "deliveryStatus": "verified-local-push-pending",
+    "gui": "CUA confirmed idle build 15/PID 18451 and quit normally. After tests, exact Product launched once as PID 52520; OS path, AX and screenshot confirmed the original 11-app home with visible icons. No user game or VM launched.",
+    "sourceRevision": null,
     "ci": {
+      "statusAtLastCheck": "not-started"
+    }
+  },
+  "lastCheck": {
+    "upstreamNewCommits": 0,
+    "upstreamChangedPaths": 0,
+    "originNewCommits": 0,
+    "mainRevision": "cc99757e65d3923851e4df383bef186c0d311cd5",
+    "macOSBaseRevision": "15c8f1b12fbbaeec8481a23fd99cbee8cc5d738a",
+    "macOSRevision": null,
+    "macOSAdaptation": "Direct WebView destruction saves before JavaBridge/AppMain retirement; replacement views and session stop join correctly; AndroidX listeners/replies remain available while saving and errors reject storage receipts; closing blank documents no longer bootstrap application plugins.",
+    "defaultSuiteTests": 137,
+    "defaultTestSeconds": 190.34,
+    "webSuiteTests": 34,
+    "webSuiteTestSeconds": 97.65,
+    "candidateDependentTestsPending": 0,
+    "fullDefaultSuitePassed": true,
+    "newBundleVerified": true,
+    "newCandidateRestarted": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
+    "blocker": null,
+    "previousCI": {
       "run": 39541085280,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39541085280",
       "statusAtLastCheck": "completed",
@@ -37,47 +60,6 @@
       "hardware": "skipped",
       "hostedCoreTests": 34,
       "hostedCoreTestSeconds": 42.14
-    }
-  },
-  "lastCheck": {
-    "upstreamNewCommits": 0,
-    "upstreamChangedPaths": 0,
-    "originNewCommits": 0,
-    "mainRevision": "cc99757e65d3923851e4df383bef186c0d311cd5",
-    "macOSBaseRevision": "f40ae23f8b4cc2e025c732aacbd61ce32d0fcac6",
-    "macOSRevision": "c54992447ec80e59de9fd995b3258c2a476e888d",
-    "macOSAdaptation": "Last-Activity guest finish and whole-stack affinity handoff before WebView destruction; queued Activity replacements and child results retained; host-stop deadline starts on first valid stopping state and heartbeats cannot extend it.",
-    "defaultSuiteTests": 127,
-    "defaultTestSeconds": 143.77,
-    "webSuiteTests": 24,
-    "webSuiteTestSeconds": 63.07,
-    "candidateDependentTestsPending": 0,
-    "fullDefaultSuitePassed": true,
-    "newBundleVerified": true,
-    "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
-    "blocker": null,
-    "previousCI": {
-      "run": 39371120881,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39371120881",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 33,
-      "hostedCoreTestSeconds": 12.66
-    },
-    "firstDefaultRun": {
-      "passed": 125,
-      "total": 127,
-      "seconds": 170.01,
-      "failures": [
-        "macos-vulkan-compositor",
-        "macos-vulkan-compositor-same-queue"
-      ],
-      "causeEvidence": "Metal Internal Error 00000206 and GPU timeout; transient underlying cause not determined. Original unchanged graphics tests pass on recheck and full final suite."
     }
   },
   "forkContribution": {
@@ -105,17 +87,18 @@
     "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
   },
   "javaWebIntegration": {
-    "status": "host-and-guest-finish-save-packaged-fixture-verified",
+    "status": "host-guest-and-direct-view-save-packaged-fixture-verified",
     "marker": "Saves/<id>/java-web-store.json",
     "receipt": "Native lifecycle=destroyed plus web.lifecycle=detached, web.storage=webkit-managed and host/guest-stop web.saveStage=prepared; explicit unused when no WebKit data store was opened. Failed preparation remains sticky through final detach.",
     "legacyPolicy": "Existing native data without a marker retains the old package UUID. Clearing that save drops its binding and uses a fresh UUID on next launch; shared legacy WebKit bytes are retained to protect other libraries.",
     "remaining": [
-      "Real HTTP application/plugin persistence and per-view save during WebView.destroy, replacement or recreate while the session continues; no fsync claim for system WebKit databases.",
+      "Real HTTP application/plugin persistence; same-view navigation and pre-destruction save for Activity replacement/recreate; unprepared/loading documents. No fsync claim for system WebKit databases.",
       "Cross-origin child frame saving is unsupported and fails closed. Synthetic lifecycle has isTrusted=false; event.waitUntil is a Husk extension. Unregistered asynchronous work and code requiring trusted browser unload are not guaranteed.",
       "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit process failure recovery and network-cancellation timeouts remain unverified."
     ],
     "saveStage": "Host-requested close or final Activity guest finish keeps Java bridge dispatch alive, suspends media, blocks new navigation and ordinary recurring tasks, delivers synthetic lifecycle once, awaits event.waitUntil promises and same-origin child frames within six seconds, then drains immediate AppMain messages before Android destruction. Later actual unload is gated; late bridge calls and all observed save failures reject storage-closed.",
-    "guestFinish": "Opt-in AppMain callback defers final Activity/whole-stack affinity destruction to host saving and existing phase 10 teardown. Recheck after already-queued launches; preserve child results, deduplicate requests and reject Activity launches/recreate after handoff. NULL callback keeps old host behavior. Process.killProcess still fails lifecycle acknowledgement. A valid stopping event starts the existing 30-second deadline without heartbeat extensions."
+    "guestFinish": "Opt-in AppMain callback defers final Activity/whole-stack affinity destruction to host saving and existing phase 10 teardown. Recheck after already-queued launches; preserve child results, deduplicate requests and reject Activity launches/recreate after handoff. NULL callback keeps old host behavior. Process.killProcess still fails lifecycle acknowledgement. A valid stopping event starts the existing 30-second deadline without heartbeat extensions.",
+    "perViewDestroy": "Direct WebView.destroy closes normal APIs but retains Java plugin/resource dispatch until a bounded save, JavaBridge/AppMain acknowledgement and WebKit detach. Other views continue. Whole-session preparation waits retiring views; all observed failures stay sticky. AndroidX listeners execute on AppMain before reply, and ReplyProxy can reply during preparation. Empty detach documents do not rerun application user scripts."
   },
   "sourceVersion": "3.0.0",
   "legacyUnityTextInput": {

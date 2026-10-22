@@ -358,8 +358,9 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
     public void destroy() {
         if (mDestroyed) return;
         mDestroyed = true;
-        synchronized (sViews) { sViews.remove(mId); }
-        husk.Web.destroy(mId);
+        // A persistent host saves this document while its Java plugins still
+        // exist. Normal WebView APIs are closed immediately via mDestroyed.
+        if (!husk.Web.destroy(mId)) synchronized (sViews) { sViews.remove(mId); }
     }
 
     /** @hide The independent host must join its framework-owned IO/bridge
@@ -378,6 +379,9 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while closing WebView workers", e);
         }
+        // The host already prepared every document before phase 10. No more
+        // input events are delivered after this final framework shutdown.
+        synchronized (sViews) { sViews.clear(); }
     }
 
     // ---- addJavascriptInterface: prompt() bridge
@@ -442,7 +446,10 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
     }
     /** A reply through a listener's JavaScriptReplyProxy: to the page's object of that name. */
     void huskReplyMessage(String name, String data) {
-        eval("(function(){var o=window[" + JSONObject.quote(name) + "];if(o&&o.__deliver)o.__deliver(" + (data == null ? "null" : JSONObject.quote(data)) + ")})()", null);
+        // An accepted listener may reply while destroy is saving this view.
+        // Normal application evaluateJavascript calls remain closed.
+        if (huskById(mId) == this) husk.Web.eval(mId,
+            "(function(){var o=window[" + JSONObject.quote(name) + "];if(o&&o.__deliver)o.__deliver(" + (data == null ? "null" : JSONObject.quote(data)) + ")})()", 0);
     }
     /** Runs at the start of every page whose origin the rules allow, until removed. A page it is not for stops it with an error at
      *  its first line, so its top-level declarations stay global where it does run. */
@@ -453,7 +460,7 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
         husk.Web.userScript(mId, "if(!(window.__husk&&window.__husk.call('\u0001ds','" + id + "',[location.href])))throw new Error('husk: a document-start script not for this page');\n" + script);
         return () -> { synchronized (mStartScripts) { mStartScripts.remove(id); } };
     }
-    private String supportCall(String kind, String name, JSONArray a) {
+    private String supportCall(int call, String kind, String name, JSONArray a) {
         switch (kind) {
         case "\u0001wmlok": {
             Object[] l; synchronized (mMessageListeners) { l = mMessageListeners.get(name); }
@@ -471,8 +478,12 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
             final Uri origin = originOf(a.optString(1, ""));
             final boolean main = a.optBoolean(2, true);
             final java.lang.reflect.InvocationHandler listener = (java.lang.reflect.InvocationHandler) l[1];
-            mHandler.post(() -> { if (!mDestroyed) HuskSupportLib.deliver(this, name, listener, data, origin, main); });
-            return "{}";
+            mHandler.post(() -> {
+                boolean delivered = huskById(mId) == this && HuskSupportLib.deliver(this, name, listener, data, origin, main);
+                husk.Web.reply(call, delivered ? "{}" : "{\"e\":\"Web message listener failed\"}");
+            });
+            // The native prompt waits for actual listener delivery on AppMain.
+            return null;
         }
         }
         return "{}";
@@ -489,7 +500,11 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
         try {
             JSONObject req = new JSONObject(json);
             String kind = req.getString("o");
-            if (kind.startsWith("\u0001")) { husk.Web.reply(call, supportCall(kind, req.getString("m"), req.optJSONArray("a") != null ? req.optJSONArray("a") : new JSONArray())); return; }
+            if (kind.startsWith("\u0001")) {
+                String support = supportCall(call, kind, req.getString("m"), req.optJSONArray("a") != null ? req.optJSONArray("a") : new JSONArray());
+                if (support != null) husk.Web.reply(call, support);
+                return;
+            }
             Object target;
             synchronized (mInterfaces) { target = mInterfaces.get(req.getString("o")); }
             String name = req.getString("m");
@@ -646,7 +661,20 @@ public class WebView extends AbsoluteLayout implements android.view.ViewTreeObse
     // ---- events from the host
     /** @hide */
     public void huskEvent(String[] f) {
+        if (mDestroyed && !"j".equals(f[0]) && !"r".equals(f[0]) && !"d".equals(f[0])) {
+            husk.Web.orphan(f);
+            return;
+        }
         switch (f[0]) {
+        case "d": {
+            // Accepted plugins may have queued main-thread writes. A bridge
+            // barrier followed by a Handler turn drains both before detach.
+            sBridge.execute(() -> mHandler.post(() -> {
+                synchronized (sViews) { sViews.remove(mId); }
+                husk.Web.destroyReady(mId);
+            }));
+            break;
+        }
         case "s": {
             String url = fromHost(f[2]);
             mUrl = url; mProgress = 10;
