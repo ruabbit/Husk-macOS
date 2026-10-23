@@ -41,6 +41,7 @@ static int variant, exitStatus;
 static BOOL minecraft, unity, nativeactivity, javaapp, javaNativeActivity, nativeDriver, ue4, portrait;
 static NSString *packageName, *nativeLibrary, *activityClass, *geodeDirectory;
 static NSUUID *javaWebStore;
+static FILE *protocolOutput;
 static BOOL guestRuntime(void) { return minecraft || unity || nativeactivity || javaapp || nativeDriver; }
 static NSString *runtimeName(void) { return nativeDriver ? mac_driver_name() : ue4 ? @"ue4" : javaNativeActivity ? @"nativeactivity" : javaapp ? @"java" : nativeactivity ? @"nativeactivity" : unity ? @"unity" : minecraft ? @"minecraft" : @"orbit"; }
 static void activityGuestExit(int status) {
@@ -304,7 +305,7 @@ static int androidKey(unsigned code)
         @"event":kind,@"state":self.state?:@"starting",@"ticks":@(self.ticks)} mutableCopy];
     [message addEntriesFromDictionary:detail?:@{}];
     NSData *data=[NSJSONSerialization dataWithJSONObject:message options:0 error:NULL];
-    if(data){fwrite(data.bytes,1,data.length,stdout);fputc('\n',stdout);fflush(stdout);}
+    if(data){fwrite(data.bytes,1,data.length,protocolOutput);fputc('\n',protocolOutput);fflush(protocolOutput);}
 }
 - (void)transition:(NSString *)state reason:(NSString *)reason
 {
@@ -929,6 +930,16 @@ int main(int argc,const char **argv)
         if(nativeDriver&&[mac_driver_name() isEqual:@"gamemaker"]){int orientation=tl_gm_orientation(apkPath.fileSystemRepresentation);if(orientation>=0)portrait=orientation==1;}
         if(activityClass&&(activityClass.length>512||[activityClass rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_/$"] invertedSet]].location!=NSNotFound))return 64;
         if(guestRuntime()){surfaceWidth=portrait?720:1280;surfaceHeight=portrait?1280:720;}
+        // Android System.out and native printf share fd 1. Keep protocol events
+        // on their own inherited pipe and send all guest stdio to diagnostics.
+        // Do this before starting guest code; children must not inherit the
+        // private writer and keep the supervisor waiting for EOF after exit.
+        int protocolFD=fcntl(STDOUT_FILENO,F_DUPFD_CLOEXEC,3);
+        if(protocolFD<0)return 71;
+        protocolOutput=fdopen(protocolFD,"w");
+        if(!protocolOutput){close(protocolFD);return 71;}
+        if(dup2(STDERR_FILENO,STDOUT_FILENO)<0){fclose(protocolOutput);return 71;}
+        setvbuf(stdout,NULL,_IONBF,0);
         mac_runtime_diagnostics_install();signal(SIGPIPE,SIG_IGN);
         Runner *runner=[Runner new];[runner transition:@"starting" reason:@"launch"];
         NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;

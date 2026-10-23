@@ -79,7 +79,7 @@ static bool find_end(const tl_zip *z, uint64_t *at)
 static bool apply_zip64_extra(const uint8_t *extra, uint16_t len, tl_zip_entry *e,
                               bool need_usize, bool need_csize, bool need_offset)
 {
-    uint16_t pos = 0;
+    uint32_t pos = 0;
     while ((uint32_t)pos + 4 <= len) {
         uint16_t id = rd16(extra + pos);
         uint16_t size = rd16(extra + pos + 2);
@@ -103,7 +103,7 @@ static bool apply_zip64_extra(const uint8_t *extra, uint16_t len, tl_zip_entry *
             }
             return true;
         }
-        pos = (uint16_t)(pos + 4 + size);
+        pos += 4u + size;
     }
     return !(need_usize || need_csize || need_offset);
 }
@@ -203,6 +203,7 @@ bool tl_zip_open(tl_zip *z, const char *path, char *err, size_t errlen)
         tl_zip_entry *en = &z->entries[z->count];
         en->flags = rd16(c + 8);
         en->method = rd16(c + 10);
+        en->crc = rd32(c + 16);
         en->csize = rd32(c + 20);
         en->usize = rd32(c + 24);
         en->local_offset = rd32(c + 42);
@@ -260,6 +261,81 @@ const tl_zip_entry *tl_zip_find(const tl_zip *z, const char *name)
         }
     }
     return NULL;
+}
+
+static bool zip_payload(const tl_zip *z, const tl_zip_entry *e, size_t limit,
+                        const uint8_t **data, char *err, size_t errlen)
+{
+    if (!e || (e->flags & 1) || e->usize > limit || (e->method != 0 && e->method != 8)) {
+        fail(err, errlen, "entry missing, encrypted, too large, or unsupported"); return false;
+    }
+    if (!in_file(z, e->local_offset, 30)) {
+        fail(err, errlen, "local header outside archive"); return false;
+    }
+    const uint8_t *l = z->map + e->local_offset;
+    uint16_t namesz = rd16(l + 26);
+    uint64_t start = e->local_offset + 30ull + namesz + rd16(l + 28);
+    if (rd32(l) != SIG_LOCAL || rd16(l + 8) != e->method || rd16(l + 6) != e->flags ||
+        !in_file(z, e->local_offset + 30, namesz) || strlen(e->name) != namesz ||
+        memcmp(l + 30, e->name, namesz) || !in_file(z, start, e->csize) ||
+        (e->method == 0 && e->csize != e->usize)) {
+        fail(err, errlen, "inconsistent local header or entry size"); return false;
+    }
+    *data = z->map + start; return true;
+}
+
+static bool write_all(int fd, const uint8_t *bytes, size_t size)
+{
+    while (size) {
+        ssize_t n = write(fd, bytes, size);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return false;
+        bytes += n; size -= (size_t)n;
+    }
+    return true;
+}
+
+bool tl_zip_write(const tl_zip *z, const tl_zip_entry *e, size_t limit, int fd,
+                  char *err, size_t errlen)
+{
+    const uint8_t *input;
+    if (!zip_payload(z, e, limit, &input, err, errlen)) return false;
+    const size_t chunk = 64 << 10;
+    uint64_t left = e->csize, written = 0;
+    uLong crc = crc32(0, Z_NULL, 0);
+    bool ok = true;
+    if (e->method == 0) {
+        while (left && ok) {
+            size_t n = left > chunk ? chunk : (size_t)left;
+            crc = crc32(crc, input, (uInt)n);
+            ok = write_all(fd, input, n); input += n; left -= n; written += n;
+        }
+    } else {
+        uint8_t buffer[64 << 10];
+        z_stream stream = {0};
+        if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) {
+            fail(err, errlen, "inflate failed to start"); return false;
+        }
+        int result = Z_OK;
+        while (result == Z_OK && ok) {
+            if (!stream.avail_in && left) {
+                uInt n = left > chunk ? (uInt)chunk : (uInt)left;
+                stream.next_in = (Bytef *)input; stream.avail_in = n;
+                input += n; left -= n;
+            }
+            stream.next_out = buffer; stream.avail_out = sizeof(buffer);
+            result = inflate(&stream, Z_NO_FLUSH);
+            size_t n = sizeof(buffer) - stream.avail_out;
+            // Enforce the promised size before writing even one excess byte.
+            ok = n <= e->usize - written;
+            if (ok) { crc = crc32(crc, buffer, (uInt)n); ok = write_all(fd, buffer, n); written += n; }
+        }
+        ok = ok && result == Z_STREAM_END && !left && !stream.avail_in;
+        inflateEnd(&stream);
+    }
+    ok = ok && written == e->usize && crc == e->crc;
+    if (!ok) fail(err, errlen, "%s: incomplete, corrupt, or unwritable entry", e->name);
+    return ok;
 }
 
 bool tl_zip_data(const tl_zip *z, const tl_zip_entry *e, size_t limit,

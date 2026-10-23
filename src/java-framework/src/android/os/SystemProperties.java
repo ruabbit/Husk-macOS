@@ -28,9 +28,8 @@ public class SystemProperties {
             case "ro.product.cpu.abilist": case "ro.product.cpu.abilist64": return "arm64-v8a";
             case "ro.hardware": return Build.HARDWARE;
             case "ro.debuggable": case "ro.secure": return key.equals("ro.secure") ? "1" : "0";
-            case "persist.sys.locale": return java.util.Locale.getDefault().toLanguageTag();
         }
-        return null;
+        return husk.Native.systemProperty(key);
     }
     public static String get(String key) { String v = lookup(key); return v != null ? v : ""; }
     public static String get(String key, String def) { String v = lookup(key); return v != null && !v.isEmpty() ? v : def; }

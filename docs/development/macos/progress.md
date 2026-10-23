@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-10-23：上游 bundle 与宿主环境，build 17
+
+从干净 eebd248 起步，Husk/本项目 Runner 与构建均已退出；其他项目 UTM/Telegram 构建保留。origin 无新增，upstream 新增 2df074b..3b87cbc 两提交/10 路径，普通合并 main=2c3af7a、macOS=ef287c0，无冲突。再次审计引擎/CMake/资料库/Runner 输入与暂停关闭、Play/登录、固定图形依赖，没有新引擎或图形 pin。
+
+已补 macOS IOKit 内部电池读取与无电池桌面状态、单次 sticky snapshot；24 小时制复用上游实现。Java 默认语言从共同宿主属性启动；Android TimeZone 实际通过 RuntimeHooks 获取，已在 Application/provider 之前安装 supplier，保留 guest 覆盖/清除语义。macOS 导入器继续使用共享 ZIP64/deflate/OBB 解析，新增 64 KiB 流式写入、CRC/完整长度/压缩流结尾校验、失败清理及既有文件/符号链接保护；单条 512 MiB、总量 4 GiB、50,000 条限制保持。
+
+新增真 DEX 暴露 guest System.out 与 NativeRunner 控制协议共用 stdout 的旧问题。现在控制事件使用带 CLOEXEC 的私有 writer，guest stdout/stderr 进入原有有界诊断。测试保留原始 println、JSON 形状文本和 onDestroy 输出，明确检查日志保留、事件未混入、正常输入/失焦/暂停/关闭与单次 storage-closed。
+
+首轮新测试目标漏链接 MacDiagnostics 已补；首轮针对性 5/15 因 Java GMT 与 native Asia/Shanghai 不一致失败，user.timezone 路径复验仍失败，查阅 Android libcore 源码后改接 RuntimeHooks。后续 17/17（15.84 秒）、包检查和首次默认 141/141（212.82 秒）通过，但新增 fixture println 会污染打包协议，临时改 Android Log 后继续定位并修复真正输出隔离。最终输出/流式针对性 2/2（3.22 秒）通过，最终代码的默认 **141/141（201.91 秒）**及包检查 **18 个 arm64 Mach-O / 406 个 Java 资源**通过。首次失败证据及隔离前完整套件日志保留，中途结果未计作最终交付。日志复用 build/logs/current-upstream-{build,ctest,bundle,stdio-recheck,ios-syntax}.log，汇总 current-upstream-validation.json 与 build/macos/bundle-verification.json。
+
+唯一 build/macos 为 3.0.0/build 17，VM=ON、缓存保留。5 个共享 C/Objective-C 文件 iOS 27 SDK/deployment 15 语法通过，只有命令行重复宏警告；不是 iOS 完整构建/真机证据。本机实时电源为无内部电池桌面，语言 en-US/时区 Asia/Shanghai；中文和法文测试只使用进程参数，未修改系统偏好。MacBook 物理插拔、真实大包/Play 网络交付和游戏兼容仍待验。
+
+最终验证后通过 CUA 只启动一次当前 Product，PID **25881**；进程完整路径、AX 与截图确认首页原有 **11 个应用**及可见图标。App SHA-256 `e5f0f66eb8794a61a451e73c7c552f796cc60fcaafaefc3e322274c63bd53546`，NativeRunner `00dcae150758f307e66ab0589105aa15487c228ec2e3db0807ee5cb1ba9e519a`，framework DEX `49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707`。本轮来源/适配提交与远端 CI 待完成；前轮 CI 39705343544 已读回 success，不借用为 build 17 的证明。
+
+真实 WebView 导航/Activity 替换保存、跨源/HTTP 插件、实体 IME/手柄、Geode、Hole.io 关闭/存档、Egg Play 密钥、War/Clash、Play/VM/P6 继续开放。本轮没有启动这些游戏或 Android VM、修改用户 APK/存档/Android 磁盘、检查 USB 或向上游写入。PR #82 当前 GitHub 查询无法解析，不推断合并状态。
+
 ## 2026-10-22：上游无变化，单个 WebView 保存与 build 16
 
 从干净的 codex/macos-p0=15c8f1b 开始，两远端 fetch 均无新增；upstream/main=2df074b 已是 main/macOS 祖先，来源锁一致，main=cc99757 保持不变，没有冲突或重复合并。初始 Git 刷新产生的临时 index.lock 已自然消失，未删除锁。对照 TLReport.nativeEngine、TLUnityView、project.yml、macOS CMake/能力判断/Runner、Store/登录和固定图形依赖，没有新引擎或 Store/图形增量。

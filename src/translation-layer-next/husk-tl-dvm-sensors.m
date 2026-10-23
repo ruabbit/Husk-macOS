@@ -19,6 +19,9 @@
 #if TARGET_OS_IOS
 #import <CoreMotion/CoreMotion.h>
 #import <UIKit/UIKit.h>
+#elif TARGET_OS_OSX
+#import <IOKit/ps/IOPowerSources.h>
+#import <IOKit/ps/IOPSKeys.h>
 #endif
 
 #include "husk-tl-dvm-internal.h"
@@ -162,8 +165,48 @@ NAT(N_read)
 }
 
 /* The battery, as BatteryManager and ACTION_BATTERY_CHANGED give it: UIDevice's level and state, read on the main thread (UIKit) and kept
- * here; the first read turns monitoring on and answers unknown (-1) until the main thread has looked. Not on a Mac (host tests). */
+ * here; the first read turns monitoring on and answers unknown (-1) until the main thread has looked. */
 static _Atomic int g_battery = -1;
+#if TARGET_OS_OSX
+/* Internal batteries only: UPS/accessory capacity is not the Mac's battery.
+ * Bit 24 represents a desktop without a battery; -1 remains an unknown read.
+ * Exposed internally so the conversion can be checked without changing power. */
+int tl_sensors_mac_battery(NSArray<NSDictionary *> *sources)
+{
+    if (!sources) return -1;
+    for (NSDictionary *d in sources) {
+        if (![d[@kIOPSTypeKey] isEqual:@kIOPSInternalBatteryType]) continue;
+        if ([d[@kIOPSIsPresentKey] isEqual:@NO]) continue;
+        NSNumber *current = d[@kIOPSCurrentCapacityKey], *maximum = d[@kIOPSMaxCapacityKey];
+        if (![current isKindOfClass:NSNumber.class] || ![maximum isKindOfClass:NSNumber.class] ||
+            current.longLongValue < 0 || maximum.longLongValue <= 0 || current.longLongValue > maximum.longLongValue) return -1;
+        int level = (int)(100.0 * current.doubleValue / maximum.doubleValue + 0.5);
+        BOOL ac = [d[@kIOPSPowerSourceStateKey] isEqual:@kIOPSACPowerValue];
+        BOOL battery = [d[@kIOPSPowerSourceStateKey] isEqual:@kIOPSBatteryPowerValue];
+        if (!ac && !battery) return -1;
+        BOOL charging = [d[@kIOPSIsChargingKey] isEqual:@YES];
+        int status = !ac ? 3 : charging ? 2 : current.longLongValue == maximum.longLongValue ? 5 : 4;
+        return level | status << 8 | (ac ? 1 : 0) << 16;
+    }
+    return 100 | 5 << 8 | 1 << 16 | 1 << 24;
+}
+static int mac_battery_read(void)
+{
+    CFTypeRef snapshot = IOPSCopyPowerSourcesInfo();
+    if (!snapshot) return -1;
+    CFArrayRef list = IOPSCopyPowerSourcesList(snapshot);
+    NSMutableArray *descriptions = list ? [NSMutableArray array] : nil;
+    if (list) for (CFIndex i = 0; i < CFArrayGetCount(list); ++i) {
+        CFDictionaryRef d = IOPSGetPowerSourceDescription(snapshot, CFArrayGetValueAtIndex(list, i));
+        if (!d) { descriptions = nil; break; }
+        [descriptions addObject:(__bridge NSDictionary *)d];
+    }
+    int value = tl_sensors_mac_battery(descriptions);
+    if (list) CFRelease(list);
+    CFRelease(snapshot);
+    return value;
+}
+#endif
 #if TARGET_OS_IOS
 static void battery_update(void)
 {
@@ -193,7 +236,13 @@ NAT(N_battery)
             [NSNotificationCenter.defaultCenter addObserverForName:n object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { (void)note; battery_update(); }];
     });
 #endif
-    jvalue v; v.j = 0; v.i = atomic_load(&g_battery); *ret = v;
+    jvalue v; v.j = 0;
+#if TARGET_OS_OSX
+    v.i = mac_battery_read();
+#else
+    v.i = atomic_load(&g_battery);
+#endif
+    *ret = v;
     return true;
 }
 

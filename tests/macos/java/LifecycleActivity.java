@@ -23,6 +23,7 @@ public final class LifecycleActivity extends Activity {
     private static void delay() { try { Thread.sleep(100); } catch (InterruptedException e) { throw new RuntimeException(e); } }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); owner = Thread.currentThread(); events |= 1;
+        HostEnvironmentChecks.run(this);
         if ("framework".equals(System.getenv("HUSK_JAVA_CASE"))) FrameworkChecks.run(this);
         if ("documents".equals(System.getenv("HUSK_JAVA_CASE"))) DocumentChecks.start(this);
         View view = new View(this) {
@@ -85,6 +86,7 @@ public final class LifecycleActivity extends Activity {
     @Override public void onResume() { callback(); paused = false; events |= 16; super.onResume(); }
     @Override public void onDestroy() {
         callback(); delay();
+        System.out.println("HUSK_GUEST_DESTROY_STDOUT");
         if ("destroy-failed".equals(System.getenv("HUSK_JAVA_CASE"))) throw new IllegalStateException("test onDestroy failure");
         events |= 32;
         getSharedPreferences("lifecycle", 0).edit().putInt("destroyed", 1).putInt("events", wrongThread ? -1 : events).apply();

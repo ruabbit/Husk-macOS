@@ -6,19 +6,24 @@ public class BatteryManager {
         BATTERY_PLUGGED_AC = 1, BATTERY_PLUGGED_USB = 2, BATTERY_PLUGGED_WIRELESS = 4, BATTERY_HEALTH_GOOD = 2;
     public static final String EXTRA_LEVEL = "level", EXTRA_SCALE = "scale", EXTRA_STATUS = "status", EXTRA_PLUGGED = "plugged", EXTRA_HEALTH = "health",
         EXTRA_PRESENT = "present", EXTRA_TEMPERATURE = "temperature", EXTRA_VOLTAGE = "voltage", EXTRA_TECHNOLOGY = "technology";
-    /** The phone's battery (husk.Sensors.battery): level 0-100, status, plugged; full and on power when it is not known. */
+    /** The host battery; unknown reads retain the compatibility fallback. */
     static int level() { int b = husk.Sensors.battery(); return b < 0 ? 100 : b & 0xff; }
     static int status() { int b = husk.Sensors.battery(); return b < 0 ? BATTERY_STATUS_FULL : (b >> 8) & 0xff; }
     static int plugged() { int b = husk.Sensors.battery(); return b < 0 ? 0 : (b >> 16) & 0xff; }
     public int getIntProperty(int id) { return id == BATTERY_PROPERTY_CAPACITY ? level() : id == BATTERY_PROPERTY_STATUS ? status() : 0; }
     public long getLongProperty(int id) { return getIntProperty(id); }
-    public boolean isCharging() { return status() == BATTERY_STATUS_CHARGING; }
+    public boolean isCharging() { int s = status(); return s == BATTERY_STATUS_CHARGING || s == BATTERY_STATUS_FULL; }
     /** ACTION_BATTERY_CHANGED's extras as the system's sticky broadcast carries them. */
     public static android.content.Intent huskStickyIntent() {
         android.content.Intent b = new android.content.Intent(android.content.Intent.ACTION_BATTERY_CHANGED);
-        b.putExtra(EXTRA_LEVEL, level()); b.putExtra(EXTRA_SCALE, 100); b.putExtra(EXTRA_STATUS, status()); b.putExtra(EXTRA_PLUGGED, plugged());
-        b.putExtra(EXTRA_PRESENT, true); b.putExtra(EXTRA_HEALTH, BATTERY_HEALTH_GOOD); b.putExtra(EXTRA_TEMPERATURE, 300); b.putExtra(EXTRA_VOLTAGE, 4000);
-        b.putExtra(EXTRA_TECHNOLOGY, "Li-ion");
+        int value = husk.Sensors.battery();
+        boolean present = value < 0 || (value & (1 << 24)) == 0;
+        b.putExtra(EXTRA_LEVEL, value < 0 ? 100 : value & 0xff); b.putExtra(EXTRA_SCALE, 100);
+        b.putExtra(EXTRA_STATUS, value < 0 ? BATTERY_STATUS_FULL : (value >> 8) & 0xff);
+        b.putExtra(EXTRA_PLUGGED, value < 0 ? 0 : (value >> 16) & 0xff);
+        b.putExtra(EXTRA_PRESENT, present); b.putExtra(EXTRA_HEALTH, BATTERY_HEALTH_GOOD);
+        b.putExtra(EXTRA_TEMPERATURE, present ? 300 : 0); b.putExtra(EXTRA_VOLTAGE, present ? 4000 : 0);
+        b.putExtra(EXTRA_TECHNOLOGY, present ? "Li-ion" : "");
         return b;
     }
     public long computeChargeTimeRemaining() { return -1; }

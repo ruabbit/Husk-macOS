@@ -44,6 +44,12 @@ add_library(SharedCore STATIC
 target_include_directories(SharedCore PUBLIC ${MAC}/SharedCore PRIVATE ${CLASSIC})
 target_link_libraries(SharedCore PUBLIC z "-framework CoreGraphics")
 
+add_executable(MacArchiveExtractTests tests/macos/ArchiveExtract.c)
+target_link_libraries(MacArchiveExtractTests PRIVATE SharedCore)
+add_test(NAME macos-archive-streaming COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/ArchiveStreaming.py
+    "$<TARGET_FILE:MacArchiveExtractTests>" "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(macos-archive-streaming PROPERTIES TIMEOUT 30)
+
 add_library(SharedLibrary STATIC
     ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/WebStorage.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
     ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/APKIcon.swift ${MAC}/SharedLibrary/SessionDiagnostics.swift
@@ -99,8 +105,14 @@ target_compile_options(GameActivityRuntime PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-
 target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv sqlite3 "-framework Foundation" "-framework Security"
     "-framework AudioToolbox" "-framework QuartzCore" "-framework Metal" "-framework AppKit"
     "-framework CoreText" "-framework ImageIO" "-framework WebKit" "-framework VideoToolbox"
-    "-framework CoreMedia" "-framework CoreVideo" "-framework Accelerate")
+    "-framework CoreMedia" "-framework CoreVideo" "-framework Accelerate" "-framework IOKit")
 add_library(NativeRuntime ALIAS GameActivityRuntime)
+
+add_executable(MacHostEnvironmentTests tests/macos/HostEnvironment.m ${MAC}/NativeRunner/MacDiagnostics.c)
+target_compile_options(MacHostEnvironmentTests PRIVATE -fobjc-arc)
+target_link_libraries(MacHostEnvironmentTests PRIVATE NativeRuntime)
+add_test(NAME macos-host-environment COMMAND MacHostEnvironmentTests)
+set_tests_properties(macos-host-environment PROPERTIES TIMEOUT 15)
 
 # The console ABI is staged independently until the real core's teardown and
 # packaging have passed. Test modules are never installed into Product.
@@ -380,7 +392,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -392,6 +404,11 @@ foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted
     add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
+endforeach()
+foreach(locale zh-Hans-CN fr-FR)
+    add_test(NAME java-lifecycle-locale-${locale} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
+        "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" normal -AppleLanguages "(${locale})")
+    set_tests_properties(java-lifecycle-locale-${locale} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
 endforeach()
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/KeyStoreTests/KeyStore.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/KeyStoreTests" keystore
@@ -582,7 +599,7 @@ endif()
 
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/PlayCases/ready
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_play_cases.py ${CMAKE_BINARY_DIR}/PlayCases
-    DEPENDS tests/macos/prepare_play_cases.py VERBATIM)
+    DEPENDS tests/macos/prepare_play_cases.py tests/macos/zip64_fixture.py VERBATIM)
 add_custom_target(PlayCases DEPENDS ${CMAKE_BINARY_DIR}/PlayCases/ready)
 add_executable(MacPlayTests tests/macos/PlaySupport.swift tests/macos/PlayLogin.swift ${MAC_PLAY_SOURCES})
 add_dependencies(MacPlayTests PlayCases)

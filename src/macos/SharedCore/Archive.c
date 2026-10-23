@@ -34,20 +34,14 @@ bool husk_archive_extract(const char *path, const char *name, const char *destin
     tl_zip zip;
     if (!tl_zip_open(&zip, path, error, capacity)) return false;
     const tl_zip_entry *entry = tl_zip_find(&zip, name);
-    const uint8_t *bytes = NULL; size_t size = 0; bool owned = false;
-    bool ok = entry && tl_zip_data(&zip, entry, (size_t)512 << 20, &bytes, &size, &owned, error, capacity);
+    bool ok = entry != NULL;
     int fd = -1;
     if (ok) { fd = open(destination, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600); ok = fd >= 0; }
-    size_t at = 0;
-    while (ok && at < size) {
-        ssize_t n = write(fd, bytes + at, size - at);
-        if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) ok = false; else at += (size_t)n;
-    }
+    if (ok) ok = tl_zip_write(&zip, entry, (size_t)512 << 20, fd, error, capacity);
     if (ok) ok = fsync(fd) == 0;
     if (fd >= 0 && close(fd) != 0) ok = false;
+    if (!ok && fd >= 0) unlink(destination); // only the file created by this call
     if (!ok && capacity && !error[0]) snprintf(error, capacity, "Entry missing, too large, or could not be written");
-    if (owned) free((void *)bytes);
     tl_zip_close(&zip);
     return ok;
 }

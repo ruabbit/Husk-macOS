@@ -53,6 +53,11 @@ import SharedLibrary
             let prefs = try String(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent(nativeActivity ? "data/shared_prefs/nativeboot.xml" : "data/shared_prefs/lifecycle.xml"), encoding: .utf8)
             try check(prefs.contains("i destroyed 1") && prefs.contains(nativeActivity ? "i events 262143" : "i events 63"), "real-input-callbacks-and-final-preferences-persisted")
             if !nativeActivity {
+                try check(prefs.contains("b host_environment true"), "packaged Java battery-clock-locale-identity checks completed")
+                let log = try String(contentsOf: paths.logs.appendingPathComponent(session.sessionID!).appendingPathComponent("stderr.log"), encoding: .utf8)
+                try check(log.contains("HUSK_GUEST_STDOUT_MARKER") && log.contains("HUSK_GUEST_STDERR_MARKER") && log.contains("HUSK_GUEST_DESTROY_STDOUT") && log.contains("guest-print"),
+                          "guest stdout/stderr and final destruction output retained in diagnostics")
+                try check(!session.events.contains { $0["event"] as? String == "guest-print" }, "guest JSON text is never a control event")
                 try check(prefs.contains("i controller_events 255") && prefs.contains("i controller_held 0"), "real-controller-device-axes-disconnect-focus-and-pause-callbacks")
             }
             print("PASS packaged Java session: \(paths.root.path)")

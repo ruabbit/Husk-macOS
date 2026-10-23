@@ -24,7 +24,7 @@ sources = [source] if web or keystore else [source, Path(__file__).parent/'java/
 if web:
     sources += sorted((Path(__file__).parent/'java/webkit').glob('*.java'))
 if not web and not keystore:
-    sources += [Path(__file__).parent/'java/MissingOptional.java', Path(__file__).parent/'java/unicode/例.java']
+    sources += [Path(__file__).parent/'java/MissingOptional.java', Path(__file__).parent/'java/unicode/例.java', Path(__file__).parent/'java/HostEnvironmentChecks.java']
 subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', *sources], check=True)
 if not web and not keystore:
     (output/'classes/missing/optional/MissingOptional.class').unlink()

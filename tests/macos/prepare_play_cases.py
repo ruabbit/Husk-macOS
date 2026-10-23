@@ -8,6 +8,7 @@ import struct
 import subprocess
 import sys
 import zipfile
+from zip64_fixture import force_zip64
 
 out = Path(sys.argv[1])
 out.mkdir(parents=True, exist_ok=True)
@@ -86,6 +87,7 @@ for bad in [False, True]:
         z.write(out/'base-v1.apk', 'base.apk')
         package = 'org.other.game' if bad else 'org.husk.playtest'
         z.writestr(f'Android/obb/{package}/main.1.{package}.obb', b'archived main resource')
+(out/'expanded-zip64.xapk').write_bytes(force_zip64((out/'expanded.xapk').read_bytes()))
 b = bytearray((out/'base-v1.apk').read_bytes()); b[50] ^= 1; (out/'tampered.apk').write_bytes(b)
 # Network-provided ZIP metadata and signing-block sizes must fail without traps.
 for n, b in [('short', b'PK'), ('overflow', b'\xff' * 80)]:

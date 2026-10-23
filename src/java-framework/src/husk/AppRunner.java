@@ -83,6 +83,11 @@ public final class AppRunner {
     private static boolean usesFactory() { return sFactory != android.app.AppComponentFactory.DEFAULT; }
 
     public static void run(String activityClass, String applicationClass) throws Exception {
+        // Android libcore reads RuntimeHooks, not user.timezone or the
+        // OpenJDK getSystemTimeZoneID native. Install before any app/provider.
+        Class.forName("dalvik.system.RuntimeHooks").getMethod("setTimeZoneIdSupplier", java.util.function.Supplier.class)
+            .invoke(null, (java.util.function.Supplier<String>) () -> Native.systemProperty("persist.sys.timezone"));
+        java.util.TimeZone.setDefault(null);
         android.webkit.MimeTypeMap.huskInstallDefault();
         KeyStoreProvider.install();
         Looper.prepareMainLooper();

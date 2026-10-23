@@ -111,7 +111,7 @@ static void *run(void *unused)
 }
 int main(int argc,char **argv)
 {
-    if(argc!=6)return 64;
+    if(argc!=6 && !(argc==8 && !strcmp(argv[6],"-AppleLanguages")))return 64;
     args=argv;mkdir(argv[4],0700);
     pthread_attr_t attr;pthread_attr_init(&attr);pthread_attr_setstacksize(&attr,256u<<20);
     pthread_t t;if(pthread_create(&t,&attr,run,NULL))return 1;

@@ -1,5 +1,15 @@
 # 审计发现
 
+## 2026-10-23 上游 bundle 与宿主环境
+
+- 最终代码默认 CTest 141/141（201.91 秒）、18 Mach-O/406 Java 资源包检查通过，CUA 单次启动唯一 build 17/PID 25881，AX/截图确认原有 11 个应用。新增功能与运行链路已验证；提交/远端 CI 仍在收尾。
+- NativeRunner.event 和 guest Java/native 输出原先共用 fd 1。新增真 DEX 的 println 导致监督器拒绝协议；临时改 Android Log 仅用于定位，最终恢复原始输出并修复实际通道：控制事件使用 CLOEXEC 独立 writer，guest stdout 转入既有有界诊断。最终复验包含 JSON 形状日志、onDestroy 最后输出与单次 storage-closed；协议校验未放宽。
+- Java 默认时区首轮得到 GMT/native Asia/Shanghai；补 user.timezone 无效。官方 Android libcore TimeZone.getDefaultRef 使用 RuntimeHooks supplier，再回退 /etc/timezone。现由 AppRunner 在 Application/provider 之前安装真实 supplier 并清缓存，保留 guest setDefault/清除覆盖。Java 默认 locale 由共享宿主属性初始化；中文 zh-Hans-CN/法文 fr-FR 仅用进程参数，不改系统偏好。
+- 本机 IOKit 快照是无内部电池桌面（packed=16844132，present=false），Asia/Shanghai / en-US。充电/放电/暂停充电/满电/0%/坏容量/UPS 排除有字典 fixture；MacBook 物理插拔尚未验收。Context7 IOKit 索引不足，补查本机 SDK 的 IOPowerSources.h/IOPSKeys.h 所有权和容量定义。
+- macOS 导入实际调用 SharedCore/Archive.c 与共享 tl_zip，原已支持 Zip64/deflate/OBB，但 deflate 分配整个输出。本轮改 64 KiB 流式写入和 CRC/完整长度/流结尾验证，保留单条 512 MiB/总量 4 GiB/50,000 条限制；失败只清理自己创建的文件。真实共享导入器验强制 Zip64 APK/OBB、库重开、多块不可压缩输入和 local data descriptor；没有真实大包/认证网络交付结论。
+- 首轮新增目标漏链接 MacDiagnostics 已补。失败日志保留：build-first、targeted-first、env-recheck、env-fixed；中途 17/17（15.84 秒）及输出隔离前默认 141/141（212.82 秒）不代替最终代码验证。最终 stdio/streaming 2/2（3.22 秒）后完整默认通过。5 个共享 C/Objective-C 文件 iOS 27 SDK/deployment 15 语法通过，只有命令行重复宏警告，不是完整 iOS 构建或真机证据。
+- upstream 5158e09、3b87cbc 共 2 提交/10 路径，origin 无外来提交；普通合并无冲突。引擎分类/TLUnityView/project.yml、CMake、资料库/Runner 输入暂停关闭、Store/登录、图形固定依赖核对没有其他增量。GitHub 当前无法解析 PR #82，不推断合并状态；前轮 CI 39705343544 仍 completed/success。
+
 ## 2026-10-22 单个 WebView 销毁
 
 - 最终默认 137/137（190.34 秒），其中 34 项 WebView（97.65 秒）；CUA 单次启动 build 16/PID 52520，AX/截图确认 11 个应用。54910cc 已推送并读回远端，CI 39705343544 completed/success，构建/包检查、34 项 hosted 核心回归（43.44 秒）和 P0 memory/core 通过。每日任务已更新，精确 prompt/时间/线程读回一致；最初断言误用了旧句式“禁止在没有相关修复时重复启动”，实际原文“没有相关修复时不重复启动这些失败样本”完整保留，未改变规则。

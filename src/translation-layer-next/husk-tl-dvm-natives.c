@@ -499,8 +499,12 @@ NAT(System_specialProperties)
     extern char g_dvm_boot_path[];
     char *bcp = malloc(strlen(g_dvm_boot_path) + 32);
     sprintf(bcp, "java.boot.class.path=%s", g_dvm_boot_path);
-    const char *v[] = { ud, "android.zlib.version=1.2.13", "android.openssl.version=OpenSSL 3.0", bcp, NULL };
-    *ret = L(string_array(v, 4));
+    // Locale initializes before AppRunner. Seed libcore from the same snapshot
+    // native code and Android SystemProperties see, including script tags.
+    const char *locale = tl_sysprop("persist.sys.locale");
+    char ul[128]; snprintf(ul, sizeof(ul), "user.locale=%s", locale ? locale : "en-US");
+    const char *v[] = { ud, "android.zlib.version=1.2.13", "android.openssl.version=OpenSSL 3.0", bcp, ul };
+    *ret = L(string_array(v, 5));
     free(bcp);
     return true;
 }

@@ -219,6 +219,14 @@ private final class FixtureHTTP: URLProtocol, @unchecked Sendable {
             try check(archived.expansions?.count == 1 &&
                       (try Data(contentsOf: archivePaths.game(archived.id).appendingPathComponent("obb/main.1.org.husk.playtest.obb"))) == Data("archived main resource".utf8),
                       "XAPK imports its OBB in the same installation transaction")
+            let zip64Paths = LibraryPaths(root: root.appendingPathComponent("Zip64OBB"))
+            let zip64Repository = try LibraryRepository(paths: zip64Paths, trustedFixtureHash: "none")
+            let zip64 = try await zip64Repository.importGame(cases.appendingPathComponent("expanded-zip64.xapk"))
+            try check(zip64.expansions == archived.expansions && zip64.digest == archived.digest,
+                      "Zip64 deflated APK and OBB import matches ordinary XAPK bytes and metadata")
+            let reopenedZip64 = try LibraryRepository(paths: zip64Paths, trustedFixtureHash: "none")
+            let zip64Games = try await reopenedZip64.games()
+            try check(zip64Games.first?.expansions == archived.expansions, "Zip64 OBB manifest survives repository reopen")
             try await refused("foreign-package archived OBB") { _ = try await archiveRepository.importGame(cases.appendingPathComponent("foreign-obb.xapk")) }
             try await refused("incomplete same-version replacement preserves OBB installation") {
                 _ = try await obbRepository.importAPKs(resources.apks, package: "org.husk.playtest", version: 1, title: "missing")

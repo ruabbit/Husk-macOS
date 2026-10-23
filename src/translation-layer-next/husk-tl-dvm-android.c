@@ -521,6 +521,14 @@ NAT(N_pickDocuments)
 }
 NAT(N_setOrientation) { (void)self; (void)ret; if (A.cfg.set_orientation) A.cfg.set_orientation(a[0].i); return true; }
 NAT(N_nightMode) { (void)self; (void)a; jvalue v; v.j = A.cfg.night_mode ? 1 : 0; *ret = v; return true; }
+NAT(N_systemProperty)
+{
+    (void)self;
+    const char *key = a[0].l ? tl_jni_string(a[0].l) : NULL;
+    const char *value = key ? tl_sysprop(key) : NULL;
+    *ret = L(value ? dvm_new_string_utf8(value) : NULL);
+    return true;
+}
 /* 24-hour time as the phone's region and Settings > General > Date & Time choose it: the locale's hour pattern ("j") has no am/pm */
 NAT(N_is24Hour)
 {
@@ -597,6 +605,7 @@ static const struct { const char *name, *sig; dvm_native_fn fn; } k_native[] = {
     { "insets", "()[I", N_insets },
     { "nightMode", "()Z", N_nightMode },
     { "is24Hour", "()Z", N_is24Hour },
+    { "systemProperty", "(Ljava/lang/String;)Ljava/lang/String;", N_systemProperty },
     { NULL, NULL, NULL },
 };
 

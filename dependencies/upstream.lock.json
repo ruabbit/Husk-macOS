@@ -2,31 +2,58 @@
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
   "previousRevision": "2df074b3083ce2913922995f2f99249f1498b554",
-  "integratedRevision": "2df074b3083ce2913922995f2f99249f1498b554",
-  "checkedOn": "2026-10-22",
-  "commitCount": 0,
-  "integration": "Both remotes fetched on 2026-10-22 with no new commits. upstream/main 2df074b remains an ancestor of fork main cc99757 and macOS; no merge or conflict. Direct WebView.destroy now saves before releasing Java plugins, drains JavaBridge/AppMain, and joins whole-session stop. AndroidX listener delivery/replies and errors are retained. Build 16 passed 137 default tests and bundle checks; exact Product CUA-launched once and main window verified.",
+  "integratedRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
+  "checkedOn": "2026-10-23",
+  "commitCount": 2,
+  "integration": "Fetched origin first; no new fork commits. Merged upstream 2df074b..3b87cbc (2 commits, 10 paths) normally into main 2c3af7a and macOS, without conflicts. macOS imports now stream and verify deflate/Zip64 APK/OBB; IOKit power snapshots and shared Java/native locale/timezone/identity are wired. NativeRunner guest stdout is isolated from control events. Build 17 passed final default tests and package checks, then exact Product was CUA-launched once and its main window verified. Push and current CI pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-push-pending",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
   },
   "candidate": {
     "version": "3.0.0",
-    "build": "16",
-    "defaultTests": 137,
-    "defaultTestSeconds": 190.34,
+    "build": "17",
+    "defaultTests": 141,
+    "defaultTestSeconds": 201.91,
     "bundleMachO": 18,
     "javaResources": 406,
-    "appSHA256": "b067f8f2ef4bd502bd7c680615d251f2ac17598ebf5226193be97dca0dbf32ec",
-    "nativeRunnerSHA256": "be8f521f82ba4a96ac7063cafa66c3fdc98bd593681f3c67d7459acd52262656",
-    "frameworkSHA256": "fd3b65fb0ea00e8feba909a4c91b15d8336f6d65201ec0e3ec5e45c191e4ecc6",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "CUA confirmed idle build 15/PID 18451 and quit normally. After tests, exact Product launched once as PID 52520; OS path, AX and screenshot confirmed the original 11-app home with visible icons. No user game or VM launched.",
-    "sourceRevision": "54910cce15f12f4a4def176010c7a04a1686f2d8",
+    "appSHA256": "e5f0f66eb8794a61a451e73c7c552f796cc60fcaafaefc3e322274c63bd53546",
+    "nativeRunnerSHA256": "00dcae150758f307e66ab0589105aa15487c228ec2e3db0807ee5cb1ba9e519a",
+    "frameworkSHA256": "49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707",
+    "deliveryStatus": "locally-verified-push-pending",
+    "gui": "Husk was already exited before building. Exact build 17 Product launched once through CUA as PID 25881; full OS path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
+    "sourceRevision": null,
     "ci": {
+      "statusAtLastCheck": "not-yet-pushed",
+      "conclusionAtLastCheck": null
+    }
+  },
+  "lastCheck": {
+    "upstreamNewCommits": 2,
+    "upstreamChangedPaths": 10,
+    "originNewCommits": 0,
+    "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15",
+    "macOSBaseRevision": "eebd24809cea94a2b57883f2f62d8940cece138a",
+    "macOSMergeRevision": "ef287c07669ecef3a92edccae317b14256c46f79",
+    "macOSRevision": null,
+    "macOSAdaptation": "IOKit battery and absent-battery desktop state; shared Java/native host locale and RuntimeHooks timezone; bounded Zip64/deflate APK/OBB streaming with integrity/ownership checks; guest stdout isolated from NativeRunner JSON control events.",
+    "defaultSuiteTests": 141,
+    "defaultTestSeconds": 201.91,
+    "targetedTests": 17,
+    "targetedTestSeconds": 15.84,
+    "finalStdioAndStreamingTests": 2,
+    "finalStdioAndStreamingSeconds": 3.22,
+    "candidateDependentTestsPending": 0,
+    "fullDefaultSuitePassed": true,
+    "newBundleVerified": true,
+    "newCandidateRestarted": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
+    "blocker": null,
+    "previousCI": {
       "run": 39705343544,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39705343544",
       "statusAtLastCheck": "completed",
@@ -37,38 +64,6 @@
       "hardware": "skipped",
       "hostedCoreTests": 34,
       "hostedCoreTestSeconds": 43.44
-    }
-  },
-  "lastCheck": {
-    "upstreamNewCommits": 0,
-    "upstreamChangedPaths": 0,
-    "originNewCommits": 0,
-    "mainRevision": "cc99757e65d3923851e4df383bef186c0d311cd5",
-    "macOSBaseRevision": "15c8f1b12fbbaeec8481a23fd99cbee8cc5d738a",
-    "macOSRevision": "54910cce15f12f4a4def176010c7a04a1686f2d8",
-    "macOSAdaptation": "Direct WebView destruction saves before JavaBridge/AppMain retirement; replacement views and session stop join correctly; AndroidX listeners/replies remain available while saving and errors reject storage receipts; closing blank documents no longer bootstrap application plugins.",
-    "defaultSuiteTests": 137,
-    "defaultTestSeconds": 190.34,
-    "webSuiteTests": 34,
-    "webSuiteTestSeconds": 97.65,
-    "candidateDependentTestsPending": 0,
-    "fullDefaultSuitePassed": true,
-    "newBundleVerified": true,
-    "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
-    "blocker": null,
-    "previousCI": {
-      "run": 39541085280,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39541085280",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "sourceRevision": "c54992447ec80e59de9fd995b3258c2a476e888d",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 34,
-      "hostedCoreTestSeconds": 42.14
     }
   },
   "forkContribution": {
@@ -130,7 +125,18 @@
       "Real authenticated Play OBB/PAD delivery and game resource use.",
       "Same-version expansion replacement and standalone OBB import need an installation transaction keyed by both APK and expansion generations.",
       "VM does not install OBB and rejects required expansions."
-    ]
+    ],
+    "streaming": "Shared C importer writes stored/deflated entries with a 64 KiB buffer and verifies local metadata, declared/actual size, compressed stream completion and CRC. Forced Zip64 APK/OBB import and repository reopen pass. Existing byte/count limits are unchanged; format support is not approval for larger imports."
   },
-  "idleExitPolicy": "User explicitly authorizes automatic termination of idle Husk after exact path/PID and absence of game/VM sessions are rechecked. Try normal quit; if unavailable or unresponsive, force quit only that idle Husk without asking. Never terminate an active game/VM or unrelated project process."
+  "idleExitPolicy": "User explicitly authorizes automatic termination of idle Husk after exact path/PID and absence of game/VM sessions are rechecked. Try normal quit; if unavailable or unresponsive, force quit only that idle Husk without asking. Never terminate an active game/VM or unrelated project process.",
+  "hostEnvironment": {
+    "status": "native-and-packaged-java-fixture-verified",
+    "battery": "IOKit internal power-source snapshots; charging/discharging/paused/full and explicit absent-battery desktop state, excluding UPS/accessories. One snapshot per sticky Intent.",
+    "java": "Host locale seeds libcore; AppRunner installs the real Android RuntimeHooks timezone supplier before application/provider startup. Native and Java properties share identity and environment values; guest timezone override/clear remains supported.",
+    "remaining": [
+      "Physical MacBook battery and power-adapter transitions.",
+      "Host timezone/locale changes during a running guest; current values are process-start snapshots.",
+      "Android compatibility identity is not device certification or Play Integrity evidence."
+    ]
+  }
 }

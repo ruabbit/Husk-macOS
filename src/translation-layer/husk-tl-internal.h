@@ -75,6 +75,7 @@ typedef struct tl_zip_entry {
     char    *name;
     uint16_t method;        /* 0 stored, 8 deflated */
     uint16_t flags;
+    uint32_t crc;
     uint64_t csize;
     uint64_t usize;
     uint64_t local_offset;
@@ -101,6 +102,11 @@ const tl_zip_entry *tl_zip_find(const tl_zip *z, const char *name);
 bool tl_zip_data(const tl_zip *z, const tl_zip_entry *e, size_t limit,
                  const uint8_t **out, size_t *out_len, bool *owned,
                  char *err, size_t errlen);
+
+/* Bounded extraction into a caller-owned file. Checks size, stream end and CRC;
+ * the caller must discard its unpublished destination on failure. */
+bool tl_zip_write(const tl_zip *z, const tl_zip_entry *e, size_t limit, int fd,
+                  char *err, size_t errlen);
 
 /* ------------------------------------------------------------------- ELF */
 

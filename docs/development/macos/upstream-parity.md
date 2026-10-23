@@ -1,5 +1,17 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-23：bundle 流式导入与 Mac 宿主环境，build 17
+
+上游 2df074b..3b87cbc 新增 5158e09（XAPK/OBB、deflate、Zip64）和 3b87cbc（电量、24 小时制、时区/语言、设备身份）。origin 无新增，普通合并 main=2c3af7a，再合回 macOS；没有冲突。对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake、资料库/Runner 分发、输入/暂停/关闭、Store/登录和图形构建，本次没有新引擎或图形 pin；原有能力保持，新增平台行为见下。
+
+- Mac 的 Sensors.battery 通过 IOKit 读取内部电源快照，区别充电、放电、暂停充电、满电和无电池桌面；排除 UPS/外设。BatteryManager 与 sticky Intent 复用该接口，sticky extras 从同一个快照生成。无电池桌面明确 present=false，温度/电压/化学类型不再伪装成电池；未知读取仍保留兼容回退。isCharging 包含充电和满电状态。
+- Java 24 小时格式直接使用上游 CoreFoundation 实现；语言从共享宿主属性注入 libcore 的 user.locale。Android 默认时区实际使用 RuntimeHooks supplier，因此在 Application/provider 之前安装 supplier，清掉旧缓存；Java SystemProperties 与 native 属性共用来源，保留 guest 临时覆盖和清除覆盖。宿主时区/语言为进程启动快照，运行中系统变更广播仍未接入。兼容 Android Build 身份一致不等于真实设备认证或 Play Integrity。
+- macOS 实际导入已经用共享 C ZIP 解析器支持 deflate、Zip64 和 OBB。本轮在该路径补 64 KiB 流式提取，校验本地记录、实际输出、压缩流结尾及 CRC；失败删除本次创建的未发布文件，既有文件/符号链接保留。复用既有 APK 签名/OBB 包名与摘要/安装事务及 Android OBB 路径映射。保持 512 MiB 单条、4 GiB 总量和 50,000 条目上限；Zip64 格式支持不代表允许超过这些限制。
+
+同轮真实 DEX 回归发现 guest System.out/native stdout 会污染 NativeRunner 控制通道，已拆分专用控制 writer 与 guest 诊断 fd，保留 JSON 严格校验及有界 stderr；最终打包 Java 验证原始 println、JSON 形状日志和 onDestroy 输出保留，日志不进入控制事件且正常关闭只发一次 storage-closed。
+
+针对性 17/17（15.84 秒）与 18 Mach-O/406 Java 资源包检查通过，包括强制 Zip64 的压缩 APK/OBB 资料库导入、库重开、CRC/长度/元数据拒绝、无覆盖清理、真实 DEX 的中文/法文/时区和打包 Java 的输入/失焦继续/暂停/正常关闭。最终输出隔离/流式复核 2/2（3.22 秒），最终默认 **141/141（201.91 秒）**；build 17 经 CUA 单次启动，PID **25881**，主窗口 AX/截图确认原有 11 个应用。来源/适配提交与远端 CI 仍待收尾，完整记录见 progress.md。MacBook 物理电源切换、真实大包/认证 Play 下载与 iOS 真机仍未验收。没有运行真实用户游戏或 Android VM。WebView 导航/Activity 替换保存等开放项继续保留；本轮优先接入新增上游功能，不把它们标为完成。
+
 ## 2026-10-22：单个 WebView 的保存与回收，build 16
 
 两远端 fetch 无新增，upstream/main=2df074b 仍是 main/macOS 祖先，main=cc99757；没有合并冲突。再次对照 TLReport.nativeEngine、TLUnityView、project.yml、macOS 的 CMake/能力判断/Runner、共享 PlayAPI/登录和固定图形依赖，没有新增引擎/Store/图形增量。

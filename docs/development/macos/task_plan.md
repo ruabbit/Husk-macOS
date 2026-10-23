@@ -1,5 +1,14 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-23 上游 bundle 与宿主环境
+
+- [x] 干净 eebd248 起步，无 Husk/Runner/本项目构建，其他项目 UTM 保留；origin 两条分支无新增。
+- [x] upstream 2df074b..3b87cbc 两提交/10 路径已普通合并至 main=2c3af7a，再合回 macOS=ef287c0；无冲突。
+- [x] Mac IOKit 电源、Java/原生一致的语言/时区/设备属性、ZIP64/deflate 有界流式导入已接入；补 guest stdout 与控制事件隔离。
+- [x] 最终代码默认 CTest 141/141（201.91 秒）、18 Mach-O/406 Java 资源包检查；唯一 build/macos/build 17，VM=ON 与缓存保留。
+- [x] CUA 单次启动当前 Product/PID 25881；完整路径、AX/截图确认原有 11 个应用。
+- [ ] 正常推送两分支、读回 SHA/本批 CI，更新最终来源与每日提示。
+
 ## 当前执行：2026-10-22 单个 WebView 销毁前保存
 
 - [x] 从干净 15c8f1b 开始，两个远端 fetch 无新增；upstream 2df074b 已是 main/macOS 祖先、来源锁一致，无冲突或外来提交。初始 index.lock 为已消失的临时刷新锁。

@@ -58,7 +58,7 @@ jobs:
         env:
           ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
         run: |
-          ctest --test-dir build/macos -R '^(core-|console-|macos-vm-controller$|java-runtime-|java-native-thread-|opensl-lifecycle$|macos-native-launch$|macos-text-input$|macos-document-picker$|android-jni-text$|macos-play-support$|macos-apk-icons$|macos-session-(diagnostics|guest-stop)$|macos-system-resources$)' --output-on-failure
+          ctest --test-dir build/macos -R '^(core-|console-|macos-vm-controller$|java-runtime-|java-native-thread-|opensl-lifecycle$|macos-native-launch$|macos-text-input$|macos-document-picker$|android-jni-text$|macos-play-support$|macos-archive-streaming$|macos-host-environment$|macos-apk-icons$|macos-session-(diagnostics|guest-stop)$|macos-system-resources$)' --output-on-failure
           ./scripts/test_macos_p0.sh --suite memory
           ./scripts/test_macos_p0.sh --suite core
       - name: Build evidence
