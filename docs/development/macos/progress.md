@@ -12,7 +12,7 @@
 
 唯一 build/macos 为 3.0.0/build 17，VM=ON、缓存保留。5 个共享 C/Objective-C 文件 iOS 27 SDK/deployment 15 语法通过，只有命令行重复宏警告；不是 iOS 完整构建/真机证据。本机实时电源为无内部电池桌面，语言 en-US/时区 Asia/Shanghai；中文和法文测试只使用进程参数，未修改系统偏好。MacBook 物理插拔、真实大包/Play 网络交付和游戏兼容仍待验。
 
-最终验证后通过 CUA 只启动一次当前 Product，PID **25881**；进程完整路径、AX 与截图确认首页原有 **11 个应用**及可见图标。App SHA-256 `e5f0f66eb8794a61a451e73c7c552f796cc60fcaafaefc3e322274c63bd53546`，NativeRunner `00dcae150758f307e66ab0589105aa15487c228ec2e3db0807ee5cb1ba9e519a`，framework DEX `49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707`。本轮来源/适配提交与远端 CI 待完成；前轮 CI 39705343544 已读回 success，不借用为 build 17 的证明。
+最终验证后通过 CUA 只启动一次当前 Product，PID **25881**；进程完整路径、AX 与截图确认首页原有 **11 个应用**及可见图标。App SHA-256 `e5f0f66eb8794a61a451e73c7c552f796cc60fcaafaefc3e322274c63bd53546`，NativeRunner `00dcae150758f307e66ab0589105aa15487c228ec2e3db0807ee5cb1ba9e519a`，framework DEX `49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707`。本轮源码 [aa2cdbf](https://github.com/ruabbit/Husk-macOS/commit/aa2cdbf925d67fb30b351e7f10db93947ab0e2a5) 与 main [2c3af7a](https://github.com/ruabbit/Husk-macOS/commit/2c3af7aa599f2ee4d68f6934c145b1ff04f14c15) 已正常原子推送，远端 SHA 读回一致。[CI 39884106041](https://github.com/ruabbit/Husk-macOS/actions/runs/39884106041) 已 **completed/success**：构建、包检查、**36 项 hosted 核心回归（42.59 秒）**与 P0 memory/core 通过；hardware job 跳过，不代表实体设备验收。每日任务已更新并精确读回，保持原聊天/每天 09:00/仅写自己仓库/空闲自动退出及原有保护边界。最后只补交文档与来源记录，不重复构建或启动候选。
 
 真实 WebView 导航/Activity 替换保存、跨源/HTTP 插件、实体 IME/手柄、Geode、Hole.io 关闭/存档、Egg Play 密钥、War/Clash、Play/VM/P6 继续开放。本轮没有启动这些游戏或 Android VM、修改用户 APK/存档/Android 磁盘、检查 USB 或向上游写入。PR #82 当前 GitHub 查询无法解析，不推断合并状态。
 

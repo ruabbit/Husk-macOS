@@ -5,10 +5,10 @@
   "integratedRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
   "checkedOn": "2026-10-23",
   "commitCount": 2,
-  "integration": "Fetched origin first; no new fork commits. Merged upstream 2df074b..3b87cbc (2 commits, 10 paths) normally into main 2c3af7a and macOS, without conflicts. macOS imports now stream and verify deflate/Zip64 APK/OBB; IOKit power snapshots and shared Java/native locale/timezone/identity are wired. NativeRunner guest stdout is isolated from control events. Build 17 passed final default tests and package checks, then exact Product was CUA-launched once and its main window verified. Push and current CI pending.",
+  "integration": "Fetched origin first; no new fork commits. Merged upstream 2df074b..3b87cbc (2 commits, 10 paths) normally into main 2c3af7a and macOS, without conflicts. macOS imports now stream and verify deflate/Zip64 APK/OBB; IOKit power snapshots and shared Java/native locale/timezone/identity are wired. NativeRunner guest stdout is isolated from control events. Build 17 passed final default tests and package checks, then exact Product was CUA-launched once and its main window verified. Both fork branches pushed normally and remote SHAs re-read; current source CI 39884106041 succeeded with build, package, 36 hosted core checks and P0 memory/core.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-push-pending",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
@@ -23,12 +23,20 @@
     "appSHA256": "e5f0f66eb8794a61a451e73c7c552f796cc60fcaafaefc3e322274c63bd53546",
     "nativeRunnerSHA256": "00dcae150758f307e66ab0589105aa15487c228ec2e3db0807ee5cb1ba9e519a",
     "frameworkSHA256": "49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707",
-    "deliveryStatus": "locally-verified-push-pending",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Husk was already exited before building. Exact build 17 Product launched once through CUA as PID 25881; full OS path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
-    "sourceRevision": null,
+    "sourceRevision": "aa2cdbf925d67fb30b351e7f10db93947ab0e2a5",
     "ci": {
-      "statusAtLastCheck": "not-yet-pushed",
-      "conclusionAtLastCheck": null
+      "run": 39884106041,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39884106041",
+      "sourceRevision": "aa2cdbf925d67fb30b351e7f10db93947ab0e2a5",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "hardware": "skipped",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hostedCoreTests": 36,
+      "hostedCoreTestSeconds": 42.59
     }
   },
   "lastCheck": {
@@ -38,7 +46,7 @@
     "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15",
     "macOSBaseRevision": "eebd24809cea94a2b57883f2f62d8940cece138a",
     "macOSMergeRevision": "ef287c07669ecef3a92edccae317b14256c46f79",
-    "macOSRevision": null,
+    "macOSRevision": "aa2cdbf925d67fb30b351e7f10db93947ab0e2a5",
     "macOSAdaptation": "IOKit battery and absent-battery desktop state; shared Java/native host locale and RuntimeHooks timezone; bounded Zip64/deflate APK/OBB streaming with integrity/ownership checks; guest stdout isolated from NativeRunner JSON control events.",
     "defaultSuiteTests": 141,
     "defaultTestSeconds": 201.91,
@@ -50,8 +58,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 39705343544,

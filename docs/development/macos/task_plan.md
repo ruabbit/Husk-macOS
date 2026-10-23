@@ -7,7 +7,9 @@
 - [x] Mac IOKit 电源、Java/原生一致的语言/时区/设备属性、ZIP64/deflate 有界流式导入已接入；补 guest stdout 与控制事件隔离。
 - [x] 最终代码默认 CTest 141/141（201.91 秒）、18 Mach-O/406 Java 资源包检查；唯一 build/macos/build 17，VM=ON 与缓存保留。
 - [x] CUA 单次启动当前 Product/PID 25881；完整路径、AX/截图确认原有 11 个应用。
-- [ ] 正常推送两分支、读回 SHA/本批 CI，更新最终来源与每日提示。
+- [x] 正常原子推送 main=2c3af7a 与 macOS 源码 aa2cdbf，远端 SHA 读回一致。
+- [x] 本批 CI 39884106041 completed/success：构建/包检查、36 项 hosted 核心回归（42.59 秒）和 P0 memory/core 通过。
+- [x] 来源/进度更新，每日提示精确读回；原聊天、每天 09:00、仅写自有仓库、空闲自动退出与所有原有约束保留。
 
 ## 当前执行：2026-10-22 单个 WebView 销毁前保存
 
