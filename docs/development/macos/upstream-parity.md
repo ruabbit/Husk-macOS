@@ -1,5 +1,15 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-24：同一 WebView 导航前保存，build 18
+
+两远端 fetch 均无新增，`upstream/main=3b87cbc` 已是本地 `main=2c3af7a` 的祖先，本轮没有重复合并或冲突。对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake、资料库/Runner 分发、输入/暂停/关闭、Store/登录和固定图形依赖，没有新的上游平台增量。
+
+Java 内嵌 WebView 现在在同一视图主文档被替换前执行独立的一次性保存阶段。reload、back、forward 和 Java `WebView.loadUrl` 都先等待旧文档的 pagehide/unload、Java 插件调用以及 `event.waitUntil`，保存成功才允许导航；`didCommitNavigation` 后重置状态。失败/超时取消导航并保留最终关闭失败标志。导航委托同时把 Android 的 `file:///android_asset/`、`file:///android_res/` 和 file URL 映射到 `huskapp://`，首屏 `about:blank` 不触发保存。页面脚本直接设置 file URL 的回调没有单独验收，因此不把它写成通过。
+
+新增真实 Java DEX 的 `navigation-save` / `navigation-rejected` 回归：Java `loadUrl` 换页前保存 localStorage、IndexedDB 和插件数据，换页后继续运行并在进程重开后恢复；永不完成的 `waitUntil` 会取消导航，Activity 保持运行且 host-stop 保持失败。WebView 组 **36/36（136.66 秒）**、重打包 Product 复核 **2/2（12.82 秒）**，默认 **CTest 143/143（207.93 秒）**，包校验 **18 个 arm64 Mach-O / 406 个 Java 资源**均通过。
+
+当前 build 18 的同一视图 Java `loadUrl` 链路已接入并有 fixture 证据；页面脚本直接 file URL、Activity replacement/recreate 的更多顺序、加载中文档、跨来源 frame、真实 HTTP 应用/第三方插件、未登记异步任务和 trusted unload 仍开放。构建/fixture/CI 不能替代真实第三方应用、真实游戏保存重开或实体设备验收。
+
 ## 2026-10-23：bundle 流式导入与 Mac 宿主环境，build 17
 
 上游 2df074b..3b87cbc 新增 5158e09（XAPK/OBB、deflate、Zip64）和 3b87cbc（电量、24 小时制、时区/语言、设备身份）。origin 无新增，普通合并 main=2c3af7a，再合回 macOS；没有冲突。对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake、资料库/Runner 分发、输入/暂停/关闭、Store/登录和图形构建，本次没有新引擎或图形 pin；原有能力保持，新增平台行为见下。
@@ -137,7 +147,7 @@ Java 内嵌 WebView 使用 `Saves/<id>/java-web-store.json`，数据归 NativeRu
 
 ## 后续开放项
 
-1. Java 内嵌 WebView：受控卸载前保存阶段已在 2026-10-20 接入，基础存储/组合关闭/删除及真 DEX 插件保存重开已有后台回归。最后 Activity/整栈主动关闭的顺序已在 2026-10-21 补齐，真 DEX 验证保存重开、重复请求、暂停和失败回执。2026-10-22 已接直接 WebView.destroy 的逐视图保存与 AndroidX 消息投递/回复。下一步是实际 HTTP 应用/插件的持久化、同视图导航和 Activity 替换/recreate 销毁前的自动保存、加载中文档与跨来源 frame 的受控保存，以及未登记异步任务的明确策略；不能把合成生命周期或 fixture 当作真实应用验收。通用 Java Thread.interrupt/等待唤醒、macOS 14 实机、网络取消超时与 WebKit 进程异常恢复仍开放，保留 worker 检查和失败回执。
+1. Java 内嵌 WebView：受控卸载前保存阶段已在 2026-10-20 接入，最后 Activity/整栈主动关闭和直接 WebView.destroy 的逐视图保存已接入；2026-10-24 又补同一视图主文档导航前保存，Java `loadUrl` 的 localStorage/IndexedDB/插件重开与拒绝/超时 sticky 失败已有真 DEX 回归。页面脚本直接 file URL 尚未单独验收。下一步是实际 HTTP 应用/插件的持久化、Activity replacement/recreate 销毁前的更多顺序、加载中文档与跨来源 frame 的受控保存，以及未登记异步任务的明确策略；不能把合成生命周期或 fixture 当作真实应用验收。通用 Java Thread.interrupt/等待唤醒、macOS 14 实机、网络取消超时与 WebKit 进程异常恢复仍开放，保留 worker 检查和失败回执。
 2. Geode：下载、配置、启动注入和存储关闭回归已进入 build 6。下一步使用独立存档验证真实 Geometry Dash、官方 Geode 发布包和模组，从设置开关、版本匹配下载到交互、保存重开；不要把自建 ELF 的通过当作这些外部程序已兼容。共享 GeodeUtils 的剪贴板、选文件/文件夹、openWebview、restartGame 仍继承上游的空实现/拒绝行为，需要实际使用证据后逐项适配。
 3. 真实应用：按独立数据逐个验首帧、交互、保存重开和所需插件；实体手柄、前台 IME、全屏多显示器也需实际设备/窗口证据。禁止在没有相关修复时重复启动已知崩溃样本。
 4. Egg：2026-10-18 已完成 Application/自定义 ClassLoader/provider/JNI/NativeActivity 桥、ContextImpl/LoadedApk 反射状态及 Android APK 安装路径映射。真实样本已记录 `Custom ClassLoader attached successfully`、`libpairipcore.so JNI_OnLoad -> 0x10006` 和成功打开 base.apk；最新阻塞为 `Encryption key not found in keystore`、绑定 `com.android.vending.securedatatransfer.IAntiTamperKeyTransferService` 失败。已出现游戏自带 Google Play 错误页，未进入游戏 ANativeActivity_onCreate，原先构造函数/PLT 的最终结果仍未知。最终 probe exit 0 与 Java 错误页正常关闭不能当作游戏通过。本地软件 AES/GCM 的 `setEntry(SecretKeyEntry, KeyProtection)`、用途/有效期/IV 检查和原子持久化已补齐，真实 DEX 跨进程回归通过；硬件包装密钥与真实 Play 下发服务仍缺。下一步核对合法安装的密钥下发及实际 Play Binder 环境，或完整 Play Android 对照环境；不得用假密钥/保护绕过/猜测地址补丁，不在缺少相关修复时重跑。详见 [Egg 启动调查与修复](2026-10-18_reverse-egg-startup-report.md)。

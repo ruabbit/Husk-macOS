@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-24：同一 WebView 导航前保存，build 18
+
+从 `codex/macos-p0=8c7b7c8` 开始，先核对工作区、远程和运行进程；`origin` 与 `upstream` fetch 均无新增，`upstream/main=3b87cbc` 已是本地 `main=2c3af7a` 的祖先，本轮没有重复合并或冲突。对照 TLReport.nativeEngine、TLUnityView、project.yml、macOS CMake/资料库/Runner、输入/暂停/关闭、Store/登录和固定图形依赖，没有新的上游平台增量。
+
+本轮推进 Java 内嵌 WebView 的同一视图主文档导航保存。`HuskWeb` 为每个文档维护独立的导航保存状态；主 frame 的 reload/back/forward 以及 Java `WebView.loadUrl` 在替换旧文档前先交付 `__huskPrepareClose()`，等待 pagehide/unload、Java 插件写入和 `event.waitUntil`，成功后才放行导航并在 `didCommitNavigation` 重置状态。失败或 6 秒超时取消导航并保持 `g_detach_failed`，最终 host-stop 不会伪造 `storage-closed`。`file:///android_asset/`、`file:///android_res/` 和一般 file URL 在导航委托中映射到 `huskapp://`，避免 macOS 直接查找 Android 路径；首屏 `about:blank` 不触发保存。页面脚本直接设置 file URL 的导航回调没有单独验收，不能写成已通过。
+
+真实 Java DEX 新增 `navigation-save` 与 `navigation-rejected`：前者通过 Java `loadUrl` 验证旧文档的 localStorage、IndexedDB 和 Java 插件写入，换页后继续运行并在真实进程重开后恢复；后者使用永不完成的 `event.waitUntil`，验证导航被取消、Activity 仍运行且最终 host-stop 失败。两项单独回归通过；含本轮场景的 WebView 组 **36/36（136.66 秒）**通过。重打包后的 Product 再复核两项 **2/2（12.82 秒）**。
+
+唯一 `build/macos` 原位更新为 **3.0.0 / build 18**，保留 VM=ON 与依赖缓存。默认 **CTest 143/143（207.93 秒）**通过；`scripts/verify_macos_bundle.py build/macos/Product/HuskMac.app --output build/macos/bundle-verification.json` 通过，包内 **18 个 arm64 Mach-O / 406 个 Java 资源**。最终 App SHA-256 为 `847efa488ba3e48706520eda91e56aa647ffa8117d416c642bdd984129ea9318`，NativeRunner 为 `8d904f1b632b732b97f21c8732e2a0418d49c6888125853506ad6781687fc1cf`，WebRunner 为 `8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074`，VMRunner 为 `b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a`，framework DEX 为 `49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707`。
+
+源码提交 [6d16dda](https://github.com/ruabbit/Husk-macOS/commit/6d16dda) 已在本地完成，文档与来源锁将在本节完成后提交并推送。CUA 只启动一次当前 Product，PID **39662**；精确可执行路径、AX 和截图确认主窗口、原有 **11 个应用**及可见图标。没有启动用户游戏或 Android VM，也没有触碰 VirtIO-XPDM/UTM、Telegram 构建、APK、存档、Android 磁盘或 USB 设备。
+
+同一视图页面脚本直接 file URL、Activity replacement/recreate 的更多顺序、加载中文档、跨来源 frame、真实 HTTP 应用/第三方插件、未登记异步任务与 trusted unload 继续开放；真实游戏正常销毁/存档重开、旧 Unity 实体 IME、实体手柄/前台窗口、Play/VM/P6、Egg/War/Clash/Hole.io 的既有阻塞也没有因 fixture 或 CTest 通过而改变。
+
 ## 2026-10-23：上游 bundle 与宿主环境，build 17
 
 从干净 eebd248 起步，Husk/本项目 Runner 与构建均已退出；其他项目 UTM/Telegram 构建保留。origin 无新增，upstream 新增 2df074b..3b87cbc 两提交/10 路径，普通合并 main=2c3af7a、macOS=ef287c0，无冲突。再次审计引擎/CMake/资料库/Runner 输入与暂停关闭、Play/登录、固定图形依赖，没有新引擎或图形 pin。

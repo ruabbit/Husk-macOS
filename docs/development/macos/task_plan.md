@@ -1,5 +1,13 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-24 同一 WebView 导航前保存
+
+- [x] 复核工作区、远端、来源锁与运行进程；origin/upstream 均无新增，Husk 本项目为空闲。
+- [x] 为同一 WebView 的主文档导航、reload/back/forward 和后续 `loadUrl` 接入一次性保存交接；保留 host-stop、Activity 替换、跨来源与加载中文档的边界。页面脚本直接 file URL 没有单独登记为通过。
+- [x] 在真实 Java DEX fixture 中验证成功导航保存、localStorage/IndexedDB 重开和拒绝/超时的 sticky 失败。
+- [x] 在唯一 `build/macos` 完成构建、针对性回归、默认 CTest、包检查和一次 Product 重启。
+- [x] 更新来源锁、parity、progress/findings，提交并推送 `origin/main` 与 `origin/codex/macos-p0`，读回远端 SHA；源码 `6d16dda` 与本轮交付文档已完成。
+
 ## 当前执行：2026-10-23 上游 bundle 与宿主环境
 
 - [x] 干净 eebd248 起步，无 Husk/Runner/本项目构建，其他项目 UTM 保留；origin 两条分支无新增。

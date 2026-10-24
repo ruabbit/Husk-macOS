@@ -1,5 +1,13 @@
 # 审计发现
 
+## 2026-10-24 同一 WebView 导航前保存
+
+- 两远端 fetch 无新增；`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，没有合并或冲突。对照上游引擎、CMake、资料库/Runner、输入/暂停/关闭、Store/登录与图形依赖，没有其他平台增量。
+- 同一 `HuskWeb` 的主文档导航现在有独立于最终 host-stop 的保存状态。导航前调用 `__huskPrepareClose()`，等待 pagehide/unload、Java 插件调用和 `event.waitUntil`，成功才允许替换；失败/6 秒超时取消导航并设置 sticky `g_detach_failed`。`didCommitNavigation` 重置该状态，首屏 `about:blank` 不保存。
+- Android `file:///android_asset/`、`file:///android_res/` 和一般 file URL 在导航委托映射到 `huskapp://`，避免 WebKit 在 macOS 文件系统查找 Android 路径。页面脚本直接设置 file URL 的导航没有独立可用回调证据；本轮只把真实 Java `WebView.loadUrl` 路径登记为通过。
+- `navigation-save` / `navigation-rejected` 真 DEX 分别验证换页前 localStorage、IndexedDB、Java 插件写入及进程重开恢复，以及永不完成的 `waitUntil` 取消导航、保留 Activity、最终关闭失败。WebView 回归组 36/36（136.66 秒）和重打包 Product 2/2（12.82 秒）通过；默认 CTest 143/143（207.93 秒）、18 arm64 Mach-O/406 Java 资源包检查通过。
+- 最终 Product 已以 `/Users/tanmy/Projects/Husk-macOS/build/macos/Product/HuskMac.app` 启动一次，PID 39662；AX/截图确认主窗口与 11 个应用。未启动用户游戏/Android VM，其他项目 QEMU/UTM 保留。真实 HTTP/第三方插件、Activity replacement/recreate 更多顺序、加载中文档、跨来源保存和实体设备/真实游戏验收仍未通过。
+
 ## 2026-10-23 上游 bundle 与宿主环境
 
 - 最终代码默认 CTest 141/141（201.91 秒）、18 Mach-O/406 Java 资源包检查通过，CUA 单次启动唯一 build 17/PID 25881，AX/截图确认原有 11 个应用。新增功能与运行链路已验证；源码 aa2cdbf 与 main 2c3af7a 已推送并读回；CI 39884106041 completed/success，36 项 hosted 核心回归（42.59 秒）、构建/包检查和 P0 memory/core 通过。
@@ -201,3 +209,10 @@
 - Apple 的 [`pressedMouseButtons` 文档](https://developer.apple.com/documentation/appkit/nsevent/pressedmousebuttons)明确表示它读取调用时的全局状态，与事件队列无关。排队的按下事件可能读到已松开的状态；现在按被接纳的 down/up 维护按钮，失焦清除，黑边内开始的按压不进入游戏。
 - 原生 NSEvent 工厂即使指定 right/other 类型，也会默认生成 buttonNumber 0。回归测试需在私有 CGEvent 副本上指定按钮；所有对象仅直接交给隐藏 GameView，不向系统投递。隐藏 NSWindow 的 sendEvent 没有触发 responder，不能把该测试夹具失败当成产品复现。
 - 当前回归直接覆盖正式 GameView 到 Android 输入边界；真实菜单操作另由 CUA 与用户手动点击验证。计数器、坐标换算和画面渲染本身都不证明可见点击可用。
+# 2026-10-24：同一 WebView 导航保存调查
+
+- 两个远端 fetch 成功且无新增；`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，来源锁仍对应 2026-10-23 的 `2df074b..3b87cbc` 交付。
+- 当前候选为 `build/macos/Product/HuskMac.app` 3.0.0/build 17；进程表没有 Husk、NativeRunner、WebRunner、VMRunner/QEMU 或本项目构建。VirtIO-XPDM 的 QEMU 与 Telegram 构建属于其他项目，不能处理。
+- `HuskWeb.prepareForHost` 通过 `__huskPrepareClose` 派发生命周期、等待 `event.waitUntil`、再由 JavaBridge/AppMain 排空；该路径会把视图标为已准备并用于最终销毁，不能直接复用在同一视图导航。
+- 导航代理当前只在 `apiLoad` 主文档路径直接放行，`loadUrl`、reload/back/forward 不会在允许导航前触发保存；需要单独的一次性 per-document preparation，允许新文档 commit 后重置状态。
+- 真实 DEX fixture 已有 `storage.html` 的 localStorage/IndexedDB 与 pagehide/unload 计数，可通过 `location.href='file:///android_asset/storage.html?next'` 验证同一 WebView 导航保存；失败场景使用永不完成的 `event.waitUntil`，应取消导航并在最终 host-stop 保持失败。
