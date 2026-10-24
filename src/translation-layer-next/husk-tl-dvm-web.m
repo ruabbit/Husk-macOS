@@ -264,6 +264,22 @@ static void cookies_put(NSArray<NSHTTPCookie *> *cs)
     }
 }
 
+/* Java's WebView maps Android asset/resource/file URLs to the private
+ * huskapp scheme before they reach the host. A page can initiate the same
+ * navigation itself (location.href, a link, or a form), so mirror that
+ * mapping in the WKNavigationDelegate instead of letting WebKit look for an
+ * /android_asset path on macOS. */
+static NSURL *host_url_for_file(NSURL *url)
+{
+    NSString *s = url.absoluteString ?: @"";
+    NSString *host = nil;
+    if ([s hasPrefix:@"file:///android_asset/"]) host = [@"huskapp://android_asset/" stringByAppendingString:[s substringFromIndex:22]];
+    else if ([s hasPrefix:@"file:///android_res/"]) host = [@"huskapp://android_res/" stringByAppendingString:[s substringFromIndex:20]];
+    else if ([s hasPrefix:@"file://"]) host = [@"huskapp://file" stringByAppendingString:[s substringFromIndex:7]];
+    else if ([s hasPrefix:@"file:/"]) host = [@"huskapp://file" stringByAppendingString:[s substringFromIndex:5]];
+    return host ? [NSURL URLWithString:host] : nil;
+}
+
 /* Installed before application scripts. The early capture gate lets the
  * controlled save phase deliver each lifecycle event once, then suppresses
  * WebKit's later unload delivery after Android has gone away. It is enabled
@@ -319,18 +335,31 @@ static NSString *bridge_js(void)
 @property (nonatomic) int wid;
 @property (nonatomic, strong) WKWebView *web;
 @property (nonatomic) bool apiLoad;            /* the next navigation is the app's own loadUrl: not offered to shouldOverrideUrlLoading */
+@property (nonatomic) BOOL documentLoaded;
 @property (nonatomic, strong) NSMutableArray<NSString *> *scripts;
 @property (nonatomic) bool edgeLinked;
 @property (nonatomic) BOOL closing;
 @property (nonatomic) BOOL prepareStarted, prepareFinished, prepareSucceeded;
+/* A document navigation has its own one-shot save stage. It must not reuse
+ * prepareStarted: that flag belongs to final host destruction and would make
+ * the replacement document permanently look like a closing WebView. */
+@property (nonatomic) BOOL navigationPrepareStarted, navigationPrepareFinished, navigationPrepareSucceeded;
+@property (nonatomic) BOOL navigationAllowing;
 @property (nonatomic) BOOL waitingForDestroyAck;
 @property (nonatomic, copy) void (^prepareCompletion)(BOOL);
+@property (nonatomic, copy) void (^navigationPrepareCompletion)(BOOL);
+@property (nonatomic, copy) void (^navigationDecision)(WKNavigationActionPolicy);
+@property (nonatomic, strong) NSURL *navigationRedirectURL;
 @property (nonatomic) WKNavigation *blankNavigation;
 @property (nonatomic, copy) void (^closeCompletion)(BOOL);
 - (void)closeForHost:(void (^)(BOOL))completion;
 - (void)completeClose:(BOOL)ok;
 - (void)prepareForHost:(void (^)(BOOL))completion;
 - (void)completePrepare:(BOOL)ok;
+- (void)prepareForNavigation:(void (^)(BOOL))completion;
+- (void)completeNavigationPrepare:(BOOL)ok;
+- (BOOL)hasSavableDocument;
+- (void)resetNavigationPreparation;
 @end
 
 @implementation HuskWeb
@@ -385,6 +414,10 @@ static NSString *bridge_js(void)
 {
     if (!_web) return;
     _closing = YES;
+    if (_navigationDecision) {
+        _navigationDecision(WKNavigationActionPolicyCancel);
+        _navigationDecision = nil;
+    }
     cancel_pending(_wid);
     [_web removeObserver:self forKeyPath:@"title"];
     [_web removeObserver:self forKeyPath:@"estimatedProgress"];
@@ -409,6 +442,14 @@ static NSString *bridge_js(void)
 - (void)closeForHost:(void (^)(BOOL))completion
 {
     if (_prepareCompletion) [self completePrepare:NO];
+    if (_navigationPrepareStarted && !_navigationPrepareFinished) {
+        /* A host stop racing a document navigation cannot claim that the
+         * document was saved twice. Leave the composite receipt failed. */
+        g_detach_failed = YES;
+    } else if (_navigationPrepareFinished) {
+        _prepareFinished = YES;
+        _prepareSucceeded = _navigationPrepareSucceeded;
+    }
     _closing = YES;
     _closeCompletion = completion;
     cancel_pending(_wid);
@@ -443,8 +484,66 @@ static NSString *bridge_js(void)
     if (!ok) g_detach_failed = YES;
     completion(ok);
 }
+- (void)completeNavigationPrepare:(BOOL)ok
+{
+    void (^completion)(BOOL) = _navigationPrepareCompletion;
+    if (!completion) return;
+    _navigationPrepareCompletion = nil;
+    _navigationPrepareFinished = YES;
+    _navigationPrepareSucceeded = ok;
+    if (!ok) g_detach_failed = YES;
+    completion(ok);
+}
+- (BOOL)hasSavableDocument
+{
+    if (!g_host_store || !_documentLoaded || !_web.URL.absoluteString.length) return NO;
+    return ![_web.URL.absoluteString isEqualToString:@"about:blank"];
+}
+- (void)resetNavigationPreparation
+{
+    _navigationAllowing = NO;
+    _navigationPrepareStarted = NO;
+    _navigationPrepareFinished = NO;
+    _navigationPrepareSucceeded = NO;
+}
+- (void)prepareForNavigation:(void (^)(BOOL))completion
+{
+    if (!g_host_store || ![self hasSavableDocument]) { completion(YES); return; }
+    if (_navigationPrepareFinished) { completion(_navigationPrepareSucceeded); return; }
+    if (_navigationPrepareCompletion || _navigationPrepareStarted) { completion(NO); return; }
+    if (!_web || _closing || _prepareStarted) { completion(NO); return; }
+    _navigationPrepareStarted = YES;
+    _navigationPrepareCompletion = [completion copy];
+    cancel_pending_except_bridge(_wid, YES);
+    __weak HuskWeb *weak = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 6 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        HuskWeb *h = weak;
+        if (h.navigationPrepareCompletion) {
+            tl_log_line("javaapp: WebView navigation save stage timed out");
+            [h completeNavigationPrepare:NO];
+        }
+    });
+    [_web setAllMediaPlaybackSuspended:YES completionHandler:^{
+        HuskWeb *h = weak;
+        if (!h.navigationPrepareCompletion) return;
+        [h.web callAsyncJavaScript:@"return await window.__huskPrepareClose();" arguments:@{} inFrame:nil inContentWorld:WKContentWorld.pageWorld
+            completionHandler:^(id result, NSError *error) {
+                HuskWeb *h = weak;
+                if (!h.navigationPrepareCompletion) return;
+                if (error) tl_log_line("javaapp: WebView navigation save stage failed: %s", error.localizedDescription.UTF8String);
+                [h completeNavigationPrepare:!error && [result isKindOfClass:NSNumber.class] && [result boolValue]];
+            }];
+    }];
+}
 - (void)prepareForHost:(void (^)(BOOL))completion
 {
+    if (_navigationPrepareStarted && !_navigationPrepareFinished) { g_detach_failed = YES; completion(NO); return; }
+    if (_navigationPrepareFinished) {
+        _prepareFinished = YES;
+        _prepareSucceeded = _navigationPrepareSucceeded;
+        completion(_prepareSucceeded);
+        return;
+    }
     if (_prepareFinished) { completion(_prepareSucceeded); return; }
     if (_prepareCompletion) {
         // A whole-session stop can join a direct WebView.destroy in progress.
@@ -499,12 +598,45 @@ static NSString *bridge_js(void)
 {
     if (_closing) { decide([act.request.URL.absoluteString isEqual:@"about:blank"] ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel); return; }
     if (g_host_preparing || _prepareStarted) { decide(WKNavigationActionPolicyCancel); return; }
-    NSURL *u = act.request.URL;
+    NSURL *requestedURL = act.request.URL;
+    NSURL *redirectURL = host_url_for_file(requestedURL);
+    NSURL *u = redirectURL ?: requestedURL;
     NSString *scheme = u.scheme.lowercaseString ?: @"";
     bool main = act.targetFrame == nil || act.targetFrame.isMainFrame;
     if (!act.targetFrame) {                             /* target=_blank / window.open: Android loads it in this view */
         decide(WKNavigationActionPolicyCancel);
-        [w loadRequest:act.request];
+        [w loadRequest:[NSURLRequest requestWithURL:u]];
+        return;
+    }
+    /* The first load starts from WebKit's about:blank document and has
+     * nothing to save. Every later main-frame navigation, including Android's
+     * loadUrl/reload/back/forward paths, must finish the old document's
+     * one-shot save stage before WebKit replaces it. */
+    if (main && _apiLoad && ![self hasSavableDocument]) {
+        _apiLoad = false;
+        if (redirectURL) { decide(WKNavigationActionPolicyCancel); [w loadRequest:[NSURLRequest requestWithURL:redirectURL]]; }
+        else decide(WKNavigationActionPolicyAllow);
+        return;
+    }
+    if (!main && redirectURL) { decide(WKNavigationActionPolicyCancel); [w loadRequest:[NSURLRequest requestWithURL:redirectURL]]; return; }
+    if (main && g_host_store && [self hasSavableDocument] && !_navigationAllowing) {
+        if (_navigationDecision || _navigationPrepareStarted || _navigationPrepareFinished) { decide(WKNavigationActionPolicyCancel); return; }
+        _navigationDecision = [decide copy];
+        _navigationRedirectURL = redirectURL;
+        __weak HuskWeb *weak = self;
+        [self prepareForNavigation:^(BOOL ok) {
+            HuskWeb *h = weak;
+            void (^pending)(WKNavigationActionPolicy) = h.navigationDecision;
+            NSURL *redirect = h.navigationRedirectURL;
+            h.navigationDecision = nil;
+            h.navigationRedirectURL = nil;
+            if (!pending) return;
+            if (!ok || h.closing || g_host_preparing) { pending(WKNavigationActionPolicyCancel); return; }
+            h.navigationAllowing = YES;
+            h.apiLoad = false;
+            if (redirect) { pending(WKNavigationActionPolicyCancel); [h.web loadRequest:[NSURLRequest requestWithURL:redirect]]; }
+            else pending(WKNavigationActionPolicyAllow);
+        }];
         return;
     }
     if (_apiLoad && main) { _apiLoad = false; decide(WKNavigationActionPolicyAllow); return; }
@@ -516,9 +648,14 @@ static NSString *bridge_js(void)
                         act.navigationType == WKNavigationTypeLinkActivated ? @"1" : @"0", act.request.HTTPMethod ?: @"GET", web ? @"1" : @"0" ]);
 }
 - (void)webView:(WKWebView *)w didStartProvisionalNavigation:(WKNavigation *)n { emit(@"s", _wid, @[ w.URL.absoluteString ?: @"" ]); }
-- (void)webView:(WKWebView *)w didCommitNavigation:(WKNavigation *)n { emit(@"m", _wid, @[ w.URL.absoluteString ?: @"" ]); [self history]; }
+- (void)webView:(WKWebView *)w didCommitNavigation:(WKNavigation *)n {
+    _documentLoaded = YES;
+    [self resetNavigationPreparation];
+    emit(@"m", _wid, @[ w.URL.absoluteString ?: @"" ]); [self history];
+}
 - (void)webView:(WKWebView *)w didFinishNavigation:(WKNavigation *)n {
     if (_closing) { if (n == _blankNavigation) [self completeClose:YES]; return; }
+    [self resetNavigationPreparation];
     [self history]; emit(@"f", _wid, @[ w.URL.absoluteString ?: @"" ]);
 }
 - (void)failed:(NSError *)e
@@ -528,8 +665,8 @@ static NSString *bridge_js(void)
     NSString *url = [e.userInfo[NSURLErrorFailingURLStringErrorKey] description] ?: _web.URL.absoluteString ?: @"";
     emit(@"E", _wid, @[ [NSString stringWithFormat:@"%ld", (long)e.code], e.localizedDescription ?: @"", url ]);
 }
-- (void)webView:(WKWebView *)w didFailNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else [self failed:e]; }
-- (void)webView:(WKWebView *)w didFailProvisionalNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else [self failed:e]; }
+- (void)webView:(WKWebView *)w didFailNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else { _navigationAllowing = NO; [self failed:e]; } }
+- (void)webView:(WKWebView *)w didFailProvisionalNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else { _navigationAllowing = NO; [self failed:e]; } }
 - (void)webViewWebContentProcessDidTerminate:(WKWebView *)w { if (g_host_store) g_detach_failed = YES; [self completePrepare:NO]; if (_closing) [self completeClose:NO]; else emit(@"g", _wid, @[]); }
 
 /* dialogs and the bridge */

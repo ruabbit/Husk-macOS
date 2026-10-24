@@ -74,6 +74,7 @@ public final class WebStorageActivity extends Activity {
         @JavascriptInterface public void armLateDestroy() { lateBridgeDestroy = true; }
         @JavascriptInterface public int generation() { return getIntent().getIntExtra("generation", 0); }
         @JavascriptInterface public void closeOnPause() { finishOnPause = true; }
+        @JavascriptInterface public void navigate() { web.loadUrl("file:///android_asset/storage.html?next"); }
         @JavascriptInterface public void close(String mode) {
             // Let the JavaScript call return before the Activity starts closing.
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {

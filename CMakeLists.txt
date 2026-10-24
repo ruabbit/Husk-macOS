@@ -461,7 +461,8 @@ target_link_libraries(MacJavaWebSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacJavaWebSessionTests PackageMac JavaWebFixture)
 foreach(case persistence legacy destroy-failed identity late-bridge save-bridge save-paused save-rejected save-promise-rejected save-script-failed save-timeout child-save cross-origin-save
     guest-finish guest-affinity guest-affinity-stack guest-duplicate guest-paused guest-rejected guest-timeout guest-destroy-failed guest-replace-first guest-replace-last guest-child
-    view-destroy view-only view-duplicate view-paused view-rejected view-plugin-failed view-timeout view-stop-race view-message view-message-failed)
+    view-destroy view-only view-duplicate view-paused view-rejected view-plugin-failed view-timeout view-stop-race view-message view-message-failed
+    navigation-save navigation-rejected)
     add_test(NAME macos-java-web-${case} COMMAND MacJavaWebSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk" "${CMAKE_BINARY_DIR}/TestResults" ${case})
     set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)
 endforeach()

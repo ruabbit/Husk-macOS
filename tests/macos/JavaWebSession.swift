@@ -141,6 +141,37 @@ import SharedLibrary
                     try check(try await evaluate("nativeSave.previous()") as? Int == 2, "per-view Java save survives process reopen")
                     try await stop()
                 }
+            } else if scenario == "navigation-save" || scenario == "navigation-rejected" {
+                let rejected = scenario == "navigation-rejected"
+                let handler = rejected
+                    ? "nativeSave.store();e.waitUntil(new Promise(()=>{}));"
+                    : "nativeSave.store();e.waitUntil(new Promise(resolve=>setTimeout(resolve,1500)).then(()=>persist('from-navigation')).then(()=>nativeSave.store()));"
+                try check(try await evaluate("typeof nativeSave.store==='function' && typeof nativeSave.navigate==='function' && typeof persist==='function'") as? Bool == true, "real Java bridge and Web storage are available before navigation")
+                _ = try await evaluate("addEventListener('pagehide',e=>{\(handler)});true")
+                _ = try await evaluate("nativeSave.navigate();true")
+                if rejected {
+                    try await Task.sleep(for: .seconds(7))
+                    try check(session.state == "running", "rejected navigation remains in the existing Activity")
+                    let current = try await evaluate("location.search") as? String ?? ""
+                    try check(current != "?next", "timed out navigation is cancelled before replacing the document")
+                    try await stop(success: false)
+                } else {
+                    var navigated = false
+                    for _ in 0..<200 {
+                        if try await evaluate("window.fixtureReady===true && location.search==='?next'", optional: true) as? Bool == true { navigated = true; break }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    try check(navigated && session.state == "running", "same WebView navigation commits after the old save stage")
+                    let state = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(state["local"] as? String == "from-navigation" && state["indexed"] as? String == "from-navigation", "navigation preserves localStorage and IndexedDB before document replacement")
+                    try check(try await evaluate("localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('unloadCount')==='1'") as? Bool == true, "navigation delivers the old document lifecycle once")
+                    try check(preferences(save).contains("i bridge_calls 2"), "navigation waits for both Java plugin writes")
+                    try await stop()
+                    try await start(repository, imported, paths)
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(restored["local"] as? String == "from-navigation" && restored["indexed"] as? String == "from-navigation", "navigation save survives a real process reopen")
+                    try await stop()
+                }
             } else if scenario.hasPrefix("guest-") {
                 if scenario == "guest-replace-first" || scenario == "guest-replace-last" {
                     _ = try await evaluate("nativeSave.replace(\(scenario == "guest-replace-first" ? "true" : "false"));true")
