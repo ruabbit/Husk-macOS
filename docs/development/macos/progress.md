@@ -10,7 +10,7 @@
 
 唯一 `build/macos` 原位更新为 **3.0.0 / build 18**，保留 VM=ON 与依赖缓存。默认 **CTest 143/143（207.93 秒）**通过；`scripts/verify_macos_bundle.py build/macos/Product/HuskMac.app --output build/macos/bundle-verification.json` 通过，包内 **18 个 arm64 Mach-O / 406 个 Java 资源**。最终 App SHA-256 为 `847efa488ba3e48706520eda91e56aa647ffa8117d416c642bdd984129ea9318`，NativeRunner 为 `8d904f1b632b732b97f21c8732e2a0418d49c6888125853506ad6781687fc1cf`，WebRunner 为 `8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074`，VMRunner 为 `b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a`，framework DEX 为 `49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707`。
 
-源码提交 [6d16dda](https://github.com/ruabbit/Husk-macOS/commit/6d16dda) 已在本地完成，文档与来源锁将在本节完成后提交并推送。CUA 只启动一次当前 Product，PID **39662**；精确可执行路径、AX 和截图确认主窗口、原有 **11 个应用**及可见图标。没有启动用户游戏或 Android VM，也没有触碰 VirtIO-XPDM/UTM、Telegram 构建、APK、存档、Android 磁盘或 USB 设备。
+源码提交 [6d16dda](https://github.com/ruabbit/Husk-macOS/commit/6d16dda) 与交付文档提交 [3389c93](https://github.com/ruabbit/Husk-macOS/commit/3389c93) 已正常推送，远端 SHA 已读回一致。Actions [40065200939](https://github.com/ruabbit/Husk-macOS/actions/runs/40065200939) 已 **completed/success**：构建、包检查和 **36 项 hosted 核心回归（46.68 秒）**通过；hardware job 为 skipped，不代表实体设备、电源、IME 或手柄验收。CUA 只启动一次当前 Product，PID **39662**；精确可执行路径、AX 和截图确认主窗口、原有 **11 个应用**及可见图标。没有启动用户游戏或 Android VM，也没有触碰 VirtIO-XPDM/UTM、Telegram 构建、APK、存档、Android 磁盘或 USB 设备。
 
 同一视图页面脚本直接 file URL、Activity replacement/recreate 的更多顺序、加载中文档、跨来源 frame、真实 HTTP 应用/第三方插件、未登记异步任务与 trusted unload 继续开放；真实游戏正常销毁/存档重开、旧 Unity 实体 IME、实体手柄/前台窗口、Play/VM/P6、Egg/War/Clash/Hole.io 的既有阻塞也没有因 fixture 或 CTest 通过而改变。
 

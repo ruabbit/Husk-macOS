@@ -27,16 +27,16 @@
     "gui": "Exact build 18 Product launched once through CUA as PID 39662; full path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
     "sourceRevision": "6d16dda7d1b136f251d1d032c39b33666c46bf06",
     "ci": {
-      "run": null,
-      "url": null,
-      "sourceRevision": "6d16dda7d1b136f251d1d032c39b33666c46bf06",
-      "statusAtLastCheck": "not-started",
-      "conclusionAtLastCheck": null,
-      "hardware": "not-run",
-      "statusAtDelivery": "not-run",
-      "conclusionAtDelivery": null,
-      "hostedCoreTests": null,
-      "hostedCoreTestSeconds": null
+      "run": 40065200939,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40065200939",
+      "sourceRevision": "3389c9397d2cfda4bdac35928201591916581682",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "hardware": "skipped",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hostedCoreTests": 36,
+      "hostedCoreTestSeconds": 46.68
     },
     "webRunnerSHA256": "8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a"
@@ -76,7 +76,19 @@
       "hostedCoreTestSeconds": 43.44
     },
     "finalNavigationTests": 2,
-    "finalNavigationTestSeconds": 12.82
+    "finalNavigationTestSeconds": 12.82,
+    "ci": {
+      "run": 40065200939,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40065200939",
+      "sourceRevision": "3389c9397d2cfda4bdac35928201591916581682",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "hardware": "skipped",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hostedCoreTests": 36,
+      "hostedCoreTestSeconds": 46.68
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",

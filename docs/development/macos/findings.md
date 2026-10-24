@@ -6,7 +6,7 @@
 - 同一 `HuskWeb` 的主文档导航现在有独立于最终 host-stop 的保存状态。导航前调用 `__huskPrepareClose()`，等待 pagehide/unload、Java 插件调用和 `event.waitUntil`，成功才允许替换；失败/6 秒超时取消导航并设置 sticky `g_detach_failed`。`didCommitNavigation` 重置该状态，首屏 `about:blank` 不保存。
 - Android `file:///android_asset/`、`file:///android_res/` 和一般 file URL 在导航委托映射到 `huskapp://`，避免 WebKit 在 macOS 文件系统查找 Android 路径。页面脚本直接设置 file URL 的导航没有独立可用回调证据；本轮只把真实 Java `WebView.loadUrl` 路径登记为通过。
 - `navigation-save` / `navigation-rejected` 真 DEX 分别验证换页前 localStorage、IndexedDB、Java 插件写入及进程重开恢复，以及永不完成的 `waitUntil` 取消导航、保留 Activity、最终关闭失败。WebView 回归组 36/36（136.66 秒）和重打包 Product 2/2（12.82 秒）通过；默认 CTest 143/143（207.93 秒）、18 arm64 Mach-O/406 Java 资源包检查通过。
-- 最终 Product 已以 `/Users/tanmy/Projects/Husk-macOS/build/macos/Product/HuskMac.app` 启动一次，PID 39662；AX/截图确认主窗口与 11 个应用。未启动用户游戏/Android VM，其他项目 QEMU/UTM 保留。真实 HTTP/第三方插件、Activity replacement/recreate 更多顺序、加载中文档、跨来源保存和实体设备/真实游戏验收仍未通过。
+- 最终 Product 已以 `/Users/tanmy/Projects/Husk-macOS/build/macos/Product/HuskMac.app` 启动一次，PID 39662；AX/截图确认主窗口与 11 个应用。Actions 40065200939 completed/success，构建/包检查和 36 项 hosted 核心回归（46.68 秒）通过，hardware job skipped。未启动用户游戏/Android VM，其他项目 QEMU/UTM 保留。真实 HTTP/第三方插件、Activity replacement/recreate 更多顺序、加载中文档、跨来源保存和实体设备/真实游戏验收仍未通过。
 
 ## 2026-10-23 上游 bundle 与宿主环境
 

@@ -8,7 +8,7 @@ Java 内嵌 WebView 现在在同一视图主文档被替换前执行独立的一
 
 新增真实 Java DEX 的 `navigation-save` / `navigation-rejected` 回归：Java `loadUrl` 换页前保存 localStorage、IndexedDB 和插件数据，换页后继续运行并在进程重开后恢复；永不完成的 `waitUntil` 会取消导航，Activity 保持运行且 host-stop 保持失败。WebView 组 **36/36（136.66 秒）**、重打包 Product 复核 **2/2（12.82 秒）**，默认 **CTest 143/143（207.93 秒）**，包校验 **18 个 arm64 Mach-O / 406 个 Java 资源**均通过。
 
-当前 build 18 的同一视图 Java `loadUrl` 链路已接入并有 fixture 证据；页面脚本直接 file URL、Activity replacement/recreate 的更多顺序、加载中文档、跨来源 frame、真实 HTTP 应用/第三方插件、未登记异步任务和 trusted unload 仍开放。构建/fixture/CI 不能替代真实第三方应用、真实游戏保存重开或实体设备验收。
+当前 build 18 的同一视图 Java `loadUrl` 链路已接入并有 fixture 证据；页面脚本直接 file URL、Activity replacement/recreate 的更多顺序、加载中文档、跨来源 frame、真实 HTTP 应用/第三方插件、未登记异步任务和 trusted unload 仍开放。Actions [40065200939](https://github.com/ruabbit/Husk-macOS/actions/runs/40065200939) 已 completed/success，构建/包检查和 36 项 hosted 核心回归（46.68 秒）通过，hardware job skipped；这些结果不能替代真实第三方应用、真实游戏保存重开或实体设备验收。
 
 ## 2026-10-23：bundle 流式导入与 Mac 宿主环境，build 17
 
