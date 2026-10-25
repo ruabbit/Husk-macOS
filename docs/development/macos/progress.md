@@ -1,5 +1,15 @@
 # 审计进度
 
+## 2026-10-25：导航许可与文档保存边界
+
+从干净 `codex/macos-p0=72f272a` 开始，origin/upstream fetch 均无新增，`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，没有重复合并或冲突。逐项核对上游引擎分类、TLUnityView/project.yml、macOS CMake/资料库/Runner、输入/暂停/双侧关闭、Store/登录和固定图形依赖，既有接入保持。前轮 build 18 的 CI 40065200939 已重新确认 success。初始空闲 Product/PID 39662 只有 11 应用首页，通过 CUA ⌘Q 正常退出，随后进程消失；没有用户游戏/本项目 VM，不需要强制结束。
+
+修复页面导航绕过 Java WebViewClient、同文档锚点错误保存、旧导航计时器误伤下一文档的边界；已批准的主 frame 重放保留请求属性，文件子 frame 拒绝不再提升为主页面。`didFinish` 不再抹掉已开始的下一次保存；导航期间插件异常即使被 catch 也取消导航并保留最终关闭失败。新文档恢复媒体许可，没有播放音频。真 DEX 新测试发现 WebKit 后退缓存恢复已封闭的文档（persisted=true、closing=true）；现在只对确认封闭且宿主已成功保存的 GET 历史项原位 reload，普通历史加载不重复请求。非 GET 历史项在进入前拒绝并向 Java 报错，保留当前页面，不自动重发 POST。
+
+旧 build 18 的导航拦截反例失败（7.55 秒）；首轮新用例存在 timer/reload 断言时序问题，改成明确文档 token 与 timer 进度后收紧验证。之后 history back 的真实缓存问题经过状态诊断定位并修复。失败证据保留在 `current-upstream-navigation-baseline.log`、`-first.log`、`-second.log` 和 `-diagnostic.log`。最终针对性 **9/9（35.40 秒）**通过；唯一 build/macos 的 **3.0.0/build 19** 完整构建成功，包检查 **18 arm64 Mach-O/406 Java 资源**通过，iOS 27 SDK/deployment 15 共享 Web host 语法检查通过（既有弃用警告）。最终默认 **CTest 150/150（224.02 秒）**通过，其中 **43 项 Java WebView（129.23 秒）**。候选 18 个二进制逐项复核与新鲜包报告一致后，经 CUA 单次启动当前 Product/PID **99255**；AX/截图显示原有 **11 个应用**及图标。启动首次读取为异步加载中的 0 个应用，随后同一实例加载完成为 11，没有重复启动。源码 [963975e](https://github.com/ruabbit/Husk-macOS/commit/963975e1026f5f188a4c0f7a26f8178c4e1791b4) 已正常推送，两分支远端 SHA 已读回一致，main 保持 2c3af7a。Actions [40150135195](https://github.com/ruabbit/Husk-macOS/actions/runs/40150135195) 已 **completed/success**，源码 head 为 963975e：构建、包检查、**36 项 hosted 核心回归（48.66 秒）**和 P0 memory/core 通过；hardware job skipped，不代表实体设备验收。来源锁和本轮交付文档随文档提交保存，最终远端 SHA 在交付时再次读回。
+
+下一轮先补隔离 HTTP DEX 的重定向/历史请求次数、cookie/插件保存重开和导航/host-stop 交叠回归，再验合法真实应用。仍开放：真实 HTTP/第三方插件持久化、Activity replacement/recreate 更多顺序、加载中/跨源页面保存、导航与 host-stop 交叠、页面脚本直接 file URL、非 GET 历史的应用显式恢复；原有真实游戏保存重开、旧 Unity 实体 IME、手柄/前台窗口、Play/VM/P6 等边界保持。未启动用户游戏/Android VM，未操作 USB、用户 APK/存档或 Android 磁盘，也未向上游写入任何内容。
+
 ## 2026-10-24：同一 WebView 导航前保存，build 18
 
 从 `codex/macos-p0=8c7b7c8` 开始，先核对工作区、远程和运行进程；`origin` 与 `upstream` fetch 均无新增，`upstream/main=3b87cbc` 已是本地 `main=2c3af7a` 的祖先，本轮没有重复合并或冲突。对照 TLReport.nativeEngine、TLUnityView、project.yml、macOS CMake/资料库/Runner、输入/暂停/关闭、Store/登录和固定图形依赖，没有新的上游平台增量。

@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "2df074b3083ce2913922995f2f99249f1498b554",
+  "previousRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
   "integratedRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
-  "checkedOn": "2026-10-24",
-  "commitCount": 2,
-  "integration": "Fetched origin first; origin and upstream had no new commits. upstream/main 3b87cbc was already an ancestor of fork main 2c3af7a, so no merge or conflict was repeated. Added same-WebView main-document navigation save in the macOS WebKit host and Java DEX fixture: Java loadUrl waits for lifecycle/plugin/event.waitUntil persistence before replacement; failed or timed-out navigation remains sticky. Build 18 passed default tests, package checks, and one exact Product CUA launch; page-script direct file URL navigation remains separately unverified.",
+  "checkedOn": "2026-10-25",
+  "commitCount": 0,
+  "integration": "Fetched origin then upstream; neither remote had new commits. upstream/main 3b87cbc is already an ancestor of fork main 2c3af7a; no merge or conflict. Continued macOS WebView navigation saving: Android policy before saving, fragments, per-document deadlines, caught plugin failures, sealed GET history restoration and refusal to resubmit saved non-GET history. Build 19 passed the full default suite and fresh package checks, then was launched once through CUA.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
   "deliveryStatus": "verified-and-pushed",
@@ -15,47 +15,47 @@
   },
   "candidate": {
     "version": "3.0.0",
-    "build": "18",
-    "defaultTests": 143,
-    "defaultTestSeconds": 207.93,
+    "build": "19",
+    "defaultTests": 150,
+    "defaultTestSeconds": 224.02,
     "bundleMachO": 18,
     "javaResources": 406,
-    "appSHA256": "847efa488ba3e48706520eda91e56aa647ffa8117d416c642bdd984129ea9318",
-    "nativeRunnerSHA256": "8d904f1b632b732b97f21c8732e2a0418d49c6888125853506ad6781687fc1cf",
+    "appSHA256": "3f3d7bd55d9d962c6f9982f2138703a103b0d0c6749c9bcf1994ba47754e4ae0",
+    "nativeRunnerSHA256": "8a98c155d585a702b55c88238b9eed532211d1609cfe130a4e3703515388b58d",
+    "webRunnerSHA256": "8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074",
+    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
     "frameworkSHA256": "49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707",
+    "sourceRevision": "963975e1026f5f188a4c0f7a26f8178c4e1791b4",
     "deliveryStatus": "verified-and-pushed",
-    "gui": "Exact build 18 Product launched once through CUA as PID 39662; full path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
-    "sourceRevision": "6d16dda7d1b136f251d1d032c39b33666c46bf06",
+    "gui": "Exact build 19 Product launched once through CUA as PID 99255; full executable path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
     "ci": {
-      "run": 40065200939,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40065200939",
-      "sourceRevision": "3389c9397d2cfda4bdac35928201591916581682",
+      "run": 40150135195,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40150135195",
+      "sourceRevision": "963975e1026f5f188a4c0f7a26f8178c4e1791b4",
       "statusAtLastCheck": "completed",
       "conclusionAtLastCheck": "success",
-      "hardware": "skipped",
       "statusAtDelivery": "completed",
       "conclusionAtDelivery": "success",
+      "hardware": "skipped",
       "hostedCoreTests": 36,
-      "hostedCoreTestSeconds": 46.68
-    },
-    "webRunnerSHA256": "8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a"
+      "hostedCoreTestSeconds": 48.66
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 0,
     "upstreamChangedPaths": 0,
     "originNewCommits": 0,
     "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15",
-    "macOSBaseRevision": "eebd24809cea94a2b57883f2f62d8940cece138a",
-    "macOSMergeRevision": "ef287c07669ecef3a92edccae317b14256c46f79",
-    "macOSRevision": "6d16dda7d1b136f251d1d032c39b33666c46bf06",
-    "macOSAdaptation": "Same-WebView main-document navigation save for Java loadUrl/reload/back/forward; file URL to huskapp remapping; Java DEX localStorage/IndexedDB/plugin reopen and sticky navigation rejection/timeout.",
-    "defaultSuiteTests": 143,
-    "defaultTestSeconds": 207.93,
-    "targetedTests": 36,
-    "targetedTestSeconds": 136.66,
-    "finalStdioAndStreamingTests": 0,
-    "finalStdioAndStreamingSeconds": 0,
+    "macOSBaseRevision": "72f272a33c547d059692d4b85cf1c5dac8acec5c",
+    "macOSMergeRevision": null,
+    "macOSRevision": "963975e1026f5f188a4c0f7a26f8178c4e1791b4",
+    "macOSAdaptation": "WebView policy ordering, same-document fragments, isolated navigation deadlines and caught-plugin failure, sealed GET history reload in place and non-GET history refusal before retirement. Seven new real DEX scenarios.",
+    "defaultSuiteTests": 150,
+    "defaultTestSeconds": 224.02,
+    "targetedTests": 9,
+    "targetedTestSeconds": 35.4,
+    "javaWebTests": 43,
+    "javaWebTestSeconds": 129.23,
     "candidateDependentTestsPending": 0,
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
@@ -64,20 +64,6 @@
     "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
-      "run": 39705343544,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/39705343544",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "sourceRevision": "54910cce15f12f4a4def176010c7a04a1686f2d8",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 34,
-      "hostedCoreTestSeconds": 43.44
-    },
-    "finalNavigationTests": 2,
-    "finalNavigationTestSeconds": 12.82,
-    "ci": {
       "run": 40065200939,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40065200939",
       "sourceRevision": "3389c9397d2cfda4bdac35928201591916581682",
@@ -88,6 +74,18 @@
       "conclusionAtDelivery": "success",
       "hostedCoreTests": 36,
       "hostedCoreTestSeconds": 46.68
+    },
+    "ci": {
+      "run": 40150135195,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40150135195",
+      "sourceRevision": "963975e1026f5f188a4c0f7a26f8178c4e1791b4",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 36,
+      "hostedCoreTestSeconds": 48.66
     }
   },
   "forkContribution": {
@@ -115,19 +113,19 @@
     "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
   },
   "javaWebIntegration": {
-    "status": "host-guest-direct-view-and-same-view-navigation-save-packaged-fixture-verified",
+    "status": "host-guest-view-and-navigation-save-packaged-fixture-verified",
     "marker": "Saves/<id>/java-web-store.json",
     "receipt": "Native lifecycle=destroyed plus web.lifecycle=detached, web.storage=webkit-managed and host/guest-stop web.saveStage=prepared; explicit unused when no WebKit data store was opened. Failed preparation remains sticky through final detach.",
     "legacyPolicy": "Existing native data without a marker retains the old package UUID. Clearing that save drops its binding and uses a fresh UUID on next launch; shared legacy WebKit bytes are retained to protect other libraries.",
     "remaining": [
-      "Real HTTP application/plugin persistence; page-script direct file URL navigation and broader Activity replacement/recreate ordering; unprepared/loading documents. No fsync claim for system WebKit databases.",
-      "Cross-origin child frame saving is unsupported and fails closed. Synthetic lifecycle has isTrusted=false; event.waitUntil is a Husk extension. Unregistered asynchronous work and code requiring trusted browser unload are not guaranteed.",
+      "Real HTTP application/third-party plugin persistence; broader Activity replacement/recreate ordering; page-script direct file URLs; file subframe remapping; loading documents and navigation/history restoration racing host stop. No fsync claim for system WebKit databases.",
+      "Cross-origin child frame saving is unsupported and fails closed. Synthetic lifecycle has isTrusted=false; event.waitUntil is a Husk extension. Unregistered asynchronous work and trusted browser unload are not guaranteed. Saved non-GET history requires explicit application recovery.",
       "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit process failure recovery and network-cancellation timeouts remain unverified."
     ],
     "saveStage": "Host-requested close or final Activity guest finish keeps Java bridge dispatch alive, suspends media, blocks new navigation and ordinary recurring tasks, delivers synthetic lifecycle once, awaits event.waitUntil promises and same-origin child frames within six seconds, then drains immediate AppMain messages before Android destruction. Later actual unload is gated; late bridge calls and all observed save failures reject storage-closed.",
     "guestFinish": "Opt-in AppMain callback defers final Activity/whole-stack affinity destruction to host saving and existing phase 10 teardown. Recheck after already-queued launches; preserve child results, deduplicate requests and reject Activity launches/recreate after handoff. NULL callback keeps old host behavior. Process.killProcess still fails lifecycle acknowledgement. A valid stopping event starts the existing 30-second deadline without heartbeat extensions.",
     "perViewDestroy": "Direct WebView.destroy closes normal APIs but retains Java plugin/resource dispatch until a bounded save, JavaBridge/AppMain acknowledgement and WebKit detach. Other views continue. Whole-session preparation waits retiring views; all observed failures stay sticky. AndroidX listeners execute on AppMain before reply, and ReplyProxy can reply during preparation. Empty detach documents do not rerun application user scripts.",
-    "navigation": "Main-frame reload/back/forward and Java WebView.loadUrl wait for the old document's pagehide/unload, Java plugin calls and event.waitUntil before replacement. A successful save resets after didCommitNavigation; failure or six-second timeout cancels navigation and remains sticky through host-stop. Android asset/resource/file URLs are remapped to huskapp. The fixture verifies Java loadUrl; page-script direct file URL navigation is not separately accepted."
+    "navigation": "App-initiated loadUrl and allowed main-frame navigation wait for the prior document save. WebViewClient policy runs before irreversible saving; vetoes, custom URLs and same-document fragments preserve the live document. Save timeouts/callbacks belong to a document generation; caught Java plugin errors cancel navigation and fail final storage acknowledgement. Confirmed sealed GET history documents reload in their original list position without duplicate lifecycle; ordinary history loads are not repeated. Saved non-GET history is rejected before leaving the current page, without automatic POST resubmission. Unsupported file subframe remaps are rejected instead of replacing the main page. Nine packaged DEX navigation tests and the full suite pass."
   },
   "sourceVersion": "3.0.0",
   "legacyUnityTextInput": {
@@ -163,5 +161,12 @@
       "Host timezone/locale changes during a running guest; current values are process-start snapshots.",
       "Android compatibility identity is not device certification or Play Integrity evidence."
     ]
+  },
+  "lastUpstreamMerge": {
+    "date": "2026-10-23",
+    "previousRevision": "2df074b3083ce2913922995f2f99249f1498b554",
+    "integratedRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
+    "commitCount": 2,
+    "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15"
   }
 }

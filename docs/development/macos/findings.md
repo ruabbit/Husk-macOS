@@ -1,5 +1,17 @@
 # 审计发现
 
+## 2026-10-25 导航许可、保存代际与历史恢复
+
+- origin/upstream fetch 均无新增，upstream/main=3b87cbc 已是 main=2c3af7a 祖先；从干净 72f272a 起步，没有合并或冲突。再次核对 TLReport.nativeEngine/TLUnityView/project.yml 与 CMake、Models/NativeLaunch、MacNativeDrivers/NativeRunner 的分发、输入/暂停/关闭，Store 共用 PlayAPI 和固定 ANGLE/MoltenVK 1.4.2 均保持现有接入。前轮 CI 40065200939 重新确认 success。
+- 新 DEX 反例证实 build 18 的页面导航绕过 Java shouldOverrideUrlLoading（7.55 秒未收到 ?blocked，日志 current-upstream-navigation-baseline.log，fixture 973C22CA）。修复为先询问应用许可，再做不可逆保存；拦截/自定义 URL/同文档锚点保留原页、timer 和插件。显式加载不带 fragment 的基准 URL 仍保存并替换；文件子 frame 不再被提升为主页面，尚未实现的映射明确拒绝。
+- 导航计时器和异步回调现在绑定文档代际，仅 didCommit 重置；didFinish 不再抹掉下一次保存。连续 2.2 秒和 4.5 秒保存都通过，旧 6 秒期限不会终止后者。导航保存期间 Java 插件异常即使被页面 catch，也会取消导航并使最终 storage-closed 失败；新文档解除媒体挂起，没有播放测试音频。
+- 真 history 回归暴露 WebKit 缓存恢复已封闭文档：原 URL 的 fixtureReady=true、pageshow.persisted=true、__huskClosing=true（current-upstream-navigation-diagnostic.log / 83F1C284）。现在记录宿主已成功保存的历史项；确认恢复的是封闭 GET 文档才原位 reload，普通历史加载不重复请求，并抑制封闭旧页 pageshow。非 GET 历史在进入前拒绝并报 Java 错误，当前页面继续且可正常关闭，POST 请求计数保持 1。记录随 WebKit 历史列表淘汰。
+- 首轮新用例 5/7（29.24 秒）有 timer/reload 断言时序问题，改为等待 timer 与文档 token，没有降低保存条件。第二轮 7/8（52.33 秒）揭示上述真实 history 问题；诊断后修复。失败日志 -first/-second/-diagnostic 保留。最终针对性 **9/9（35.40 秒）**通过，新增七项；最终默认 **150/150（224.02 秒）**通过，其中 **43 项 Java WebView（129.23 秒）**。
+- 唯一 Product 为 **3.0.0/build 19**，保留 VM=ON 与依赖缓存；新鲜 --output 包报告检查 **18 arm64 Mach-O/406 Java 资源**，启动前再次逐项核对 18 个二进制 hash 一致。共享 Web host 的 iOS 27 SDK/deployment 15 语法检查通过，仅有既有 javaScriptEnabled 弃用警告，不是完整 iOS 构建/真机结论。
+- CUA 确认旧 Product/PID 39662 空闲后 ⌘Q；随后的 AX procNotFound 和系统进程检查证明正常退出。新 Product 只启动一次，PID **99255**，完整路径、AX/截图确认首页原有 **11 个应用**和图标。源码 **963975e** 已正常推送，两分支远端 SHA 已读回。Actions **40150135195** 已 completed/success（head=963975e）：构建、包检查、36 项 hosted 核心回归（48.66 秒）和 P0 memory/core 通过；hardware job skipped。
+- Context7 Apple WebKit 文档确认导航许可在尝试加载前发生、可异步但必须完成 decisionHandler，targetFrame=nil 是新窗口。来源 https://developer.apple.com/documentation/webkit/wknavigationdelegate/webview(_:decidepolicyfor:decisionhandler:)-2ni62 和 /webkit/wknavigationaction/targetframe。Android Context7 索引未命中该 API，未冒充取得文档；Java 语义由仓库实现和真实 DEX 验证。
+- 真实 HTTP/第三方插件、Activity replacement/recreate 更多顺序、加载中/跨源文档、导航与 host-stop 交叠、页面脚本 file URL 和非 GET 历史显式恢复继续开放。真实游戏、IME/手柄、Play/VM/P6 边界保持。没有启动用户游戏/Android VM、触碰用户 APK/存档/磁盘/USB，也没有向上游新建或更新任何 PR/issue/comment。
+
 ## 2026-10-24 同一 WebView 导航前保存
 
 - 两远端 fetch 无新增；`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，没有合并或冲突。对照上游引擎、CMake、资料库/Runner、输入/暂停/关闭、Store/登录与图形依赖，没有其他平台增量。
