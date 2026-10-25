@@ -141,20 +141,117 @@ import SharedLibrary
                     try check(try await evaluate("nativeSave.previous()") as? Int == 2, "per-view Java save survives process reopen")
                     try await stop()
                 }
-            } else if scenario == "navigation-save" || scenario == "navigation-rejected" {
-                let rejected = scenario == "navigation-rejected"
-                let handler = rejected
+            } else if ["navigation-policy-blocked", "navigation-policy-allowed", "navigation-fragment", "navigation-sequential", "navigation-history", "navigation-post-history"].contains(scenario) {
+                func awaitPage(_ query: String) async throws {
+                    var ready = false
+                    for _ in 0..<240 {
+                        if try await evaluate("window.fixtureReady===true && location.search==='\(query)' && !window.__huskClosing", optional: true) as? Bool == true { ready = true; break }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    if !ready { print("Navigation diagnostic: \(try await evaluate("({url:location.href,ready:window.fixtureReady,closing:window.__huskClosing,persisted:window.fixturePageshowPersisted,hide:localStorage.getItem('pagehideCount'),token:window.navigationDocument})", optional: true))") }
+                    try check(ready && session.state == "running", "replacement document is loaded, live and still in the Activity")
+                }
+                func installSave(_ value: String, delay: Int = 20) async throws {
+                    _ = try await evaluate("addEventListener('pagehide',e=>{nativeSave.store();e.waitUntil(new Promise(r=>setTimeout(r,\(delay))).then(()=>persist('\(value)')).then(()=>nativeSave.store()));});true")
+                }
+                if scenario == "navigation-post-history" {
+                    _ = try await evaluate("nativeSave.postPage();true")
+                    try await awaitPage("?posted")
+                    try check(preferences(save).contains("i post_requests 1"), "fixture main document was loaded by POST once")
+                    try await installSave("post-save")
+                    _ = try await evaluate("location.href='?after-post';true")
+                    try await awaitPage("?after-post")
+                    _ = try await evaluate("nativeSave.history('back');true")
+                    try await session.wait(until: { preferences(save).contains("navigation_error") || !session.active }, timeout: 5)
+                    try check(try await evaluate("location.search==='?after-post' && !window.__huskClosing && nativeSave.previous()===2") as? Bool == true, "non-GET history is rejected before retiring the current document")
+                    try await stop()
+                    try check(preferences(save).contains("i post_requests 1"), "history restore never resubmits the POST request")
+                    try await repository.deleteSave(imported.id, javaHelper: helper)
+                    print("PASS Java WebView \(scenario): \(root.path)")
+                    return
+                } else if scenario == "navigation-policy-blocked" {
+                    _ = try await evaluate("window.ticks=0;setInterval(()=>ticks++,25);location.href='?blocked';true")
+                    try await session.wait(until: { preferences(save).contains("?blocked") || !session.active }, timeout: 5)
+                    try check(preferences(save).contains("b navigation_main true"), "Java WebViewClient receives main-document policy before saving")
+                    for _ in 0..<40 {
+                        if try await evaluate("ticks>0") as? Bool == true { break }
+                        try await Task.sleep(for: .milliseconds(25))
+                    }
+                    try check(try await evaluate("location.search==='' && !window.__huskClosing && !localStorage.getItem('pagehideCount') && ticks>0 && nativeSave.previous()===0") as? Bool == true, "vetoed navigation leaves lifecycle, timers and Java plugins live")
+                    _ = try await evaluate("location.href='husk-fixture:intercept';true")
+                    try await session.wait(until: { preferences(save).contains("husk-fixture:intercept") || !session.active }, timeout: 5)
+                    try check(try await evaluate("!window.__huskClosing && !localStorage.getItem('pagehideCount') && nativeSave.previous()===0") as? Bool == true, "custom URL handling does not seal the current page")
+                } else if scenario == "navigation-fragment" {
+                    _ = try await evaluate("window.ticks=0;setInterval(()=>ticks++,25);location.hash='section';true")
+                    try await Task.sleep(for: .milliseconds(200))
+                    try check(try await evaluate("location.hash==='#section' && !window.__huskClosing && !localStorage.getItem('pagehideCount') && ticks>0 && nativeSave.previous()===0") as? Bool == true, "fragment navigation preserves the same document and its running plugins")
+                    _ = try await evaluate("nativeSave.history('back');true")
+                    try await Task.sleep(for: .milliseconds(200))
+                    try check(try await evaluate("location.hash==='' && !window.__huskClosing && !localStorage.getItem('pagehideCount')") as? Bool == true, "fragment history back does not unload the document")
+                    _ = try await evaluate("nativeSave.history('forward');true")
+                    try await Task.sleep(for: .milliseconds(200))
+                    try check(try await evaluate("location.hash==='#section' && !window.__huskClosing && !localStorage.getItem('pagehideCount')") as? Bool == true, "fragment history forward does not unload the document")
+                    try await installSave("fragment-replaced")
+                    _ = try await evaluate("window.navigationDocument='before-base';nativeSave.loadBase();true")
+                    for _ in 0..<160 {
+                        if try await evaluate("!window.navigationDocument && window.fixtureReady===true && location.hash===''", optional: true) as? Bool == true { break }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    try check(try await evaluate("!window.navigationDocument && !window.__huskClosing && localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('value')==='fragment-replaced'") as? Bool == true, "explicit base-URL load after a fragment still saves and replaces the document")
+                } else {
+                    try await installSave("policy-save", delay: scenario == "navigation-sequential" ? 2200 : 20)
+                    _ = try await evaluate("location.href='?allowed';true")
+                    try await awaitPage("?allowed")
+                    try check(preferences(save).contains("?allowed") && preferences(save).contains("i navigation_calls 1"), "allowed page navigation reaches Java policy exactly once")
+                    let saved = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(saved["local"] as? String == "policy-save" && saved["indexed"] as? String == "policy-save", "allowed navigation waits for Java plugins and both Web stores")
+                    if scenario == "navigation-sequential" {
+                        try await installSave("second-save", delay: 4500)
+                        _ = try await evaluate("location.href='?second';true")
+                        try await awaitPage("?second")
+                        let second = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                        try check(second["indexed"] as? String == "second-save" && preferences(save).contains("i bridge_calls 4"), "previous document deadline cannot abort the next document save")
+                    } else if scenario == "navigation-history" {
+                        try await installSave("reload-save")
+                        _ = try await evaluate("window.navigationDocument='before-reload';nativeSave.history('reload');true")
+                        // Observe the committed new document, not the old page before its policy callback.
+                        for _ in 0..<160 {
+                            if try await evaluate("localStorage.getItem('pagehideCount')==='2' && !window.navigationDocument && !window.__huskClosing && window.fixtureReady===true", optional: true) as? Bool == true { break }
+                            try await Task.sleep(for: .milliseconds(50))
+                        }
+                        try check(try await evaluate("localStorage.getItem('pagehideCount')==='2' && !window.navigationDocument && !window.__huskClosing") as? Bool == true, "reload saves the old page once and installs a live replacement")
+                        try await installSave("back-save")
+                        _ = try await evaluate("nativeSave.history('back');true")
+                        try await awaitPage("")
+                        try check(try await evaluate("localStorage.getItem('value')==='back-save' && nativeSave.previous()===6") as? Bool == true, "back saves and restores a live document with plugin access")
+                        try await installSave("forward-save")
+                        _ = try await evaluate("nativeSave.history('forward');true")
+                        try await awaitPage("?allowed")
+                        try check(try await evaluate("localStorage.getItem('value')==='forward-save' && nativeSave.previous()===8") as? Bool == true, "forward saves and restores a live document with plugin access")
+                    }
+                }
+                try await stop()
+                try await start(repository, imported, paths)
+                if scenario == "navigation-sequential" {
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(restored["local"] as? String == "second-save" && restored["indexed"] as? String == "second-save", "successive navigation writes survive process reopen")
+                }
+                try await stop()
+            } else if scenario == "navigation-save" || scenario == "navigation-rejected" || scenario == "navigation-plugin-failed" {
+                let rejected = scenario != "navigation-save"
+                let handler = scenario == "navigation-plugin-failed" ? "try{nativeSave.fail();}catch(e){}" : rejected
                     ? "nativeSave.store();e.waitUntil(new Promise(()=>{}));"
                     : "nativeSave.store();e.waitUntil(new Promise(resolve=>setTimeout(resolve,1500)).then(()=>persist('from-navigation')).then(()=>nativeSave.store()));"
                 try check(try await evaluate("typeof nativeSave.store==='function' && typeof nativeSave.navigate==='function' && typeof persist==='function'") as? Bool == true, "real Java bridge and Web storage are available before navigation")
                 _ = try await evaluate("addEventListener('pagehide',e=>{\(handler)});true")
                 _ = try await evaluate("nativeSave.navigate();true")
                 if rejected {
-                    try await Task.sleep(for: .seconds(7))
+                    try await Task.sleep(for: .seconds(scenario == "navigation-plugin-failed" ? 1 : 7))
                     try check(session.state == "running", "rejected navigation remains in the existing Activity")
                     let current = try await evaluate("location.search") as? String ?? ""
-                    try check(current != "?next", "timed out navigation is cancelled before replacing the document")
+                    try check(current != "?next", "failed or timed out navigation is cancelled before replacing the document")
                     try await stop(success: false)
+                    try check(!session.events.contains { $0["event"] as? String == "storage-closed" }, "navigation save failure never acknowledges storage")
                 } else {
                     var navigated = false
                     for _ in 0..<200 {

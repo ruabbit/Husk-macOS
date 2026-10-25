@@ -30,5 +30,7 @@ addEventListener('pagehide', () => {
     localStorage.setItem('pagehideCount', String(Number(localStorage.getItem('pagehideCount') || 0) + 1));
 });
 addEventListener('unload', () => localStorage.setItem('unloadCount', String(Number(localStorage.getItem('unloadCount') || 0) + 1)));
+window.fixturePageshowPersisted = false;
+addEventListener('pageshow', e => window.fixturePageshowPersisted = e.persisted);
 window.fixtureReady = true;
 </script>

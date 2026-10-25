@@ -297,7 +297,7 @@ static NSString *save_stage_js(void)
         "window.clearInterval=id=>{intervals.delete(id);ci(id);};"
         "window.requestAnimationFrame=fn=>{if(preparing)return 0;const id=raf(t=>{frames.delete(id);if(!preparing)fn(t);});frames.add(id);return id;};"
         "window.cancelAnimationFrame=id=>{frames.delete(id);cr(id);};"
-        "['beforeunload','visibilitychange','pagehide','unload'].forEach(type=>window.addEventListener(type,e=>{if(preparing&&e!==expected)e.stopImmediatePropagation();},true));"
+        "['beforeunload','visibilitychange','pagehide','unload','pageshow'].forEach(type=>window.addEventListener(type,e=>{if(preparing&&e!==expected)e.stopImmediatePropagation();},true));"
         "window.addEventListener('error',()=>{if(preparing&&!sealed)bad();},true);"
         "window.addEventListener('unhandledrejection',()=>{if(preparing&&!sealed)bad();},true);"
         "Object.defineProperty(window,'__huskPrepareClose',{value:async()=>{"
@@ -344,12 +344,18 @@ static NSString *bridge_js(void)
  * prepareStarted: that flag belongs to final host destruction and would make
  * the replacement document permanently look like a closing WebView. */
 @property (nonatomic) BOOL navigationPrepareStarted, navigationPrepareFinished, navigationPrepareSucceeded;
-@property (nonatomic) BOOL navigationAllowing;
+@property (nonatomic) NSUInteger navigationPrepareGeneration;
+@property (nonatomic) BOOL navigationPrepareFailed;
+@property (nonatomic, strong) NSURL *navigationReplayURL;
+@property (nonatomic, strong) NSMapTable<WKBackForwardListItem *, NSString *> *savedHistoryMethods;
+@property (nonatomic, copy) NSString *documentMethod, *navigationMethod;
+@property (nonatomic) BOOL navigationIsHistory;
+@property (nonatomic, strong) WKNavigation *restoredHistoryNavigation;
+@property (nonatomic) BOOL restoredHistoryFinished;
 @property (nonatomic) BOOL waitingForDestroyAck;
 @property (nonatomic, copy) void (^prepareCompletion)(BOOL);
 @property (nonatomic, copy) void (^navigationPrepareCompletion)(BOOL);
 @property (nonatomic, copy) void (^navigationDecision)(WKNavigationActionPolicy);
-@property (nonatomic, strong) NSURL *navigationRedirectURL;
 @property (nonatomic) WKNavigation *blankNavigation;
 @property (nonatomic, copy) void (^closeCompletion)(BOOL);
 - (void)closeForHost:(void (^)(BOOL))completion;
@@ -367,6 +373,7 @@ static NSString *bridge_js(void)
 {
     self = [super init];
     _wid = wid;
+    _savedHistoryMethods = [NSMapTable strongToStrongObjectsMapTable];
     _scripts = [NSMutableArray array];
     WKWebViewConfiguration *c = [[WKWebViewConfiguration alloc] init];
     c.websiteDataStore = data_store();
@@ -414,6 +421,7 @@ static NSString *bridge_js(void)
 {
     if (!_web) return;
     _closing = YES;
+    [self completeNavigationPrepare:NO];
     if (_navigationDecision) {
         _navigationDecision(WKNavigationActionPolicyCancel);
         _navigationDecision = nil;
@@ -489,8 +497,11 @@ static NSString *bridge_js(void)
     void (^completion)(BOOL) = _navigationPrepareCompletion;
     if (!completion) return;
     _navigationPrepareCompletion = nil;
+    ok = ok && !_navigationPrepareFailed;
     _navigationPrepareFinished = YES;
     _navigationPrepareSucceeded = ok;
+    if (ok && _web.backForwardList.currentItem)
+        [_savedHistoryMethods setObject:_documentMethod ?: @"GET" forKey:_web.backForwardList.currentItem];
     if (!ok) g_detach_failed = YES;
     completion(ok);
 }
@@ -501,10 +512,12 @@ static NSString *bridge_js(void)
 }
 - (void)resetNavigationPreparation
 {
-    _navigationAllowing = NO;
+    ++_navigationPrepareGeneration;
+    _navigationReplayURL = nil;
     _navigationPrepareStarted = NO;
     _navigationPrepareFinished = NO;
     _navigationPrepareSucceeded = NO;
+    _navigationPrepareFailed = NO;
 }
 - (void)prepareForNavigation:(void (^)(BOOL))completion
 {
@@ -513,23 +526,24 @@ static NSString *bridge_js(void)
     if (_navigationPrepareCompletion || _navigationPrepareStarted) { completion(NO); return; }
     if (!_web || _closing || _prepareStarted) { completion(NO); return; }
     _navigationPrepareStarted = YES;
+    NSUInteger generation = ++_navigationPrepareGeneration;
     _navigationPrepareCompletion = [completion copy];
     cancel_pending_except_bridge(_wid, YES);
     __weak HuskWeb *weak = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 6 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         HuskWeb *h = weak;
-        if (h.navigationPrepareCompletion) {
+        if (h.navigationPrepareGeneration == generation && h.navigationPrepareCompletion) {
             tl_log_line("javaapp: WebView navigation save stage timed out");
             [h completeNavigationPrepare:NO];
         }
     });
     [_web setAllMediaPlaybackSuspended:YES completionHandler:^{
         HuskWeb *h = weak;
-        if (!h.navigationPrepareCompletion) return;
+        if (h.navigationPrepareGeneration != generation || !h.navigationPrepareCompletion) return;
         [h.web callAsyncJavaScript:@"return await window.__huskPrepareClose();" arguments:@{} inFrame:nil inContentWorld:WKContentWorld.pageWorld
             completionHandler:^(id result, NSError *error) {
                 HuskWeb *h = weak;
-                if (!h.navigationPrepareCompletion) return;
+                if (h.navigationPrepareGeneration != generation || !h.navigationPrepareCompletion) return;
                 if (error) tl_log_line("javaapp: WebView navigation save stage failed: %s", error.localizedDescription.UTF8String);
                 [h completeNavigationPrepare:!error && [result isKindOfClass:NSNumber.class] && [result boolValue]];
             }];
@@ -594,68 +608,144 @@ static NSString *bridge_js(void)
 }
 
 /* navigation */
+- (void)allowNavigation:(WKNavigationAction *)act decisionHandler:(void (^)(WKNavigationActionPolicy))decide
+{
+    NSURL *redirect = host_url_for_file(act.request.URL);
+    BOOL main = !act.targetFrame || act.targetFrame.isMainFrame;
+    if (!main) {
+        // A subframe must never replace the top-level page. File subframes
+        // still need a frame-aware scheme loader; reject unsupported remaps.
+        decide(redirect ? WKNavigationActionPolicyCancel : WKNavigationActionPolicyAllow);
+        return;
+    }
+    if (act.navigationType == WKNavigationTypeBackForward) {
+        for (WKBackForwardListItem *item in _savedHistoryMethods) {
+            if ([item.URL isEqual:redirect ?: act.request.URL] && ![[_savedHistoryMethods objectForKey:item] isEqualToString:@"GET"]) {
+                // Do this before WebKit can restore or resubmit the history
+                // request, while the current document is still usable.
+                decide(WKNavigationActionPolicyCancel);
+                emit(@"E", _wid, @[@"-1002", @"Saved non-GET history needs an explicit application load", act.request.URL.absoluteString ?: @""]);
+                return;
+            }
+        }
+    }
+    NSURLComponents *current = _web.URL ? [NSURLComponents componentsWithURL:_web.URL resolvingAgainstBaseURL:NO] : nil;
+    NSURLComponents *next = [NSURLComponents componentsWithURL:act.request.URL resolvingAgainstBaseURL:NO];
+    BOOL fragment = next.fragment != nil ||
+        (act.navigationType == WKNavigationTypeBackForward && current.fragment != nil);
+    current.fragment = nil; next.fragment = nil;
+    BOOL sameDocument = act.targetFrame && !redirect && act.navigationType != WKNavigationTypeReload &&
+        fragment && current.URL && [current.URL isEqual:next.URL];
+    if (_navigationDecision || (_navigationPrepareStarted && !_navigationPrepareFinished)) {
+        decide(WKNavigationActionPolicyCancel); return;
+    }
+    __weak HuskWeb *weak = self;
+    void (^proceed)(void (^)(WKNavigationActionPolicy), BOOL) = ^(void (^pending)(WKNavigationActionPolicy), BOOL ok) {
+        HuskWeb *h = weak;
+        if (!ok || !h.web || h.closing || h.prepareStarted || g_host_preparing) { pending(WKNavigationActionPolicyCancel); return; }
+        if (!sameDocument) {
+            h.navigationIsHistory = act.navigationType == WKNavigationTypeBackForward;
+            h.navigationMethod = act.request.HTTPMethod ?: @"GET";
+        }
+        if (redirect || !act.targetFrame) {
+            // Replay an approved main-frame request only. Keep its headers,
+            // method and body, and do not ask Java policy a second time.
+            NSMutableURLRequest *request = [act.request mutableCopy];
+            request.URL = redirect ?: act.request.URL;
+            h.navigationReplayURL = request.URL;
+            pending(WKNavigationActionPolicyCancel);
+            [h.web loadRequest:request];
+        } else pending(WKNavigationActionPolicyAllow);
+    };
+    if (sameDocument || ![self hasSavableDocument]) { proceed(decide, YES); return; }
+    _navigationDecision = [decide copy];
+    [self prepareForNavigation:^(BOOL ok) {
+        HuskWeb *h = weak;
+        void (^pending)(WKNavigationActionPolicy) = h.navigationDecision;
+        h.navigationDecision = nil;
+        if (pending) proceed(pending, ok);
+    }];
+}
 - (void)webView:(WKWebView *)w decidePolicyForNavigationAction:(WKNavigationAction *)act decisionHandler:(void (^)(WKNavigationActionPolicy))decide
 {
     if (_closing) { decide([act.request.URL.absoluteString isEqual:@"about:blank"] ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel); return; }
     if (g_host_preparing || _prepareStarted) { decide(WKNavigationActionPolicyCancel); return; }
-    NSURL *requestedURL = act.request.URL;
-    NSURL *redirectURL = host_url_for_file(requestedURL);
-    NSURL *u = redirectURL ?: requestedURL;
+    NSURL *u = host_url_for_file(act.request.URL) ?: act.request.URL;
     NSString *scheme = u.scheme.lowercaseString ?: @"";
-    bool main = act.targetFrame == nil || act.targetFrame.isMainFrame;
-    if (!act.targetFrame) {                             /* target=_blank / window.open: Android loads it in this view */
-        decide(WKNavigationActionPolicyCancel);
-        [w loadRequest:[NSURLRequest requestWithURL:u]];
-        return;
+    BOOL main = !act.targetFrame || act.targetFrame.isMainFrame;
+    if (main && _navigationReplayURL) {
+        BOOL replay = [_navigationReplayURL isEqual:act.request.URL];
+        _navigationReplayURL = nil;
+        if (replay) { decide(WKNavigationActionPolicyAllow); return; }
     }
-    /* The first load starts from WebKit's about:blank document and has
-     * nothing to save. Every later main-frame navigation, including Android's
-     * loadUrl/reload/back/forward paths, must finish the old document's
-     * one-shot save stage before WebKit replaces it. */
-    if (main && _apiLoad && ![self hasSavableDocument]) {
-        _apiLoad = false;
-        if (redirectURL) { decide(WKNavigationActionPolicyCancel); [w loadRequest:[NSURLRequest requestWithURL:redirectURL]]; }
-        else decide(WKNavigationActionPolicyAllow);
-        return;
-    }
-    if (!main && redirectURL) { decide(WKNavigationActionPolicyCancel); [w loadRequest:[NSURLRequest requestWithURL:redirectURL]]; return; }
-    if (main && g_host_store && [self hasSavableDocument] && !_navigationAllowing) {
-        if (_navigationDecision || _navigationPrepareStarted || _navigationPrepareFinished) { decide(WKNavigationActionPolicyCancel); return; }
-        _navigationDecision = [decide copy];
-        _navigationRedirectURL = redirectURL;
-        __weak HuskWeb *weak = self;
-        [self prepareForNavigation:^(BOOL ok) {
-            HuskWeb *h = weak;
-            void (^pending)(WKNavigationActionPolicy) = h.navigationDecision;
-            NSURL *redirect = h.navigationRedirectURL;
-            h.navigationDecision = nil;
-            h.navigationRedirectURL = nil;
-            if (!pending) return;
-            if (!ok || h.closing || g_host_preparing) { pending(WKNavigationActionPolicyCancel); return; }
-            h.navigationAllowing = YES;
-            h.apiLoad = false;
-            if (redirect) { pending(WKNavigationActionPolicyCancel); [h.web loadRequest:[NSURLRequest requestWithURL:redirect]]; }
-            else pending(WKNavigationActionPolicyAllow);
-        }];
-        return;
-    }
-    if (_apiLoad && main) { _apiLoad = false; decide(WKNavigationActionPolicyAllow); return; }
-    bool web = [scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"] || [scheme isEqualToString:@"huskapp"] ||
+    BOOL web = [scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"] || [scheme isEqualToString:@"huskapp"] ||
                [scheme isEqualToString:@"about"] || [scheme isEqualToString:@"data"] || [scheme isEqualToString:@"blob"] || [scheme isEqualToString:@"file"];
-    if (!main && web) { decide(WKNavigationActionPolicyAllow); return; }
-    int call = [self park:[decide copy] kind:'o'];
+    if ((_apiLoad && main) || (!main && web)) {
+        if (main) _apiLoad = false;
+        [self allowNavigation:act decisionHandler:decide];
+        return;
+    }
+    // Android owns the navigation decision. A veto/custom URL must leave the
+    // old document running; its irreversible save stage starts only on allow.
+    __weak HuskWeb *weak = self;
+    int call = [self park:[^(WKNavigationActionPolicy policy) {
+        HuskWeb *h = weak;
+        if (policy != WKNavigationActionPolicyAllow || !h.web || h.closing || h.prepareStarted || g_host_preparing) {
+            decide(WKNavigationActionPolicyCancel); return;
+        }
+        [h allowNavigation:act decisionHandler:decide];
+    } copy] kind:'o'];
     emit(@"o", _wid, @[ [NSString stringWithFormat:@"%d", call], u.absoluteString ?: @"", main ? @"1" : @"0",
                         act.navigationType == WKNavigationTypeLinkActivated ? @"1" : @"0", act.request.HTTPMethod ?: @"GET", web ? @"1" : @"0" ]);
 }
 - (void)webView:(WKWebView *)w didStartProvisionalNavigation:(WKNavigation *)n { emit(@"s", _wid, @[ w.URL.absoluteString ?: @"" ]); }
 - (void)webView:(WKWebView *)w didCommitNavigation:(WKNavigation *)n {
     _documentLoaded = YES;
+    WKBackForwardList *history = w.backForwardList;
+    NSString *savedMethod = _navigationIsHistory ? [_savedHistoryMethods objectForKey:history.currentItem] : nil;
+    _navigationIsHistory = NO;
+    _documentMethod = _navigationMethod ?: @"GET";
+    if (_navigationPrepareSucceeded) [w setAllMediaPlaybackSuspended:NO completionHandler:^{}];
     [self resetNavigationPreparation];
+    NSMutableSet *live = [NSMutableSet setWithArray:history.backList];
+    [live addObjectsFromArray:history.forwardList];
+    if (history.currentItem) [live addObject:history.currentItem];
+    for (WKBackForwardListItem *item in _savedHistoryMethods.keyEnumerator.allObjects)
+        if (![live containsObject:item]) [_savedHistoryMethods removeObjectForKey:item];
+    if (savedMethod) {
+        // A cached document still has its sealed scripts; a normal history
+        // fetch already created a fresh document and must not be loaded twice.
+        _restoredHistoryNavigation = n;
+        _restoredHistoryFinished = NO;
+        NSUInteger generation = _navigationPrepareGeneration;
+        __weak HuskWeb *weak = self;
+        [w evaluateJavaScript:@"window.__huskClosing===true" completionHandler:^(id value, NSError *error) {
+            HuskWeb *h = weak;
+            if (!h.web || h.closing || h.prepareStarted || g_host_preparing || h.navigationPrepareGeneration != generation) return;
+            if (error) { g_detach_failed = YES; [h failed:error]; return; }
+            if ([value boolValue]) {
+                // The host saved this exact history item before it left. Reuse
+                // that receipt for one reload in place, without another unload.
+                h.navigationPrepareStarted = h.navigationPrepareFinished = h.navigationPrepareSucceeded = YES;
+                h.navigationReplayURL = h.web.URL;
+                h.navigationMethod = @"GET";
+                [h.web reload];
+            } else {
+                [h.savedHistoryMethods removeObjectForKey:h.web.backForwardList.currentItem];
+                h.restoredHistoryNavigation = nil;
+                emit(@"m", h.wid, @[ h.web.URL.absoluteString ?: @"" ]);
+                [h history];
+                if (h.restoredHistoryFinished) emit(@"f", h.wid, @[ h.web.URL.absoluteString ?: @"" ]);
+            }
+        }];
+        return;
+    }
+    [_savedHistoryMethods removeObjectForKey:history.currentItem];
     emit(@"m", _wid, @[ w.URL.absoluteString ?: @"" ]); [self history];
 }
 - (void)webView:(WKWebView *)w didFinishNavigation:(WKNavigation *)n {
     if (_closing) { if (n == _blankNavigation) [self completeClose:YES]; return; }
-    [self resetNavigationPreparation];
+    if (n == _restoredHistoryNavigation) { _restoredHistoryFinished = YES; return; }
     [self history]; emit(@"f", _wid, @[ w.URL.absoluteString ?: @"" ]);
 }
 - (void)failed:(NSError *)e
@@ -665,20 +755,20 @@ static NSString *bridge_js(void)
     NSString *url = [e.userInfo[NSURLErrorFailingURLStringErrorKey] description] ?: _web.URL.absoluteString ?: @"";
     emit(@"E", _wid, @[ [NSString stringWithFormat:@"%ld", (long)e.code], e.localizedDescription ?: @"", url ]);
 }
-- (void)webView:(WKWebView *)w didFailNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else { _navigationAllowing = NO; [self failed:e]; } }
-- (void)webView:(WKWebView *)w didFailProvisionalNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else { _navigationAllowing = NO; [self failed:e]; } }
-- (void)webViewWebContentProcessDidTerminate:(WKWebView *)w { if (g_host_store) g_detach_failed = YES; [self completePrepare:NO]; if (_closing) [self completeClose:NO]; else emit(@"g", _wid, @[]); }
+- (void)webView:(WKWebView *)w didFailNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else { _navigationReplayURL = nil; [self failed:e]; } }
+- (void)webView:(WKWebView *)w didFailProvisionalNavigation:(WKNavigation *)n withError:(NSError *)e { if (_closing) { if (n == _blankNavigation) [self completeClose:NO]; } else { _navigationReplayURL = nil; [self failed:e]; } }
+- (void)webViewWebContentProcessDidTerminate:(WKWebView *)w { if (g_host_store) g_detach_failed = YES; [self completePrepare:NO]; [self completeNavigationPrepare:NO]; if (_closing) [self completeClose:NO]; else emit(@"g", _wid, @[]); }
 
 /* dialogs and the bridge */
 - (void)webView:(WKWebView *)w runJavaScriptAlertPanelWithMessage:(NSString *)msg initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(void))done
 {
-    if (_closing || g_host_closing || g_host_preparing || _prepareStarted) { done(); return; }
+    if (_closing || g_host_closing || g_host_preparing || _prepareStarted || _navigationPrepareStarted) { done(); return; }
     int call = [self park:[done copy] kind:'A'];
     emit(@"A", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"" ]);
 }
 - (void)webView:(WKWebView *)w runJavaScriptConfirmPanelWithMessage:(NSString *)msg initiatedByFrame:(WKFrameInfo *)f completionHandler:(void (^)(BOOL))done
 {
-    if (_closing || g_host_closing || g_host_preparing || _prepareStarted) { done(NO); return; }
+    if (_closing || g_host_closing || g_host_preparing || _prepareStarted || _navigationPrepareStarted) { done(NO); return; }
     int call = [self park:[done copy] kind:'C'];
     emit(@"C", _wid, @[ [NSString stringWithFormat:@"%d", call], f.request.URL.absoluteString ?: @"", msg ?: @"" ]);
 }
@@ -694,8 +784,9 @@ static NSString *bridge_js(void)
         done(nil); return;
     }
     BOOL bridge = [msg hasPrefix:@"husk:"];
-    if ((g_host_preparing && (!bridge || g_host_prepared)) || (_prepareStarted && (!bridge || _prepareFinished))) {
-        if (bridge) g_detach_failed = YES;
+    if ((g_host_preparing && (!bridge || g_host_prepared)) || (_prepareStarted && (!bridge || _prepareFinished)) ||
+        (_navigationPrepareStarted && (!bridge || _navigationPrepareFinished))) {
+        if (bridge) { g_detach_failed = YES; _navigationPrepareFailed = YES; }
         done(nil); return;
     }
     int call = [self park:[done copy] kind:bridge ? 'j' : 'P'];
@@ -714,6 +805,7 @@ static NSString *bridge_js(void)
     NSDictionary *d = [m.body isKindOfClass:NSDictionary.class] ? m.body : @{};
     if (g_host_store && ([d[@"saveFailed"] boolValue] || [d[@"closing"] boolValue])) {
         g_detach_failed = YES;
+        if (_navigationPrepareStarted) _navigationPrepareFailed = YES;
         tl_log_line("javaapp: WebView save or late Java bridge call failed");
         return;
     }
@@ -1027,10 +1119,13 @@ NAT(W_reply)
         case 'C': ((void (^)(BOOL))thing)([r isEqualToString:@"\x01yes"]); break;
         case 'j': {
             HuskWeb *owner = g_views[@(pending.wid)] ?: g_retiring[@(pending.wid)];
-            if (g_host_preparing || owner.prepareStarted) {
+            if (g_host_preparing || owner.prepareStarted || owner.navigationPrepareStarted) {
                 NSData *data = [r dataUsingEncoding:NSUTF8StringEncoding];
                 id reply = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
-                if (![reply isKindOfClass:NSDictionary.class] || reply[@"e"]) g_detach_failed = YES;
+                if (![reply isKindOfClass:NSDictionary.class] || reply[@"e"]) {
+                    g_detach_failed = YES;
+                    if (owner.navigationPrepareStarted) owner.navigationPrepareFailed = YES;
+                }
             }
             ((void (^)(NSString *))thing)(isNull ? nil : r); break;
         }

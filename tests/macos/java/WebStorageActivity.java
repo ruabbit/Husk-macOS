@@ -9,6 +9,9 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebResourceError;
 import android.view.KeyEvent;
 
 /** A real DEX WebView using APK assets, Java callbacks and final cookie writes. */
@@ -75,6 +78,15 @@ public final class WebStorageActivity extends Activity {
         @JavascriptInterface public int generation() { return getIntent().getIntExtra("generation", 0); }
         @JavascriptInterface public void closeOnPause() { finishOnPause = true; }
         @JavascriptInterface public void navigate() { web.loadUrl("file:///android_asset/storage.html?next"); }
+        @JavascriptInterface public void postPage() { web.postUrl("file:///android_asset/storage.html?posted", new byte[] {1, 2, 3}); }
+        @JavascriptInterface public void loadBase() { web.loadUrl("file:///android_asset/storage.html"); }
+        @JavascriptInterface public void history(String action) {
+            main.post(() -> {
+                if ("back".equals(action)) web.goBack();
+                else if ("forward".equals(action)) web.goForward();
+                else web.reload();
+            });
+        }
         @JavascriptInterface public void close(String mode) {
             // Let the JavaScript call return before the Activity starts closing.
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
@@ -135,6 +147,23 @@ public final class WebStorageActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true);
         web.addJavascriptInterface(new SaveBridge(), "nativeSave");
         web.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if ("POST".equals(request.getMethod())) {
+                    android.content.SharedPreferences preferences = getSharedPreferences("web", 0);
+                    preferences.edit().putInt("post_requests", preferences.getInt("post_requests", 0) + 1).apply();
+                }
+                return null;
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                getSharedPreferences("web", 0).edit().putString("navigation_error", error.getDescription().toString()).apply();
+            }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                android.content.SharedPreferences preferences = getSharedPreferences("web", 0);
+                preferences.edit().putInt("navigation_calls", preferences.getInt("navigation_calls", 0) + 1)
+                    .putString("navigation_url", url).putBoolean("navigation_main", request.isForMainFrame()).apply();
+                return url.contains("?blocked") || url.startsWith("husk-fixture:");
+            }
             @Override public void onPageFinished(WebView view, String url) {
                 String cookie = CookieManager.getInstance().getCookie("https://husk.invalid/");
                 getSharedPreferences("web", 0).edit().putString("cookie", cookie == null ? "empty" : cookie).apply();
