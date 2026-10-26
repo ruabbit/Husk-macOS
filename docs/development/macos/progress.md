@@ -12,7 +12,7 @@ HTTP 首轮 **5/5（20.68 秒）**通过；追加晚到 host-stop 不延长原�
 
 昨天用户 War Thunder 的两次真实会话均 exit 1、没有 storage-closed；当前日志已经完成更新器，随后 Vulkan 报设备黑名单并退出。已修正 parity 的现况，旧“更新器未接通”只保留为 10-13 历史证据，具体黑名单命中规则仍未知。今天没有重跑 War/Egg/Clash/Hole.io 或任何用户游戏、启动 Android VM、操作 USB、修改用户 APK/存档/Android 磁盘，其他项目 UTM 保持原状。
 
-验证和候选启动已完成；源码提交、远端读回及本批 CI 待交付。下一轮优先验证历史恢复检查与 host-stop 的交叠，再验真实 HTTP/第三方插件；导航保存与逐视图 destroy 的交叠尚无专门回归。Activity replacement/recreate 更多顺序、加载中/跨源页面、页面脚本直接 file URL、非 GET 历史的显式应用恢复及未登记异步任务继续开放；真实游戏保存重开、实体 IME/手柄、Play/VM/P6 边界保持。
+源码 [97de762](https://github.com/ruabbit/Husk-macOS/commit/97de7623fca14f5d5e8e8bec4a0d7e48601d225c) 已正常推送，main/macOS 两分支远端 SHA 已读回一致，main 保持 2c3af7a。本批 [CI 40253576983](https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983) 已 **completed/success**，head 为 97de762：构建、包检查、**36 项 hosted 核心回归（48.98 秒）**及 P0 memory/core 通过，build-and-core 用时 5 分 32 秒；hardware job skipped。最终来源锁与交付记录随文档提交保存，远端完整 SHA 在交付时再次读回。下一轮优先验证历史恢复检查与 host-stop 的交叠，再验真实 HTTP/第三方插件；导航保存与逐视图 destroy 的交叠尚无专门回归。Activity replacement/recreate 更多顺序、加载中/跨源页面、页面脚本直接 file URL、非 GET 历史的显式应用恢复及未登记异步任务继续开放；真实游戏保存重开、实体 IME/手柄、Play/VM/P6 边界保持。
 
 ## 2026-10-25：导航许可与文档保存边界
 

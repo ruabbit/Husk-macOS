@@ -6,7 +6,7 @@
 - [x] 复核上游与 macOS 接线；隔离 HTTP DEX 重定向、cookie/插件持久化、导航与 host-stop 交叠五项通过，停止等待原保存且不延长期限。
 - [x] 更新 War Thunder 当前证据：更新器完成后 Vulkan 黑名单主动 exit 1；未重跑游戏或修改用户存档。
 - [x] 唯一 build/macos 的 build 20 完整构建、默认 CTest 155/155 与包检查通过；CUA 单次启动 PID 98822，首页 11 应用与图标确认。
-- [ ] 正常推送自有两分支并读回，核对本批 CI；更新最终来源/进度，保持 codex/macos-p0。
+- [x] 源码 97de762 已正常推送，两分支远端 SHA 已读回；CI 40253576983 completed/success（36 hosted 核心回归，48.98 秒，P0 memory/core 通过），来源锁与最终记录已更新，保持 codex/macos-p0。
 - [ ] 后续继续历史恢复检查/host-stop 交叠和真实 HTTP/第三方插件。导航与逐视图 destroy 专门回归、Activity replacement/recreate、加载中/跨源与实体设备/真实游戏验收保持开放。
 
 ## 当前执行：2026-10-25 导航许可与文档保存边界

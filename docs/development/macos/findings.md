@@ -8,6 +8,7 @@
 - 回环 HTTP 五项覆盖实际 POST、重定向/历史请求次数、cookie/Web 存储/Java 插件的进程重开、停止与保存交叠及失败。首轮 5/5（20.68 秒）；最终延迟 3.5 秒再请求 stop，断言不足 4.5 秒内失败，证明没有重启六秒计时。最终 HTTP 5/5（20.99 秒）、Java WebView 48/48（155.25 秒）、默认 155/155（247.80 秒）通过。真实第三方应用/插件仍开放。
 - CUA 正常退出 PID 99255 后出现新空闲实例 68212，原因未确定；打包保护正确拒绝。复核路径、无 Runner/VM 后 SIGTERM，进程消失；保留 `current-upstream-build-idle-guard.log`，未绕过保护或触碰其他项目 UTM。
 - build 20 完整构建、18 arm64 Mach-O/406 Java 资源包检查、共享 Web host 的 iOS 语法检查通过；启动前逐项复核二进制摘要。CUA 单次启动 Product/PID 98822，完整路径、AX/截图确认 11 个应用和图标，没有启动游戏。
+- 源码 97de762 正常推送，main/macOS 两远端 SHA 读回一致；Actions 40253576983 completed/success，head=97de762，构建/包检查、36 项 hosted 核心回归（48.98 秒）与 P0 memory/core 通过；hardware job skipped。
 - 用户 2026-10-25 的 War Thunder 会话 558F5F77/3BD9B1CE 均 exit 1、无 storage-closed。真实引擎日志显示 Download complete / UPDATER_EVENT_FINISH，随后 Apple M1 Ultra/MoltenVK 创建设备后 running on a blacklisted device。已对照 Dagor 公开源码的黑名单检查与 terminate_process(1)；具体命中项未知。旧 DagorUpdater 未接通只适用于 10-13 历史样本，本轮不重跑或改游戏配置。
 
 ## 2026-10-25 导航许可、保存代际与历史恢复

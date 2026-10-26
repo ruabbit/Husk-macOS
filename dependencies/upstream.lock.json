@@ -8,7 +8,7 @@
   "integration": "Fetched origin then upstream; neither remote had new commits. upstream/main 3b87cbc is already an ancestor of fork main 2c3af7a, itself an ancestor of the macOS branch; no merge or conflict. Continued WebView migration with real loopback HTTP fixtures and host stop joining an in-flight navigation save without resetting its deadline. Build 20 passed the full default suite and fresh package checks, then was launched once through CUA.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-awaiting-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
@@ -25,10 +25,21 @@
     "webRunnerSHA256": "8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
     "frameworkSHA256": "49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707",
-    "sourceRevision": null,
-    "deliveryStatus": "verified-awaiting-push",
+    "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Exact build 20 Product launched once through CUA as PID 98822; full executable path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
-    "ci": null
+    "ci": {
+      "run": 40253576983,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983",
+      "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 36,
+      "hostedCoreTestSeconds": 48.98
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 0,
@@ -37,7 +48,7 @@
     "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15",
     "macOSBaseRevision": "d57d6831fab1936df37b767c3739b36357ec1f5c",
     "macOSMergeRevision": null,
-    "macOSRevision": null,
+    "macOSRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
     "macOSAdaptation": "Host stop joins the existing navigation save, cancels the pending navigation decision immediately and keeps the original six-second deadline. Five loopback HTTP real-DEX scenarios cover storage/plugin reopen, cookies, redirect/history request counts, stop overlap, rejection and timeout.",
     "defaultSuiteTests": 155,
     "defaultTestSeconds": 247.8,
@@ -49,8 +60,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 40150135195,
@@ -64,7 +75,18 @@
       "hostedCoreTests": 36,
       "hostedCoreTestSeconds": 48.66
     },
-    "ci": null
+    "ci": {
+      "run": 40253576983,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983",
+      "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 36,
+      "hostedCoreTestSeconds": 48.98
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",

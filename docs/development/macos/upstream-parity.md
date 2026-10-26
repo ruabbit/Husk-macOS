@@ -10,7 +10,7 @@ origin/upstream fetch 均无新增；upstream 3b87cbc 已在 main 2c3af7a 的历
 
 这组 HTTP 证据来自本机回环服务与受控 APK/DEX，真实第三方应用/插件、历史恢复检查与 host-stop 交叠、导航保存与逐视图 destroy 专门回归、Activity replacement/recreate 更多顺序、加载中/跨源文档继续开放。下一轮先验证历史恢复交叠，再验合法真实应用。用户 War Thunder 最新日志已改记为更新器完成后的 Vulkan 设备黑名单退出，具体命中规则未知；本轮未启动用户游戏或 VM。
 
-验证及候选启动完成；源码推送和本批 CI 待交付。
+源码 [97de762](https://github.com/ruabbit/Husk-macOS/commit/97de7623fca14f5d5e8e8bec4a0d7e48601d225c) 已正常推送，两分支远端 SHA 已读回一致；[CI 40253576983](https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983) 已 **completed/success**，构建、包检查、36 项 hosted 核心回归（48.98 秒）及 P0 memory/core 通过；hardware job skipped。
 
 ## 2026-10-25：导航许可、文档代际与历史恢复，build 19
 
