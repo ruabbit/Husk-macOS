@@ -78,6 +78,8 @@ public final class WebStorageActivity extends Activity {
         @JavascriptInterface public int generation() { return getIntent().getIntExtra("generation", 0); }
         @JavascriptInterface public void closeOnPause() { finishOnPause = true; }
         @JavascriptInterface public void navigate() { web.loadUrl("file:///android_asset/storage.html?next"); }
+        @JavascriptInterface public void loadRemote(String url) { web.loadUrl(url); }
+        @JavascriptInterface public String cookieFor(String url) { return CookieManager.getInstance().getCookie(url); }
         @JavascriptInterface public void postPage() { web.postUrl("file:///android_asset/storage.html?posted", new byte[] {1, 2, 3}); }
         @JavascriptInterface public void loadBase() { web.loadUrl("file:///android_asset/storage.html"); }
         @JavascriptInterface public void history(String action) {

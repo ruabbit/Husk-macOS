@@ -467,6 +467,11 @@ foreach(case persistence legacy destroy-failed identity late-bridge save-bridge 
     set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)
 endforeach()
 add_test(NAME macos-package-guard COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/PackageGuard.py)
+foreach(case http-save http-history http-stop http-stop-rejected http-stop-timeout)
+    add_test(NAME macos-java-web-${case} COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/JavaWebHTTP.py
+        "$<TARGET_FILE:MacJavaWebSessionTests>" "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk" "${CMAKE_BINARY_DIR}/TestResults" ${case})
+    set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)
+endforeach()
 add_executable(VMExitFixture tests/macos/VMExitFixture.m)
 target_compile_options(VMExitFixture PRIVATE -fobjc-arc)
 target_link_libraries(VMExitFixture PRIVATE "-framework Foundation")

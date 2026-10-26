@@ -504,6 +504,10 @@ static NSString *bridge_js(void)
         [_savedHistoryMethods setObject:_documentMethod ?: @"GET" forKey:_web.backForwardList.currentItem];
     if (!ok) g_detach_failed = YES;
     completion(ok);
+    // Host stop or per-view destruction can join the in-flight document save.
+    // Its original timer remains authoritative; no second lifecycle or grace
+    // period is created when ownership passes to the final close stage.
+    if (_prepareCompletion) [self completePrepare:ok];
 }
 - (BOOL)hasSavableDocument
 {
@@ -551,18 +555,28 @@ static NSString *bridge_js(void)
 }
 - (void)prepareForHost:(void (^)(BOOL))completion
 {
-    if (_navigationPrepareStarted && !_navigationPrepareFinished) { g_detach_failed = YES; completion(NO); return; }
-    if (_navigationPrepareFinished) {
-        _prepareFinished = YES;
-        _prepareSucceeded = _navigationPrepareSucceeded;
-        completion(_prepareSucceeded);
-        return;
-    }
     if (_prepareFinished) { completion(_prepareSucceeded); return; }
     if (_prepareCompletion) {
         // A whole-session stop can join a direct WebView.destroy in progress.
         void (^previous)(BOOL) = _prepareCompletion;
         _prepareCompletion = ^(BOOL ok) { previous(ok); completion(ok); };
+        return;
+    }
+    if (_navigationPrepareStarted && !_navigationPrepareFinished) {
+        _prepareStarted = YES;
+        _prepareCompletion = [completion copy];
+        // Keep the old document and its Java plugins alive, but settle WebKit's
+        // pending navigation immediately so it cannot replace the saving page.
+        void (^pending)(WKNavigationActionPolicy) = _navigationDecision;
+        _navigationDecision = nil;
+        if (pending) pending(WKNavigationActionPolicyCancel);
+        cancel_pending_except_bridge(_wid, YES);
+        return;
+    }
+    if (_navigationPrepareFinished) {
+        _prepareFinished = YES;
+        _prepareSucceeded = _navigationPrepareSucceeded;
+        completion(_prepareSucceeded);
         return;
     }
     if (!_web || _closing) { g_detach_failed = YES; completion(NO); return; }

@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-26：HTTP WebView 保存与停止交叠，build 20
+
+从干净 `codex/macos-p0=d57d683` 起步，origin/upstream fetch 均无新增；`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，main 又是 macOS 分支祖先，没有重复合并或冲突。前轮 build 19 的 Actions 40150135195 已确认 completed/success。重新对照上游 TLReport.nativeEngine、TLUnityView/project.yml 与 macOS CMake、资料库/Runner 分发、输入/暂停/关闭、共享 PlayAPI/登录和固定图形依赖，既有接入保持，没有新的上游平台增量。
+
+回环 HTTP + 真 Java DEX baseline 复现导航保存刚进入插件后 host-stop 直接失败，`/saved` 未收到请求（3.13 秒）。现在停止请求接续正在进行的文档保存，立即取消尚未放行的导航，保留 Java 插件与即时 UI 写入，等待同一个保存结果后再销毁 Android/WebKit；原六秒期限不重置，拒绝/超时仍保持最终关闭失败。新测试验证真实 HTTP POST、重定向和历史请求次数、localStorage/IndexedDB、普通 cookie 出站及 Java 插件的跨进程重开，另核对 HttpOnly 对 Java 与页面脚本的可见性；这里只是本机回环服务器与受控 APK，不是第三方 HTTP 应用验收。
+
+HTTP 首轮 **5/5（20.68 秒）**通过；追加晚到 host-stop 不延长原期限的断言后，最终默认 **CTest 155/155（247.80 秒）**通过，其中 **48 项 Java WebView（155.25 秒）**，HTTP 五项共 **20.99 秒**。唯一 `build/macos` 的 **3.0.0/build 20** 完整构建、**18 个 arm64 Mach-O/406 个 Java 资源**包检查通过；共享 Web host 的 iOS 27 SDK/deployment 15 语法检查通过，只有既有弃用警告，不代表 iOS 真机验证。证据复用 `current-upstream-http-baseline.log`、`-http-first.log`、`-build.log`、`-ctest.log`、`-bundle.log`、`-ios-syntax.log` 和 `current-upstream-validation.json`。
+
+初始空闲 Product/PID 99255 经 CUA ⌘Q 后消失，但后续观察出现新空闲 PID 68212，打包保护正确拒绝替换，具体再次出现原因未确定。复核完整路径及无本项目 Runner/VM 后 SIGTERM 正常终止该空闲实例，无需 SIGKILL；保护失败日志保留为 `current-upstream-build-idle-guard.log`。最终包报告的 18 个二进制摘要逐项复核一致后，CUA 单次启动当前 Product/PID **98822**；完整路径、AX/截图确认首页原有 **11 个应用**与可见图标。App SHA-256 `50e320db2c22ec44aa4585d02d68c32203be799f291755667a422850e3da5559`，NativeRunner `31df7c153d21e581609cf992cf815472d110fdc931f0a510da224402a888f04d`，framework DEX `49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707`。
+
+昨天用户 War Thunder 的两次真实会话均 exit 1、没有 storage-closed；当前日志已经完成更新器，随后 Vulkan 报设备黑名单并退出。已修正 parity 的现况，旧“更新器未接通”只保留为 10-13 历史证据，具体黑名单命中规则仍未知。今天没有重跑 War/Egg/Clash/Hole.io 或任何用户游戏、启动 Android VM、操作 USB、修改用户 APK/存档/Android 磁盘，其他项目 UTM 保持原状。
+
+验证和候选启动已完成；源码提交、远端读回及本批 CI 待交付。下一轮优先验证历史恢复检查与 host-stop 的交叠，再验真实 HTTP/第三方插件；导航保存与逐视图 destroy 的交叠尚无专门回归。Activity replacement/recreate 更多顺序、加载中/跨源页面、页面脚本直接 file URL、非 GET 历史的显式应用恢复及未登记异步任务继续开放；真实游戏保存重开、实体 IME/手柄、Play/VM/P6 边界保持。
+
 ## 2026-10-25：导航许可与文档保存边界
 
 从干净 `codex/macos-p0=72f272a` 开始，origin/upstream fetch 均无新增，`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，没有重复合并或冲突。逐项核对上游引擎分类、TLUnityView/project.yml、macOS CMake/资料库/Runner、输入/暂停/双侧关闭、Store/登录和固定图形依赖，既有接入保持。前轮 build 18 的 CI 40065200939 已重新确认 success。初始空闲 Product/PID 39662 只有 11 应用首页，通过 CUA ⌘Q 正常退出，随后进程消失；没有用户游戏/本项目 VM，不需要强制结束。

@@ -84,7 +84,86 @@ import SharedLibrary
             try await start(repository, imported, paths)
             let identity = try WebStorage.readJavaStore(in: save)
             _ = try await javascriptAsync("return await persist('retained');")
-            if scenario.hasPrefix("view-") {
+            if scenario.hasPrefix("http-") {
+                guard let origin = ProcessInfo.processInfo.environment["HUSK_WEB_HTTP_ORIGIN"],
+                      let originURL = URL(string: origin), originURL.host == "127.0.0.1" else {
+                    throw LibraryFailure("HTTP test needs its isolated loopback server")
+                }
+                func awaitHTTP(_ path: String) async throws {
+                    var ready = false
+                    for _ in 0..<160 {
+                        if try await evaluate("window.fixtureReady===true && location.origin==='\(origin)' && location.pathname==='\(path)' && !window.__huskClosing", optional: true) as? Bool == true { ready = true; break }
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    try check(ready && session.state == "running", "HTTP document \(path) is loaded and live")
+                }
+                func loadHTTP() async throws {
+                    _ = try await evaluate("nativeSave.loadRemote('\(origin)/start');true")
+                    try await awaitHTTP("/start")
+                }
+                func requests() async throws -> [[String: Any]] {
+                    let (data, _) = try await URLSession.shared.data(from: originURL.appendingPathComponent("report"))
+                    return try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
+                }
+                func assertCount(_ path: String, _ expected: Int) async throws {
+                    let count = try await requests().filter { $0["path"] as? String == path }.count
+                    try check(count == expected, "HTTP \(path) request count \(count) == \(expected)")
+                }
+                func saveHTTP(_ value: String, delay: Int = 100, rejection: Bool = false, timeout: Bool = false) async throws {
+                    let wait = timeout ? "new Promise(()=>{})" : rejection ?
+                        "new Promise((r,j)=>setTimeout(()=>j(new Error('HTTP save rejected')),\(delay)))" : "new Promise(r=>setTimeout(r,\(delay)))"
+                    _ = try await evaluate("addEventListener('pagehide',e=>{nativeSave.store();e.waitUntil(\(wait).then(()=>persist('\(value)')).then(async()=>{document.cookie='final_cookie=retained; Max-Age=3600; Path=/';const r=await fetch('/saved',{method:'POST',body:'\(value)'});if(!r.ok)throw Error('save HTTP failed');nativeSave.store();nativeSave.recordUI();}));});true")
+                }
+                try await loadHTTP()
+                _ = try await javascriptAsync("return await persist('http-initial');")
+                if scenario == "http-history" {
+                    try await saveHTTP("before-redirect")
+                    _ = try await evaluate("location.href='/redirect';true")
+                    try await awaitHTTP("/second")
+                    try await assertCount("/start", 1); try await assertCount("/redirect", 1); try await assertCount("/second", 1)
+                    try check(try await evaluate("localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('value')==='before-redirect'") as? Bool == true, "HTTP redirect retires the source document exactly once")
+                    try await saveHTTP("before-back")
+                    _ = try await evaluate("nativeSave.history('back');true")
+                    try await awaitHTTP("/start")
+                    try await assertCount("/start", 2)
+                    try check(try await evaluate("localStorage.getItem('pagehideCount')==='2' && localStorage.getItem('value')==='before-back'") as? Bool == true, "HTTP history uses saved data without another unload or duplicate request")
+                    _ = try await evaluate("nativeSave.history('forward');true")
+                    try await awaitHTTP("/second")
+                    try await assertCount("/second", 2); try await assertCount("/redirect", 1)
+                    try await stop()
+                } else {
+                    let rejected = scenario == "http-stop-rejected" || scenario == "http-stop-timeout"
+                    let racing = scenario != "http-save"
+                    try await saveHTTP("http-saved", delay: racing ? 1500 : 100, rejection: scenario == "http-stop-rejected", timeout: scenario == "http-stop-timeout")
+                    if racing {
+                        _ = try await evaluate("location.href='/second';true")
+                        try await session.wait(until: { preferences(save).contains("i bridge_calls 1") || !session.active }, timeout: 10)
+                        try check(session.state == "running" && !preferences(save).contains("b view_ui_saved true"), "host stop overlaps the document's unfinished save")
+                    }
+                    if scenario == "http-stop-timeout" { try await Task.sleep(for: .milliseconds(3500)) }
+                    let stoppedAt = Date()
+                    try await stop(success: !rejected)
+                    if scenario == "http-stop-timeout" {
+                        try check(Date().timeIntervalSince(stoppedAt) < 4.5, "host stop retains the original navigation save deadline")
+                    }
+                    if racing { try await assertCount("/second", 0) }
+                    if rejected {
+                        try await assertCount("/saved", 0)
+                        try check(!session.events.contains { $0["event"] as? String == "storage-closed" }, "rejected or timed-out HTTP save cannot acknowledge storage")
+                    } else {
+                        try await assertCount("/saved", 1)
+                        try check(preferences(save).contains("i bridge_calls 2") && preferences(save).contains("i bridge_main_calls 2") && preferences(save).contains("b view_ui_saved true"), "HTTP save completed plugin and queued UI writes before Android destruction")
+                        try await start(repository, imported, paths)
+                        try await loadHTTP()
+                        let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                        try check(restored["local"] as? String == "http-saved" && restored["indexed"] as? String == "http-saved", "HTTP localStorage and IndexedDB survive a real process reopen")
+                        try check(try await evaluate("document.cookie.includes('final_cookie=retained') && !document.cookie.includes('fixture_http=') && nativeSave.cookieFor('\(origin)/start').includes('fixture_http=server') && nativeSave.previous()===2 && localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('unloadCount')==='1'") as? Bool == true, "HTTP cookies, Java plugin state and single lifecycle survive reopen")
+                        let starts = try await requests().filter { $0["path"] as? String == "/start" }
+                        try check(starts.count == 2 && (starts.last?["cookie"] as? String ?? "").contains("final_cookie=retained"), "reopened HTTP request sends its persisted cookie")
+                        try await stop()
+                    }
+                }
+            } else if scenario.hasPrefix("view-") {
                 let failed = ["view-rejected", "view-plugin-failed", "view-timeout", "view-message-failed"].contains(scenario)
                 if scenario.hasPrefix("view-message") {
                     try check(try await evaluate("nativeSave.installListener(\(scenario == "view-message-failed" ? "true" : "false"))") as? Bool == true, "APK AndroidX boundary listener installed")

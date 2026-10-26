@@ -1,5 +1,15 @@
 # 审计发现
 
+## 2026-10-26：HTTP 保存与用户会话证据
+
+- origin/upstream 无新增；引擎分类与 macOS CMake、资料库、Runner 分发/输入/暂停/关闭、共享 PlayAPI/登录和固定图形依赖已逐项复核，没有遗漏的上游增量。
+- 旧 `prepareForHost` 在 navigationPrepareStarted 但未完成时直接失败。回环 HTTP 真 DEX baseline 在进入插件后停止，3.13 秒失败且 `/saved` 未被请求；证据 `current-upstream-http-baseline.log`，fixture `JavaWeb-350BB0A4-0A74-446A-A8C0-D47265BE8134`。
+- 修复让 host-stop 等待原导航保存，并立即 Cancel 未完成的 WebKit 导航 decision；已接受插件与 UI 写入仍可完成。沿用原六秒期限，没有重发合成生命周期。保存拒绝或超时仍拒绝 storage-closed。Context7 Apple WKNavigationDelegate 文档确认 decisionHandler 可异步调用但必须完成，取消跳转与保存完成应分别处理。
+- 回环 HTTP 五项覆盖实际 POST、重定向/历史请求次数、cookie/Web 存储/Java 插件的进程重开、停止与保存交叠及失败。首轮 5/5（20.68 秒）；最终延迟 3.5 秒再请求 stop，断言不足 4.5 秒内失败，证明没有重启六秒计时。最终 HTTP 5/5（20.99 秒）、Java WebView 48/48（155.25 秒）、默认 155/155（247.80 秒）通过。真实第三方应用/插件仍开放。
+- CUA 正常退出 PID 99255 后出现新空闲实例 68212，原因未确定；打包保护正确拒绝。复核路径、无 Runner/VM 后 SIGTERM，进程消失；保留 `current-upstream-build-idle-guard.log`，未绕过保护或触碰其他项目 UTM。
+- build 20 完整构建、18 arm64 Mach-O/406 Java 资源包检查、共享 Web host 的 iOS 语法检查通过；启动前逐项复核二进制摘要。CUA 单次启动 Product/PID 98822，完整路径、AX/截图确认 11 个应用和图标，没有启动游戏。
+- 用户 2026-10-25 的 War Thunder 会话 558F5F77/3BD9B1CE 均 exit 1、无 storage-closed。真实引擎日志显示 Download complete / UPDATER_EVENT_FINISH，随后 Apple M1 Ultra/MoltenVK 创建设备后 running on a blacklisted device。已对照 Dagor 公开源码的黑名单检查与 terminate_process(1)；具体命中项未知。旧 DagorUpdater 未接通只适用于 10-13 历史样本，本轮不重跑或改游戏配置。
+
 ## 2026-10-25 导航许可、保存代际与历史恢复
 
 - origin/upstream fetch 均无新增，upstream/main=3b87cbc 已是 main=2c3af7a 祖先；从干净 72f272a 起步，没有合并或冲突。再次核对 TLReport.nativeEngine/TLUnityView/project.yml 与 CMake、Models/NativeLaunch、MacNativeDrivers/NativeRunner 的分发、输入/暂停/关闭，Store 共用 PlayAPI 和固定 ANGLE/MoltenVK 1.4.2 均保持现有接入。前轮 CI 40065200939 重新确认 success。

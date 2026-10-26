@@ -1,5 +1,14 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-26 HTTP WebView 与停止交叠
+
+- [x] 工作区干净，origin/upstream fetch 无新增；最新 build 19 与 CI 40150135195 success 已复核。无本项目 Runner/VM/构建，其他项目 UTM 保留。
+- [x] 复核上游与 macOS 接线；隔离 HTTP DEX 重定向、cookie/插件持久化、导航与 host-stop 交叠五项通过，停止等待原保存且不延长期限。
+- [x] 更新 War Thunder 当前证据：更新器完成后 Vulkan 黑名单主动 exit 1；未重跑游戏或修改用户存档。
+- [x] 唯一 build/macos 的 build 20 完整构建、默认 CTest 155/155 与包检查通过；CUA 单次启动 PID 98822，首页 11 应用与图标确认。
+- [ ] 正常推送自有两分支并读回，核对本批 CI；更新最终来源/进度，保持 codex/macos-p0。
+- [ ] 后续继续历史恢复检查/host-stop 交叠和真实 HTTP/第三方插件。导航与逐视图 destroy 专门回归、Activity replacement/recreate、加载中/跨源与实体设备/真实游戏验收保持开放。
+
 ## 当前执行：2026-10-25 导航许可与文档保存边界
 
 - [x] 核对干净工作区、远端、祖先及 build 18 交付；origin/upstream 均无新增，main=2c3af7a，macOS=72f272a。
