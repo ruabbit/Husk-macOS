@@ -87,6 +87,10 @@ for bad in [False, True]:
         z.write(out/'base-v1.apk', 'base.apk')
         package = 'org.other.game' if bad else 'org.husk.playtest'
         z.writestr(f'Android/obb/{package}/main.1.{package}.obb', b'archived main resource')
+with zipfile.ZipFile(out/'arbitrary.apks', 'w', zipfile.ZIP_DEFLATED) as z:
+    z.write(out/'base-v1.apk', 'config.arm64_v8a.apk')
+    for i, name in enumerate(['base.apk', 'models.apk', 'textures.apk', 'z.apk', 'a.apk', 'stuff.apk']):
+        z.write(out/f'split{i}-v1.apk', name)
 (out/'expanded-zip64.xapk').write_bytes(force_zip64((out/'expanded.xapk').read_bytes()))
 b = bytearray((out/'base-v1.apk').read_bytes()); b[50] ^= 1; (out/'tampered.apk').write_bytes(b)
 # Network-provided ZIP metadata and signing-block sizes must fail without traps.

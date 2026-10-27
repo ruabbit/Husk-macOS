@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Supported native architecture")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Provisional deployment floor; requires separate machine validation")
-project(HuskMac VERSION 3.0.0 LANGUAGES C OBJC Swift)
+project(HuskMac VERSION 3.1.0 LANGUAGES C OBJC Swift)
 if(NOT APPLE OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "HuskMac currently targets native macOS arm64")
 endif()
@@ -51,6 +51,7 @@ add_test(NAME macos-archive-streaming COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOUR
 set_tests_properties(macos-archive-streaming PROPERTIES TIMEOUT 30)
 
 add_library(SharedLibrary STATIC
+    ${MAC}/SharedLibrary/AppLanguage.swift
     ${MAC}/SharedLibrary/Models.swift ${MAC}/SharedLibrary/WebStorage.swift ${MAC}/SharedLibrary/AtomicFile.swift ${MAC}/SharedLibrary/APKSignature.swift
     ${MAC}/SharedLibrary/LibraryRepository.swift ${MAC}/SharedLibrary/APKIcon.swift ${MAC}/SharedLibrary/SessionDiagnostics.swift
     ${MAC}/SharedLibrary/SessionController.swift ${MAC}/SharedLibrary/NativeLaunch.swift ${MAC}/SharedLibrary/VMController.swift
@@ -96,7 +97,7 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-egl.c ${NEXT}/husk-tl-gameactivity.c ${NEXT}/husk-tl-unity.c ${NEXT}/husk-tl-gamepad.c
     ${NEXT}/husk-tl-nativeactivity.c ${NEXT}/husk-tl-dvm-nativeactivity.c ${NEXT}/husk-tl-jni-ue4.c
     ${NEXT}/husk-tl-cocos.c ${NEXT}/husk-tl-jni-cocos.c ${NEXT}/husk-tl-cocos-text.c
-    ${NEXT}/husk-tl-godot.c ${NEXT}/husk-tl-jni-godot.c ${NEXT}/husk-tl-gamemaker.c
+    ${NEXT}/husk-tl-godot.c ${NEXT}/husk-tl-jni-godot.c ${NEXT}/husk-tl-jni-godot-kotlin.c ${NEXT}/husk-tl-gamemaker.c
     ${NEXT}/husk-tl-sdl.c ${NEXT}/husk-tl-sdl-apps.c ${NEXT}/husk-tl-gtasa.c
     ${NEXT}/husk-tl-geode.c ${NEXT}/husk-tl-python.c
     ${NEXT}/husk-tl-audio.c ${NEXT}/husk-tl-http.m ${NEXT}/husk-tl-vulkan.m)
@@ -107,6 +108,26 @@ target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv sqlite3 "-fra
     "-framework CoreText" "-framework ImageIO" "-framework WebKit" "-framework VideoToolbox"
     "-framework CoreMedia" "-framework CoreVideo" "-framework Accelerate" "-framework IOKit")
 add_library(NativeRuntime ALIAS GameActivityRuntime)
+
+add_executable(GodotFileTests tests/macos/GodotFiles.c)
+target_link_libraries(GodotFileTests PRIVATE NativeRuntime)
+add_test(NAME native-godot-kotlin-files COMMAND GodotFileTests)
+add_executable(FontPathTests tests/translation-layer/font_paths.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_compile_options(FontPathTests PRIVATE -UNDEBUG)
+target_link_libraries(FontPathTests PRIVATE NativeRuntime)
+add_test(NAME core-font-paths COMMAND FontPathTests)
+# Reuse upstream's real Mach mapping test in the sole build tree. The bounded
+# address window makes the early/late reservation distinction deterministic.
+add_library(CompressedHeapWindow SHARED tests/translation-layer/compressed_heap_window.c)
+add_executable(CompressedHeapTests tests/translation-layer/compressed_heap.c)
+target_include_directories(CompressedHeapTests PRIVATE ${NEXT} ${CLASSIC})
+target_compile_options(CompressedHeapTests PRIVATE -O1 -ffunction-sections -fdata-sections -UNDEBUG)
+target_link_options(CompressedHeapTests PRIVATE -Wl,-dead_strip -Wl,-undefined,dynamic_lookup)
+foreach(mode early late)
+    add_test(NAME core-compressed-heap-${mode} COMMAND ${CMAKE_COMMAND} -E env
+        "DYLD_INSERT_LIBRARIES=$<TARGET_FILE:CompressedHeapWindow>" "$<TARGET_FILE:CompressedHeapTests>" ${mode})
+endforeach()
+set_tests_properties(native-godot-kotlin-files core-font-paths core-compressed-heap-early core-compressed-heap-late PROPERTIES TIMEOUT 15)
 
 add_executable(MacHostEnvironmentTests tests/macos/HostEnvironment.m ${MAC}/NativeRunner/MacDiagnostics.c)
 target_compile_options(MacHostEnvironmentTests PRIVATE -fobjc-arc)
@@ -175,13 +196,23 @@ set(MAC_PLAY_SOURCES
     ${MAC}/Play/GoogleLoginPolicy.swift ${MAC}/Play/GoogleBrowserLogin.swift
     ${MAC}/Play/PlayCredentials.swift ${MAC}/Play/PlayDownload.swift ${MAC}/Play/MacPlayStore.swift)
 add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift
+    ${MAC}/HuskMac/MacAccount.swift src/app/Husk/Account.swift src/app/Husk/HuskLogo.swift
     ${MAC}/HuskMac/HuskMac.swift ${MAC}/HuskMac/MacShell.swift ${MAC}/HuskMac/MacCompatibility.swift src/app/Husk/Holiday.swift src/app/Husk/Compatibility.swift "${HUSK_ICON}")
 # Swift's whole-module link does not follow the object-level resource copy rule.
 add_custom_target(HuskMacResources DEPENDS "${CMAKE_BINARY_DIR}/HuskMac.app/Contents/Resources/Husk.icns")
 add_dependencies(HuskMac MacIcon HuskMacResources)
+add_custom_target(MacLocalizations
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${MAC}/HuskMac/Resources "$<TARGET_BUNDLE_DIR:HuskMac>/Contents/Resources" VERBATIM)
+add_dependencies(HuskMac MacLocalizations)
 target_compile_options(HuskMac PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(HuskMac PRIVATE SharedLibrary "-framework AppKit" "-framework SwiftUI" "-framework WebKit")
 set_target_properties(HuskMac PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/HuskMac/Info.plist.in)
+
+add_executable(MacAccountTests tests/macos/MacAccountTests.swift src/app/Husk/Account.swift src/app/Husk/Compatibility.swift ${MAC}/HuskMac/MacAccount.swift)
+target_compile_options(MacAccountTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacAccountTests PRIVATE SharedLibrary "-framework AppKit" "-framework SwiftUI")
+add_test(NAME macos-account-language COMMAND MacAccountTests)
+set_tests_properties(macos-account-language PROPERTIES TIMEOUT 20)
 
 if(HUSK_BUILD_VM)
     if(NOT EXISTS "${HUSK_VM_DEPS}/lib/libqemu-aarch64-softmmu.dylib")
@@ -260,7 +291,7 @@ endforeach()
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/gamemaker-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-missing.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta.apk"
-    "${CMAKE_BINARY_DIR}/NativeTests/ue4.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/ue4.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos-v8.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-godot4.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta-missing.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_cases.py "${CMAKE_BINARY_DIR}/NativeTests"
@@ -293,6 +324,8 @@ foreach(mode normal jni-error)
     set_tests_properties(native-geode-${mode} PROPERTIES TIMEOUT 20 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=128")
 endforeach()
 add_dependencies(MacNativeDriverSessionTests GeodeFixtures)
+add_test(NAME macos-cocos-v8-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/cocos-v8.apk" cocos "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(macos-cocos-v8-session PROPERTIES TIMEOUT 60)
 add_test(NAME macos-geode-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/GeodeTests/normal/game.apk" geode "${CMAKE_BINARY_DIR}/TestResults")
 set_tests_properties(macos-geode-session PROPERTIES TIMEOUT 60)
 add_executable(NativeDriverLifecycleTests tests/macos/NativeDriverLifecycle.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacDiagnostics.c)
@@ -392,7 +425,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -400,7 +433,7 @@ target_link_libraries(JavaLifecycleTests PRIVATE NativeRuntime)
 add_dependencies(JavaLifecycleTests JavaRuntimeResources JavaLifecycleFixture)
 add_custom_command(TARGET JavaLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaLifecycleTests>" VERBATIM)
-foreach(case normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework documents)
+foreach(case runtime31 normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework documents)
     add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
@@ -447,6 +480,10 @@ target_link_libraries(MacJavaSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacJavaSessionTests PackageMac JavaLifecycleFixture NativeBootstrapFixture)
 add_test(NAME macos-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults")
 set_tests_properties(macos-java-session PROPERTIES TIMEOUT 95)
+foreach(language en zh-Hans)
+    add_test(NAME macos-java-language-${language} COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults" ${language})
+    set_tests_properties(macos-java-language-${language} PROPERTIES TIMEOUT 60)
+endforeach()
 add_test(NAME macos-java-nativeactivity-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity)
 set_tests_properties(macos-java-nativeactivity-session PROPERTIES TIMEOUT 95)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk"

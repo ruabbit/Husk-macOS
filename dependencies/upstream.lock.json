@@ -2,80 +2,67 @@
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
   "previousRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
-  "integratedRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
-  "checkedOn": "2026-10-26",
-  "commitCount": 0,
-  "integration": "Fetched origin then upstream; neither remote had new commits. upstream/main 3b87cbc is already an ancestor of fork main 2c3af7a, itself an ancestor of the macOS branch; no merge or conflict. Continued WebView migration with real loopback HTTP fixtures and host stop joining an in-flight navigation save without resetting its deadline. Build 20 passed the full default suite and fresh package checks, then was launched once through CUA.",
+  "integratedRevision": "9519faf819abed9807cd11eff088f314c993f35f",
+  "checkedOn": "2026-10-27",
+  "commitCount": 27,
+  "integration": "Fetched origin then upstream; origin had no external commits. Ordinarily merged 27 commits / 66 paths through 9519faf into fork main 99169de, then macOS merge 52c17da, without conflicts. Integrated 3.1 into the Mac runtime, library, input, language, shell and shared account. Final build 21 passed all 164 default tests and package validation, then was launched once through CUA; push and current CI are pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "verified-pending-push",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
   },
   "candidate": {
-    "version": "3.0.0",
-    "build": "20",
-    "defaultTests": 155,
-    "defaultTestSeconds": 247.8,
+    "version": "3.1.0",
+    "build": "21",
+    "defaultTests": 164,
+    "defaultTestSeconds": 256.95,
     "bundleMachO": 18,
     "javaResources": 406,
-    "appSHA256": "50e320db2c22ec44aa4585d02d68c32203be799f291755667a422850e3da5559",
-    "nativeRunnerSHA256": "31df7c153d21e581609cf992cf815472d110fdc931f0a510da224402a888f04d",
-    "webRunnerSHA256": "8cf245602c6e139d3e43f1ee80619fe24e8c95a2fcc157ddc98595631b883074",
+    "appSHA256": "1d13b6ad80dff155c072c113182caf3414876beda173c15cac90db4edc941dfd",
+    "nativeRunnerSHA256": "1ca327f32f405f3a61e2175625ff9b5a392d6589e90926d7ac9b3f88fa6a360a",
+    "webRunnerSHA256": "5a53066917a1c7d41991df88f06ce358184512c5c939a632dbb4d2f792e48487",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "frameworkSHA256": "49d738b4b695cb94d23edecb97ca9b4b012b9a26ee523bc9c959f64228e76707",
-    "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Exact build 20 Product launched once through CUA as PID 98822; full executable path, AX and screenshot confirmed the original 11-app home and visible icons. No user game or Android VM launched.",
-    "ci": {
-      "run": 40253576983,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983",
-      "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 36,
-      "hostedCoreTestSeconds": 48.98
-    }
+    "frameworkSHA256": "e3ed98a47c0a28b573eb986e9c47cede8dd9cb7e87defab916f797c387e64489",
+    "localizations": {
+      "en": {
+        "entries": 331,
+        "sha256": "dc356f00db841fac242dd183b925b4859cc5ed73bcffcd5321a49b4ce57f0c63"
+      },
+      "zh-Hans": {
+        "entries": 331,
+        "sha256": "446a903f14da18b6ee3cc7ca5dac640c625f757bfb0bf7a8ca25be5a509a139a"
+      }
+    },
+    "sourceRevision": null,
+    "deliveryStatus": "verified-pending-push",
+    "gui": "Exact build 21 Product launched once through CUA as PID 13975; full executable path, AX and screenshots confirmed the new sidebar/home, original 11 applications and visible icons, account sign-in view and sync disclosure, then returned home. No real login/upload, user game or Android VM launch.",
+    "ci": null
   },
   "lastCheck": {
-    "upstreamNewCommits": 0,
-    "upstreamChangedPaths": 0,
+    "upstreamNewCommits": 27,
+    "upstreamChangedPaths": 66,
     "originNewCommits": 0,
-    "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15",
-    "macOSBaseRevision": "d57d6831fab1936df37b767c3739b36357ec1f5c",
-    "macOSMergeRevision": null,
-    "macOSRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
-    "macOSAdaptation": "Host stop joins the existing navigation save, cancels the pending navigation decision immediately and keeps the original six-second deadline. Five loopback HTTP real-DEX scenarios cover storage/plugin reopen, cookies, redirect/history request counts, stop overlap, rejection and timeout.",
-    "defaultSuiteTests": 155,
-    "defaultTestSeconds": 247.8,
-    "targetedTests": 5,
-    "targetedTestSeconds": 20.99,
+    "mainRevision": "99169de4e6a419678003d8ab0a6aea6613392d77",
+    "macOSBaseRevision": "1c9cafe7cb6c157598b44af8ebe4d06a6ad2b536",
+    "macOSMergeRevision": "52c17dad7522b6f2ba1fb65b8f1bdb0983d4cf23",
+    "macOSRevision": null,
+    "macOSAdaptation": "Godot Kotlin aliases share canonical file/listing handles; earliest compressed heap reservation; V8 jitless, font paths, JNI registration generation and W^X compiled and exercised. Java/manual SDL input, GL resize/insets/settings cancellation, manifest base APK order, application/guest locale, sidebar/shared account/avatar/library/playtime and Store categories are connected. Real application/device/service acceptance remains open.",
+    "defaultSuiteTests": 164,
+    "defaultTestSeconds": 256.95,
+    "targetedTests": 15,
+    "targetedTestSeconds": 11.95,
     "javaWebTests": 48,
-    "javaWebTestSeconds": 155.25,
+    "javaWebTestSeconds": 161.14,
     "candidateDependentTestsPending": 0,
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
     "blocker": null,
     "previousCI": {
-      "run": 40150135195,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40150135195",
-      "sourceRevision": "963975e1026f5f188a4c0f7a26f8178c4e1791b4",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 36,
-      "hostedCoreTestSeconds": 48.66
-    },
-    "ci": {
       "run": 40253576983,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983",
       "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
@@ -86,7 +73,8 @@
       "hardware": "skipped",
       "hostedCoreTests": 36,
       "hostedCoreTestSeconds": 48.98
-    }
+    },
+    "ci": null
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -128,7 +116,7 @@
     "navigation": "App-initiated loadUrl and allowed main-frame navigation wait for the prior document save. WebViewClient policy runs before irreversible saving; vetoes, custom URLs and same-document fragments preserve the live document. Save timeouts/callbacks belong to a document generation; caught Java plugin errors cancel navigation and fail final storage acknowledgement. Confirmed sealed GET history documents reload in their original list position without duplicate lifecycle; ordinary history loads are not repeated. Saved non-GET history is rejected before leaving the current page, without automatic POST resubmission. Unsupported file subframe remaps are rejected instead of replacing the main page. Nine packaged DEX navigation tests and the full suite pass. Host stop during navigation preparation joins the existing save, cancels the pending decision immediately and preserves its six-second deadline; success, rejection and a late-stop timeout are covered by real loopback HTTP DEX tests.",
     "httpValidation": "Five packaged real-DEX tests use a disposable loopback HTTP server: async save POST, redirect/history request counts, localStorage/IndexedDB/Java plugin process reopen, persisted outgoing cookie, HttpOnly visibility and stop/save overlap. This is controlled-fixture evidence, not third-party HTTP application compatibility."
   },
-  "sourceVersion": "3.0.0",
+  "sourceVersion": "3.1.0",
   "legacyUnityTextInput": {
     "status": "packaged-driver-fixture-verified",
     "remaining": [
@@ -164,10 +152,32 @@
     ]
   },
   "lastUpstreamMerge": {
-    "date": "2026-10-23",
-    "previousRevision": "2df074b3083ce2913922995f2f99249f1498b554",
-    "integratedRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
-    "commitCount": 2,
-    "mainRevision": "2c3af7aa599f2ee4d68f6934c145b1ff04f14c15"
+    "date": "2026-10-27",
+    "previousRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
+    "integratedRevision": "9519faf819abed9807cd11eff088f314c993f35f",
+    "commitCount": 27,
+    "mainRevision": "99169de4e6a419678003d8ab0a6aea6613392d77"
+  },
+  "runtime31Integration": {
+    "status": "macos-packaged-and-fixture-verified",
+    "godot": "Kotlin alias registrations reuse canonical HLE and APK assets; cross-object file access, binary persistence/reopen, resize, independent directory IDs and stale-handle rejection verified. Existing Godot input/pause/normal-close ELF tests remain passing.",
+    "runtime": "NativeRunner reserves compressed heap before AppKit/Java. Real Mach mapping early/late tests and shared font path tests pass. Packaged ELF requires V8 --jitless before JNI_OnLoad; real DEX confirms cached native registration updates from 17 to 41. W^X changes use existing Mac permissions and graphics pins.",
+    "input": "Manual keyboard control and Command-T share existing AppKit input; Java fallback handles ASCII, Chinese and emoji without InputConnection. Legacy Unity key handler included; SDL manual ASCII/shift mapping verified by packaged ELF. GL resize, fullscreen insets and cancelled settings activities have real DEX checks.",
+    "apkOrder": "Manifest-driven orderedAPKs is used by the repository. A signed seven-APK bundle with misleading filenames selects the actual base and preserves signer checks and existing limits.",
+    "remaining": [
+      "Real Godot 4.7/Cocos Creator/Flutter/Dex2C applications and their save reopen.",
+      "Physical IME/controller/frontmost game acceptance; SDL Unicode requires the application text interface.",
+      "Full iOS build/device validation; only shared Swift/C syntax was checked."
+    ]
+  },
+  "accountAndLanguage": {
+    "status": "macos-ui-and-isolated-protocol-verified",
+    "account": "Shared Account.swift protocol with AppKit 256px avatar, Mac library rows, playtime tracking, sign-in/signup/edit/sync/refresh/signout UI. Intercepted HTTP tests use disposable credentials/preferences; no real authentication or upload. Failed Keychain updates retain the prior token.",
+    "language": "Application-only language override; whitelisted HUSK_APP_LANGUAGE for new NativeRunner/WebRunner. Both packaged Java locales initialize before Application. en and zh-Hans resource dictionaries each contain 331 entries.",
+    "remaining": [
+      "Real Husk account service and Keychain session acceptance, authenticated Google Play.",
+      "Some dynamic counters, older help and diagnostics remain Chinese; complete translation and visible Chinese UI acceptance remain open.",
+      "Running guest language changes are not applied."
+    ]
   }
 }

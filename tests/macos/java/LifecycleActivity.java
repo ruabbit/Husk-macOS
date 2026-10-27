@@ -13,6 +13,10 @@ import android.database.sqlite.SQLiteDatabase;
 
 /** Real DEX fixture. Delays expose a host that acknowledges before callbacks return. */
 public final class LifecycleActivity extends Activity {
+    private static native int rebound();
+    public static int callRebound() { return rebound(); }
+    public static int runtime31Result() { return Runtime31Checks.status(); }
+    private static boolean runtime31;
     private static volatile int events;
     private static Thread owner;
     private static boolean wrongThread;
@@ -50,6 +54,8 @@ public final class LifecycleActivity extends Activity {
             }
         };
         view.setFocusable(true); view.setFocusableInTouchMode(true); setContentView(view); view.requestFocus();
+        runtime31 = "runtime31".equals(System.getenv("HUSK_JAVA_CASE"));
+        if (runtime31) Runtime31Checks.start(this, view);
         ((InputManager)getSystemService(INPUT_SERVICE)).registerInputDeviceListener(new InputManager.InputDeviceListener() {
             public void onInputDeviceAdded(int id) { callback(); if (id == 41 || id == 42) controllerEvents |= 64; }
             public void onInputDeviceRemoved(int id) { callback(); if (id == 42) controllerEvents |= 128; }
@@ -64,6 +70,8 @@ public final class LifecycleActivity extends Activity {
         }
     }
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        if (e.getAction() == KeyEvent.ACTION_MULTIPLE) System.out.println("HUSK_MANUAL_INPUT " + e.getCharacters());
+        if (runtime31 && !e.isFromSource(InputDevice.SOURCE_GAMEPAD)) Runtime31Checks.key(e);
         if (e.isFromSource(InputDevice.SOURCE_GAMEPAD)) {
             callback();
             if (paused || e.getDownTime() <= 0 || e.getEventTime() < e.getDownTime()) controllerErrors++;
@@ -99,7 +107,10 @@ public final class LifecycleActivity extends Activity {
         super.onDestroy();
     }
     public static int result() { return wrongThread ? -1 : events; }
-    @Override protected void onActivityResult(int request,int code,android.content.Intent data) { DocumentChecks.receive(this,request,code,data); }
+    @Override protected void onActivityResult(int request,int code,android.content.Intent data) {
+        if (runtime31 && request == 91) Runtime31Checks.result(request,code,data);
+        else DocumentChecks.receive(this,request,code,data);
+    }
     public static int documentResult() { return DocumentChecks.result; }
     public static int controllerResult() { return wrongThread || controllerErrors != 0 ? -1 : controllerEvents; }
     public static int controllerHeld() { return heldButtons; }

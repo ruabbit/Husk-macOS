@@ -221,6 +221,7 @@ enum HuskLog {
 
 var exitCode: Int32 = 0
 MainActor.assumeIsolated {
+    AppLanguage.applyRunnerEnvironment()
     let app = NSApplication.shared
     let delegate = WebRunner()
     app.delegate = delegate

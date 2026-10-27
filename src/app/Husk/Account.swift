@@ -4,7 +4,13 @@
 import Foundation
 import Security
 import SwiftUI
+#if os(macOS)
+import AppKit
+typealias AccountImage = NSImage
+#else
 import UIKit
+typealias AccountImage = UIImage
+#endif
 
 // MARK: - what the site answers
 
@@ -79,29 +85,48 @@ struct AccountError: LocalizedError {
     static let shared = Account()
 
     @Published private(set) var user: HuskUser?
-    @Published private(set) var avatar: UIImage?
+    @Published private(set) var avatar: AccountImage?
     @Published var busy = false
 
     var signedIn: Bool { token != nil }
 
     private static let userKey = "husk.account.user"
-    private var token: String? { Keychain.read() }
+    private var token: String? { readToken() }
+    private let session: URLSession
+    private let sites: [URL]
+    private let defaults: UserDefaults
+    private let avatarFile: URL
+    private let readToken: () -> String?
+    private let writeToken: (String) throws -> Void
+    private let deleteToken: () -> Void
+    @Published private(set) var error: String?
+    // macOS supplies its own repository rows; the web protocol is shared.
+    var libraryRows: (() -> [[String: Any]])?
     private var syncTask: Task<Void, Never>?
 
-    private init() {
-        if let d = UserDefaults.standard.data(forKey: Self.userKey), let u = try? JSONDecoder().decode(HuskUser.self, from: d) { user = u }
-        if let d = try? Data(contentsOf: Self.avatarFile) { avatar = UIImage(data: d) }
-    }
-
-    private static var avatarFile: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("account-avatar.png")
+    init(session: URLSession = .shared, sites: [URL]? = nil,
+         defaults: UserDefaults = .standard, avatarFile: URL? = nil,
+         readToken: @escaping () -> String? = { Keychain.read() },
+         writeToken: @escaping (String) throws -> Void = { try Keychain.write($0) },
+         deleteToken: @escaping () -> Void = { Keychain.delete() }) {
+        self.session = session; self.sites = sites ?? CompatibilityStore.sites; self.defaults = defaults
+        self.readToken = readToken; self.writeToken = writeToken; self.deleteToken = deleteToken
+        #if os(macOS)
+        let avatarPath = "Husk/account-avatar.png"
+        #else
+        let avatarPath = "account-avatar.png"
+        #endif
+        self.avatarFile = avatarFile ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(avatarPath)
+        if readToken() != nil, let d = defaults.data(forKey: Self.userKey), let u = try? JSONDecoder().decode(HuskUser.self, from: d) { user = u }
+        if user != nil, let d = try? Data(contentsOf: self.avatarFile) { avatar = AccountImage(data: d) }
     }
 
     // MARK: talking to the site
 
     private func call(_ method: String, _ path: String, body: [String: Any]? = nil, auth: Bool = true) async throws -> Data {
         var last: Error = AccountError(message: "The Husk website did not answer.")
-        for site in CompatibilityStore.sites {
+        for site in sites {
             var r = URLRequest(url: site.appendingPathComponent(path))
             r.httpMethod = method
             r.timeoutInterval = 20
@@ -109,7 +134,7 @@ struct AccountError: LocalizedError {
             if auth, let token { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
             if let body { r.httpBody = try JSONSerialization.data(withJSONObject: body) }
             do {
-                let (data, resp) = try await URLSession.shared.data(for: r)
+                let (data, resp) = try await session.data(for: r)
                 guard let http = resp as? HTTPURLResponse else { continue }
                 if http.statusCode >= 500 { last = AccountError(message: "The Husk website had a problem (\(http.statusCode))."); continue }
                 if http.statusCode == 401, auth { forget() }
@@ -129,24 +154,27 @@ struct AccountError: LocalizedError {
 
     private func take(_ u: HuskUser) {
         user = u
-        if let d = try? JSONEncoder().encode(u) { UserDefaults.standard.set(d, forKey: Self.userKey) }
+        if let d = try? JSONEncoder().encode(u) { defaults.set(d, forKey: Self.userKey) }
         Task { await loadAvatar() }
     }
 
     private func loadAvatar() async {
-        guard let u = user, let s = u.avatarUrl else { avatar = nil; try? FileManager.default.removeItem(at: Self.avatarFile); return }
-        let url = URL(string: s, relativeTo: CompatibilityStore.site) ?? CompatibilityStore.site
-        guard let (d, _) = try? await URLSession.shared.data(from: url), let img = UIImage(data: d) else { return }
+        guard let u = user, let s = u.avatarUrl else { avatar = nil; try? FileManager.default.removeItem(at: avatarFile); return }
+        guard let site = sites.first, let url = URL(string: s, relativeTo: site) else { return }
+        guard let (d, _) = try? await session.data(from: url), let img = AccountImage(data: d) else { return }
+        guard user?.id == u.id, user?.avatarUrl == s else { return }
         avatar = img
-        try? d.write(to: Self.avatarFile)
+        try? FileManager.default.createDirectory(at: avatarFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? d.write(to: avatarFile, options: .atomic)
     }
 
     private func forget() {
-        Keychain.delete()
+        syncTask?.cancel(); syncTask = nil
+        deleteToken()
         user = nil
         avatar = nil
-        UserDefaults.standard.removeObject(forKey: Self.userKey)
-        try? FileManager.default.removeItem(at: Self.avatarFile)
+        defaults.removeObject(forKey: Self.userKey)
+        try? FileManager.default.removeItem(at: avatarFile)
     }
 
     // MARK: what the screens do
@@ -155,7 +183,7 @@ struct AccountError: LocalizedError {
         busy = true; defer { busy = false }
         let d = try await call("POST", "api/auth/signup", body: ["username": username, "password": password, "displayName": displayName], auth: false)
         let a = try JSONDecoder().decode(AuthAnswer.self, from: d)
-        Keychain.write(a.token)
+        try writeToken(a.token)
         take(a.user)
         await syncLibrary()
     }
@@ -164,7 +192,7 @@ struct AccountError: LocalizedError {
         busy = true; defer { busy = false }
         let d = try await call("POST", "api/auth/login", body: ["username": username, "password": password], auth: false)
         let a = try JSONDecoder().decode(AuthAnswer.self, from: d)
-        Keychain.write(a.token)
+        try writeToken(a.token)
         take(a.user)
         await syncLibrary()
     }
@@ -175,8 +203,12 @@ struct AccountError: LocalizedError {
     }
 
     func refresh() async {
-        guard signedIn, let d = try? await call("GET", "api/me"), let u = try? JSONDecoder().decode(HuskUser.self, from: d) else { return }
-        take(u)
+        guard let sessionToken = token else { return }
+        do {
+            let d = try await call("GET", "api/me")
+            guard token == sessionToken else { return }
+            take(try JSONDecoder().decode(HuskUser.self, from: d)); error = nil
+        } catch { self.error = error.localizedDescription }
     }
 
     func update(displayName: String? = nil, avatarPNG: Data?? = nil) async throws {
@@ -198,6 +230,11 @@ struct AccountError: LocalizedError {
     /// Every game and app here, with its playtime and when it was last played, replaces what the account had.
     func syncLibrary() async {
         guard signedIn else { return }
+        let sessionToken = token
+        #if os(macOS)
+        guard let libraryRows else { return }
+        let rows = Array(libraryRows().prefix(2000))
+        #else
         let iso = ISO8601DateFormatter()
         let items = Launcher.items(store: TranslationLayerStore.shared, host: AndroidHost.shared).filter { $0 != .android }
         let rows: [[String: Any]] = items.prefix(2000).compactMap { i in
@@ -206,14 +243,32 @@ struct AccountError: LocalizedError {
              "type": i.isGame ? "game" : "app", "playtimeSeconds": Playtime.seconds(i.id).rounded(),
              "lastPlayed": i.lastUsed.map { iso.string(from: $0) } ?? NSNull()]
         }
-        guard let d = try? await call("PUT", "api/me/library", body: ["items": rows]),
-              let u = try? JSONDecoder().decode(HuskUser.self, from: d) else { return }
-        take(u)
+        #endif
+        do {
+            let d = try await call("PUT", "api/me/library", body: ["items": rows])
+            guard token == sessionToken, !Task.isCancelled else { return }
+            take(try JSONDecoder().decode(HuskUser.self, from: d)); error = nil
+        } catch { self.error = error.localizedDescription }
     }
 
     /// The avatar picked for the profile, made small and square before it goes.
-    static func avatarPNG(_ image: UIImage) -> Data? {
+    static func avatarPNG(_ image: AccountImage) -> Data? {
+        guard image.size.width > 0, image.size.height > 0 else { return nil }
         let side: CGFloat = 256
+        #if os(macOS)
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 256, pixelsHigh: 256,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        NSGraphicsContext.saveGraphicsState(); defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        let k = max(side / image.size.width, side / image.size.height)
+        let w = image.size.width * k, h = image.size.height * k
+        image.draw(in: NSRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h),
+                   from: .zero, operation: .copy, fraction: 1)
+        return bitmap.representation(using: .png, properties: [:])
+        #else
         let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 1
         let img = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: fmt).image { _ in
             let s = image.size, k = max(side / s.width, side / s.height)
@@ -221,9 +276,11 @@ struct AccountError: LocalizedError {
             image.draw(in: CGRect(x: (side - w) / 2, y: (side - h) / 2, width: w, height: h))
         }
         return img.pngData()
+        #endif
     }
 }
 
+#if !os(macOS)
 extension LibraryItem {
     /// What the account knows it by: the Android package, or a PS4 game's title ID.
     var accountID: String? {
@@ -231,6 +288,8 @@ extension LibraryItem {
         return packageName
     }
 }
+
+#endif
 
 // MARK: - Keychain
 
@@ -246,12 +305,15 @@ private enum Keychain {
         guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
         return String(data: d, encoding: .utf8)
     }
-    static func write(_ token: String) {
-        delete()
-        var q = query
-        q[kSecValueData as String] = Data(token.utf8)
-        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        SecItemAdd(q as CFDictionary, nil)
+    static func write(_ token: String) throws {
+        let value = Data(token.utf8)
+        var status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: value] as CFDictionary)
+        if status == errSecItemNotFound {
+            var q = query; q[kSecValueData as String] = value
+            q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            status = SecItemAdd(q as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { throw AccountError(message: "Could not save the account session in Keychain.") }
     }
     static func delete() { SecItemDelete(query as CFDictionary) }
 }
@@ -266,13 +328,21 @@ struct AccountAvatar: View {
     var body: some View {
         Group {
             if let img = account.avatar {
+                #if os(macOS)
+                Image(nsImage: img).resizable().scaledToFill()
+                #else
                 Image(uiImage: img).resizable().scaledToFill()
+                #endif
             } else {
                 Image(systemName: "person.fill")
                     .font(.system(size: size * 0.42, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #if os(macOS)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    #else
                     .background(Console.raised)
+                    #endif
             }
         }
         .frame(width: size, height: size)

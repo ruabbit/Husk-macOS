@@ -16,6 +16,12 @@ def command(*args):
 
 def verify(app):
     command('codesign','--verify','--deep','--strict',app)
+    localizations = {}
+    for language, home, account in [('en', 'Home', 'Husk Account'), ('zh-Hans', '首页', 'Husk 账号')]:
+        strings = app/'Contents/Resources'/f'{language}.lproj/Localizable.strings'
+        values = json.loads(command('plutil', '-convert', 'json', '-o', '-', strings).stdout)
+        assert values['首页'] == home and values['Husk Account'] == account, ('Missing application localization', language)
+        localizations[language] = {'entries': len(values), 'sha256': hashlib.sha256(strings.read_bytes()).hexdigest()}
     java = verify_java(app/'Contents/Resources/JavaRuntime', check_sources=True)
     graphics = json.loads((app/'Contents/Resources/Notices/moltenvk-build.json').read_text())
     assert graphics['patches'] == graphics_patches(), 'Packaged graphics source patches differ'
@@ -110,7 +116,7 @@ def verify(app):
     if not vm.exists(): forbidden.append('libqemu')
     for path in app.rglob('*'):
         assert not any(term in path.name for term in forbidden),path
-    return {'passed':True,'app':str(app),'binaries':results,'icons':icons,
+    return {'passed':True,'app':str(app),'binaries':results,'icons':icons,'localizations':localizations,
             'javaRuntime':{'imageSHA256':java['imageSHA256'],'files':len(java['files']),
                            'frameworkSHA256':java['files']['husk-framework.dex']['sha256']},
             'signing':'local ad-hoc unless an explicit identity was supplied'}

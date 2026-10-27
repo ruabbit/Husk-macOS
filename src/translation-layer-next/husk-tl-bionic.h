@@ -61,6 +61,11 @@ extern void (*tl_guest_exit_hook)(int status);   /* set by an app host: exit() f
 void *tl_bionic_find(const char *name);
 bool  tl_bionic_is_system_lib(const char *soname);
 
+/* Reserve before executable aliases fragment the compressed-pointer window.
+ * Releasing an unused reservation never releases a cage already handed to a guest. */
+void husk_prepare_compressed_heap(void);
+void husk_release_unused_compressed_heap(void);
+
 /* Fixed before the Java app starts. Android installation paths alias the
  * original APKs; no copies, renames or percent-decoding of ordinary filenames. */
 bool tl_path_install_apks(const char *base, const char *package);

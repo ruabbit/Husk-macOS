@@ -7,6 +7,11 @@ struct MacPlayStoreView: View {
     @ObservedObject var store: MacPlayStore
     @Environment(\.openWindow) private var openWindow
     @State private var query = ""
+    @State private var category = "all"
+    private var displayedApps: [PlayAPI.PlayApp] {
+        guard query.isEmpty else { return store.apps }
+        return store.apps.filter { category == "all" || (category == "apps") == PlayAPI.featuredAppPackages.contains($0.id) }
+    }
     @State private var selected: String?
     @State private var details: PlayAPI.PlayApp?
     @State private var detailError: String?
@@ -26,6 +31,10 @@ struct MacPlayStoreView: View {
                     Button("退出登录") { store.signOut() }.disabled(store.hasActiveDownloads)
                 }
             }.padding(16)
+            if store.session != nil && query.isEmpty {
+                Picker("Browse", selection: $category) { Text("All").tag("all"); Text("Games").tag("games"); Text("Apps").tag("apps") }
+                    .pickerStyle(.segmented).frame(width: 300).padding(.bottom, 12)
+            }
             Divider()
             if store.session == nil {
                 VStack(spacing: 18) {
@@ -42,7 +51,7 @@ struct MacPlayStoreView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HSplitView {
-                    List(store.apps, selection: $selected) { app in
+                    List(displayedApps, selection: $selected) { app in
                         HStack(spacing: 12) {
                             PlayIcon(url: app.iconURL, size: 42)
                             VStack(alignment: .leading, spacing: 3) {
@@ -117,6 +126,7 @@ struct MacPlayStoreView: View {
             do { let app = try await store.details(selected); if !Task.isCancelled { details = app } }
             catch { if !Task.isCancelled { detailError = error.localizedDescription } }
         }
+        .onChange(of: category) { _, _ in selected = nil; details = nil }
         .onChange(of: store.session?.email) { _, _ in selected = nil; details = nil }
     }
     @ViewBuilder private func downloadControls(_ app: PlayAPI.PlayApp) -> some View {

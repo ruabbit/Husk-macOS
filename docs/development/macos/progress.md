@@ -1,5 +1,22 @@
 # 审计进度
 
+
+## 2026-10-27：上游 3.1 接入，build 21
+
+起点 `1c9cafe` 工作区干净；Product/build 20/PID 98822 只有主程序，无项目 Runner/VM/构建，其他项目 UTM 保留。前轮 CI 40253576983 重新确认 success。首次 origin SSH fetch 连接被关闭，重试成功；origin 无外来提交，上游 `3b87cbc..9519faf` 新增 **27 提交、66 路径**。普通合并 main=`99169de`，再合回 macOS=`52c17da`，均无冲突。对照 TLReport.nativeEngine、TLUnityView/project.yml、CMake/能力判断/Runner、Play/登录与图形构建，落实本轮 3.1 增量；图形 pin、权限、独立 Runner、固定画布、默认失焦继续和正常关闭协议保持。
+
+Godot Kotlin 别名编入并共用既有文件/目录句柄，修复双表导致跨对象访问不一致、写入结果和过期目录句柄。压缩堆预留移到 NativeRunner 最早入口；共享 font-path、V8 jitless、JNI native 重新注册与 W^X 代码已编入并补对应回归。真 DEX 验证无文本框的中文/emoji、按键和 GL resize/insets/设置 Activity 取消；Mac ⌘T 手动输入接到 Java、旧 Unity 及支持的原生驱动，SDL 补 ASCII/shift 键。APK 主包按 manifest 识别，误导性文件名的完整签名 bundle 回归通过。
+
+新版侧栏、共享 H 标志/启动页、Husk 账号/资料库同步、游玩计时、Store 分类和应用语言已接入。账号复用 Account.swift 服务协议，Mac 使用 AppKit 头像；凭据失败不发布登录身份，Keychain 更新失败不先删除原 token。账号测试仅用拦截 HTTP、临时偏好与凭据，没有真实注册、登录或上传。中英文各 **331 条**资源进入包，语言仅影响本应用和下一次 Runner；旧动态文本/帮助诊断仍有中文，未声称全面翻译。
+
+唯一 `build/macos`、VM=ON 与缓存保留；相关后台 **15/15（11.95 秒）**。最后账号/文案检查改动重建后，最终默认 **CTest 164/164（256.95 秒）**，其中 Java WebView **48/48（161.14 秒）**、回环 HTTP **5/5（21.62 秒）**。新鲜包检查 **18 个 arm64 Mach-O/406 个 Java 资源**及中英文文案通过，启动前逐项摘要一致。共享 Account/HuskLogo Swift 与 Godot C 的 iOS 27/deployment 15 语法检查通过，没有 iOS 真机结论。日志复用 current-upstream-build/targeted/ctest/bundle/ios-syntax 与 validation.json；首轮账号测试的偏好断言错误和意外 SIGTRAP 保留在 account-first.log，已改为临时 suite 检查和显式失败退出。
+
+旧空闲 Husk 经 CUA ⌘Q 退出后确认进程消失。最终唯一 **3.1.0/build 21** Product 通过 CUA 只启动一次，PID **13975**；完整路径、AX/截图确认侧栏、原有 **11 个应用**与图标、账号登录页及同步说明，再返回首页。App SHA-256 `1d13b6ad80dff155c072c113182caf3414876beda173c15cac90db4edc941dfd`，NativeRunner `1ca327f32f405f3a61e2175625ff9b5a392d6589e90926d7ac9b3f88fa6a360a`，framework DEX `e3ed98a47c0a28b573eb986e9c47cede8dd9cb7e87defab916f797c387e64489`。
+
+真实 Godot/Cocos/Flutter/Geode 应用、实体 IME/手柄、真实账号服务、认证 Play 与 VM/P6 继续开放。下一轮继续 WebView 历史恢复与 host-stop、导航/destroy、Activity replacement/recreate、加载中/跨来源和真实插件；本轮未将这些关闭。War Thunder 已知用户日志是更新器完成后的 Vulkan 设备黑名单 exit 1，具体规则仍未知。本轮没有运行用户游戏或 Android VM、操作 USB、修改 APK/存档/Android 磁盘，未向上游发布任何内容。
+
+本地验证与候选启动完成；源码提交、两分支推送、远端 SHA 和本批 CI 回读待收尾。
+
 ## 2026-10-26：HTTP WebView 保存与停止交叠，build 20
 
 从干净 `codex/macos-p0=d57d683` 起步，origin/upstream fetch 均无新增；`upstream/main=3b87cbc` 已是 `main=2c3af7a` 的祖先，main 又是 macOS 分支祖先，没有重复合并或冲突。前轮 build 19 的 Actions 40150135195 已确认 completed/success。重新对照上游 TLReport.nativeEngine、TLUnityView/project.yml 与 macOS CMake、资料库/Runner 分发、输入/暂停/关闭、共享 PlayAPI/登录和固定图形依赖，既有接入保持，没有新的上游平台增量。

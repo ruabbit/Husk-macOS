@@ -26,6 +26,8 @@ import ImageIO
     let paths: LibraryPaths
     let repository: LibraryRepository?
     let resources: URL
+    private var playingID: String?
+    private var playtimeChanges: AnyCancellable?
     private var sessionChanges: AnyCancellable?
     private var vmChanges: AnyCancellable?
     private var pendingImports: [URL] = []
@@ -39,6 +41,16 @@ import ImageIO
                   let hash = data["sha256"] as? String else { throw LibraryFailure("安装不完整：缺少随附游戏清单。") }
             repository = try LibraryRepository(paths: paths, trustedFixtureHash: hash)
         } catch { repository = nil; self.error = error.localizedDescription }
+        Account.shared.libraryRows = { [weak self] in MacAccountLibrary.rows(self?.games ?? []) }
+        playtimeChanges = session.$state.sink { [weak self] state in
+            guard let self else { return }
+            let next = state == "running" ? self.session.gameID : nil
+            if self.playingID != next {
+                if let id = self.playingID { Playtime.end(id) }
+                self.playingID = next
+                if let id = next { Playtime.begin(id) }
+            }
+        }
         sessionChanges = session.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
         vmChanges = vm.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
     }
@@ -49,7 +61,7 @@ import ImageIO
         return ids
     }
     func reload() async {
-        do { games = try await repository?.games() ?? []; if selection == nil { selection = games.first?.id } }
+        do { games = try await repository?.games() ?? []; if selection == nil { selection = games.first?.id }; Account.shared.librarySoon() }
         catch { self.error = error.localizedDescription }
     }
     func importURLs(_ urls: [URL]) {
@@ -267,12 +279,6 @@ struct LibraryView: View {
             model.importProviders(providers)
             return true
         }
-        .fileImporter(isPresented: $model.showImporter, allowedContentTypes: ["apk", "xapk", "apkm", "apks"].compactMap { UTType(filenameExtension: $0) }, allowsMultipleSelection: true) { result in
-            switch result { case .success(let urls): model.importURLs(urls); case .failure(let error): model.error = error.localizedDescription }
-        }
-        .alert("无法完成操作", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
-            Button("好") { model.error = nil }
-        } message: { Text(model.error ?? "") }
         .task { await model.reload() }
         .sheet(item: $reporting) { MacCompatReportSheet(subject: $0) }
         .onChange(of: model.session.state) { _, state in
@@ -326,6 +332,7 @@ struct GameDetail: View {
                              game.runtime == "minecraft" ? "Minecraft · macOS 原生运行" :
                              game.runtime == "nativeactivity" ? "macOS 原生运行" :
                              game.runtime == "unity" ? "Unity · macOS 原生运行" : "已导入资料库").foregroundStyle(.secondary)
+                        Label(Playtime.text(Playtime.seconds(game.id)), systemImage: "clock").font(.caption).foregroundStyle(.secondary)
                         if let last = game.lastPlayed { Text("上次游玩：\(last.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
                     }
                 }
@@ -422,8 +429,13 @@ struct SettingsView: View {
     @AppStorage(CompatibilityStore.askKey) private var askCompatibility = false
     @AppStorage(Holiday.key) private var holiday = true
     @AppStorage("macos.appearance") private var appearance = "system"
+    @AppStorage(AppLanguage.key) private var language = "system"
     var body: some View {
         Form {
+            Picker("Language", selection: $language) {
+                Text("System default").tag("system"); Text("English").tag("en"); Text("简体中文").tag("zh-Hans")
+            }.onChange(of: language) { _, value in AppLanguage.set(value) }
+            Text("Restart Husk to apply the language to every screen. Applications use it on their next launch.").font(.caption).foregroundStyle(.secondary)
             Picker("外观", selection: $appearance) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") }
             Toggle("圣诞装饰", isOn: $holiday)
             LabeledContent("资料目录") { Text(model.paths.root.path).font(.caption).textSelection(.enabled) }
@@ -469,6 +481,7 @@ struct HuskMacApp: App {
                 Button("显示游戏窗口") { model.session.send("window", values: ["action": "show"]) }.disabled(!model.session.active)
                 Button("最小化游戏窗口") { model.session.send("window", values: ["action": "minimize"]) }.disabled(!model.session.active)
                 Button("切换游戏全屏") { model.session.send("window", values: ["action": "fullscreen"]) }.disabled(!model.session.active)
+                Button("文字输入 / 键盘控制") { model.session.send("keyboard") }.keyboardShortcut("t").disabled(!model.session.active)
                 Button("结束游戏") { model.session.stop() }.disabled(!model.session.active)
             }
         }

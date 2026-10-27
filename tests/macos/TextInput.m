@@ -2,6 +2,9 @@
 #import "MacTextInput.h"
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"Text input check failed: %s\n",#x);return 1;}}while(0)
 int main(void) { @autoreleasepool {
+    NSMutableArray *keys=[NSMutableArray new];
+    mac_send_android_text_keys(@"A!?中😀\n",^(int code,BOOL down){[keys addObject:@(down?code:-code)];});
+    CHECK(([keys isEqual:@[@59,@29,@-29,@-59,@59,@8,@-8,@-59,@59,@76,@-76,@-59,@66,@-66]]));
     MacTextInput *input=[[MacTextInput alloc] initWithFrame:NSZeroRect];
     [input receiveText:@"World" selection:NSMakeRange(0,5) marked:NSMakeRange(NSNotFound,0)];
     [input setMarkedText:@"shi" selectedRange:NSMakeRange(3,0) replacementRange:NSMakeRange(NSNotFound,0)];

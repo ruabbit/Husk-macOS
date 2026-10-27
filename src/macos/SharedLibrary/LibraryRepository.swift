@@ -226,8 +226,7 @@ public actor LibraryRepository {
                     else { throw LibraryFailure("解包失败：\(String(cString: error))") }
                     names.append(name)
                 }
-                let siblings = names
-                names.sort { let a = BundleUnpacker.rank($0, siblings: siblings), b = BundleUnpacker.rank($1, siblings: siblings); return a == b ? $0 < $1 : a < b }
+                names = BundleUnpacker.orderedAPKs(names) { Self.entry(stage.appendingPathComponent($0), "AndroidManifest.xml") }
                 let obbs = entries.filter { $0.name.lowercased().hasSuffix(".obb") }
                 guard obbs.count <= 2 else { throw LibraryFailure("此 bundle 含过多的 OBB 资源。") }
                 if !obbs.isEmpty {

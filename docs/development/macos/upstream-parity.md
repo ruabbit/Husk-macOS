@@ -1,5 +1,22 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-27：上游 3.1，build 21
+
+`3b87cbc..9519faf` 的 **27 提交/66 路径**已普通合并到 fork main=`99169de`，再合回 macOS=`52c17da`，没有冲突或 origin 外来提交。按 TLReport.nativeEngine、TLUnityView/project.yml、CMake、资料库判断、Runner 输入/暂停/关闭、共享 PlayAPI/登录及图形构建逐项核对；没有新增图形依赖 pin 或 Mac 权限。iOS 的 Bonjour RemotePairing、TrollStore/JIT fallback 与 jetsam 诊断保留上游源码，不映射成 Mac 平台能力。
+
+| 3.1 增量 | macOS 接入与本轮验证 | 证据边界 |
+| --- | --- | --- |
+| Godot 4.7 Kotlin 文件/目录 | 新文件编入 NativeRuntime；所有别名复用 canonical HLE，保留 APK assets，修复跨对象句柄、写入返回值、翻译后路径与目录锁/过期 ID。二进制 flush/关闭/重开、resize、seek/eof、rename、独立目录/无效句柄回归通过；原 Godot ELF 输入/暂停/正常关闭保留 | 真实 Godot 4.7 游戏、可见窗口与存档重开仍待验收 |
+| compressed heap、font-path、V8、JNI、W^X | NativeRunner 在 AppKit/Java 前预留；复用上游真实 Mach 早/晚预留和字体路径测试。打包 ELF 验证 JNI_OnLoad 前已设 `--jitless`；真 DEX 验证重新注册 native 后缓存失效。共享 RX/RW 改动进入现有 Hardened Runtime | 受控 ELF/DEX 与路径测试不代表 Cocos Creator、Flutter、Dex2C 真实应用兼容 |
+| Java 布局/手动输入 | 真 DEX 覆盖 GL resize、fullscreen 零 insets、系统设置请求取消、无输入框的 ASCII/中文/emoji 与删除/确认。Mac ⌘T/keyboard 控制和旧 Unity 输入分支接通；SDL 手动文字生成 Android ASCII/shift 键。打包 Java/SDL 输入、暂停和关闭通过 | 实体输入法组合/实体手柄/前台真实游戏未验收；SDL 无法表示的 Unicode 仍需应用自身文本接口 |
+| APK manifest 主包识别 | 导入复用共享 orderedAPKs；受控签名 bundle 将 base 与 split 文件名故意互换仍正确选择，原身份/版本/签名校验不变 | 不代表真实大包或已认证 Play 资源交付 |
+| 侧栏、H 标志、账号、游玩时长、Store 分类 | 复用 Account/HuskLogo，加入 AppKit 头像、账号页、Mac library rows、暂停时停止计时、导入后/游玩后的同步调度及 All/Games/Apps。离线服务测试覆盖登录/注册/回退/资料库/编辑/退出/401/凭据失败；CUA 核对首页 11 应用与账号登录页 | 未创建或登录真实账号、上传个人资料、验证线上服务或 Google Play 认证 |
+| 应用与 guest 语言 | en/zh-Hans 各 331 条文案进入 Product；仅改 Husk 自身偏好，白名单环境传给新 NativeRunner/WebRunner；真打包 DEX 在 Application 前取得对应语言 | CUA 当前核对英文主要界面，动态计数/旧帮助诊断仍有中文；运行中 guest 语言变化未实现 |
+
+唯一 Product 为 **3.1.0/build 21**。针对性 **15/15（11.95 秒）**、最终默认 **164/164（256.95 秒）**、包检查 **18 arm64 Mach-O/406 Java 资源**及两语言资源通过；其中原 WebView **48 项（161.14 秒）**和 HTTP **5 项（21.62 秒）**保持通过。iOS 共享 Swift/C 语法通过，未做完整构建/真机验证。CUA 单次启动 PID **13975**，完整候选路径、首页/侧栏/账号页 AX 与截图核对成功；没有启动用户游戏/VM。推送与本批 CI 的最终状态见 progress.md 顶部交付记录。
+
+既有 WebView 主程序/Activity/destroy/导航与受控 HTTP 保存已交付；历史恢复/host-stop 交叠、导航/destroy 专门回归、Activity replacement/recreate、加载中文档、跨源 child frame 与真实 HTTP 第三方插件继续开放。下一轮先完成这些具体回归，再验合法真实应用；保留物理 IME/手柄、文件面板/URI、真实 .NET、真实 Geode、Play/VM/P6 等下文待办。War Thunder 最新真实证据仍是更新器完成后设备黑名单主动 exit 1，不能因这轮构建通过改记为游戏兼容。
+
 ## 2026-10-26：HTTP 保存与停止交叠，build 20
 
 origin/upstream fetch 均无新增；upstream 3b87cbc 已在 main 2c3af7a 的历史内，main 又是 macOS 分支祖先，没有合并或冲突。逐项核对上游引擎、TLUnityView/project.yml、macOS CMake/资料库/Runner 输入与暂停关闭、Store/登录和固定图形依赖，既有接入保持。

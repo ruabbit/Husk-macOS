@@ -123,6 +123,10 @@ private final class FixtureHTTP: URLProtocol, @unchecked Sendable {
             for name in ["tampered", "short", "overflow"] {
                 try await refused("reject \(name) APK") { _ = try APKSignature.verify(cases.appendingPathComponent("\(name).apk")) }
             }
+            let arbitrary = try LibraryRepository(paths: LibraryPaths(root: root.appendingPathComponent("ArbitraryNames")), trustedFixtureHash: "none")
+            let named = try await arbitrary.importGame(cases.appendingPathComponent("arbitrary.apks"))
+            try check(named.apkNames.count == 7 && named.apkNames.first == "config.arm64_v8a.apk" && named.signerSHA256 == signer,
+                      "manifest base wins over misleading base/config/asset filenames with signatures preserved")
             let paths = LibraryPaths(root: root.appendingPathComponent("Library"))
             let library = try LibraryRepository(paths: paths, trustedFixtureHash: "none")
             let first = try await library.importAPKs(Array(set(1).reversed()), package: "org.husk.playtest", version: 1, title: "Play fixture")

@@ -12,6 +12,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -101,9 +102,9 @@ static void FA_open(tl_jcall *c)
     case 7: flags = O_RDWR | O_CREAT | O_TRUNC; break;
     default: flags = O_RDONLY;
     }
-    if (flags & O_CREAT) { char dir[1024]; snprintf(dir, sizeof(dir), "%s", path); char *s = strrchr(dir, '/'); if (s) { *s = 0; mkdirs(dir); } }
     char host[1100];
     host_path(path, host, sizeof(host));
+    if (flags & O_CREAT) { char dir[1100]; snprintf(dir, sizeof(dir), "%s", host); char *s = strrchr(dir, '/'); if (s) { *s = 0; mkdirs(dir); } }
     int fd = open(host, flags, 0644);
     if (fd < 0) { c->ret = vi(errno == ENOENT ? -1 : 0); return; }        /* FILE_NOT_FOUND_ERROR_ID, INVALID_FILE_ID */
     pthread_mutex_lock(&f_lock);
@@ -134,17 +135,19 @@ static void FA_read(tl_jcall *c)
     if (got < n) F[id].eof = true;
     c->ret = vi((int)got);
 }
-static void FA_write(tl_jcall *c)
+static bool FA_write_buffer(tl_jcall *c)
 {
     int fd = fd_of(c->args[0].i);
     jobj *buf = c->args[1].l;
     const char *p = buf ? tl_jni_get_field(buf, "address", "J").l : NULL;
     int64_t n = buf ? tl_jni_get_field(buf, "capacity", "J").j : 0;
-    if (fd < 0 || !p) return;
+    if (fd < 0 || !p || n < 0) return false;
     int64_t put = 0;
-    while (put < n) { ssize_t w = write(fd, p + put, (size_t)(n - put)); if (w <= 0) break; put += w; }
+    while (put < n) { ssize_t w = write(fd, p + put, (size_t)(n - put)); if (w <= 0) return false; put += w; }
+    return true;
 }
-static void FA_write4(tl_jcall *c) { FA_write(c); c->ret = vz(fd_of(c->args[0].i) >= 0); }
+static void FA_write(tl_jcall *c) { FA_write_buffer(c); c->ret.j = 0; }
+static void FA_write4(tl_jcall *c) { c->ret = vz(FA_write_buffer(c)); }
 static void FA_resize(tl_jcall *c) { int fd = fd_of(c->args[0].i); c->ret = vi(fd >= 0 && ftruncate(fd, c->args[1].j) == 0 ? 0 : 1); }   /* OK, FAILED */
 static void FA_sizeOf(tl_jcall *c) { char host[1100]; struct stat st; host_path(S(c->args[0].l), host, sizeof(host)); c->ret = vj(stat(host, &st) == 0 ? st.st_size : -1); }
 static void FA_accessed(tl_jcall *c) { char host[1100]; struct stat st; host_path(S(c->args[0].l), host, sizeof(host)); c->ret = vj(stat(host, &st) == 0 ? st.st_atime : 0); }
@@ -158,8 +161,9 @@ static void FA_modified(tl_jcall *c) { char host[1100]; struct stat st; host_pat
  * opened; dirNext walks it and dirIsDir / isCurrentHidden ask about the entry dirNext last gave.
  */
 #define MAX_DIRS 64
-typedef struct { bool used; int n, at; char **names; bool *dirs; } listing;
+typedef struct { bool used; int id, n, at; char **names; bool *dirs; } listing;
 static listing D[MAX_DIRS];
+static int next_directory = 4096;
 static pthread_mutex_t d_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void add_name(listing *l, const char *name, bool dir)
@@ -232,27 +236,47 @@ static void DA_open(tl_jcall *c)
     pthread_mutex_lock(&d_lock);
     int id = -1;
     for (int i = 1; i < MAX_DIRS; i++) if (!D[i].used) { id = i; break; }
-    if (id > 0) { D[id] = l; D[id].used = true; D[id].at = -1; }
+    if (id > 0 && next_directory < INT_MAX) {
+        D[id] = l; D[id].used = true; D[id].at = -1; D[id].id = next_directory++;
+        id = D[id].id;
+    } else {
+        for (int i = 0; i < l.n; i++) free(l.names[i]);
+        free(l.names); free(l.dirs); id = -1;
+    }
     pthread_mutex_unlock(&d_lock);
     c->ret = vi(id);
 }
-static listing *dir_of(int id) { return id > 0 && id < MAX_DIRS && D[id].used ? &D[id] : NULL; }
+static listing *dir_of(int id) {
+    for (int i = 1; i < MAX_DIRS; i++) if (D[i].used && D[i].id == id) return &D[i];
+    return NULL;
+}
 static void DA_next(tl_jcall *c)
 {
+    pthread_mutex_lock(&d_lock);
     listing *l = dir_of(c->args[1].i);
-    if (!l || l->at + 1 >= l->n) { if (l) l->at = l->n; c->ret = vl(STR("")); return; }
-    l->at++;
-    c->ret = vl(STR(l->names[l->at]));
+    const char *name = "";
+    if (!l || l->at + 1 >= l->n) { if (l) l->at = l->n; }
+    else name = l->names[++l->at];
+    c->ret = vl(STR(name));
+    pthread_mutex_unlock(&d_lock);
 }
-static void DA_isDir(tl_jcall *c) { listing *l = dir_of(c->args[1].i); c->ret = vz(l && l->at >= 0 && l->at < l->n && l->dirs[l->at]); }
-static void DA_hidden(tl_jcall *c) { listing *l = dir_of(c->args[1].i); c->ret = vz(l && l->at >= 0 && l->at < l->n && l->names[l->at][0] == '.'); }
+static void DA_isDir(tl_jcall *c) {
+    pthread_mutex_lock(&d_lock); listing *l = dir_of(c->args[1].i);
+    c->ret = vz(l && l->at >= 0 && l->at < l->n && l->dirs[l->at]); pthread_mutex_unlock(&d_lock);
+}
+static void DA_hidden(tl_jcall *c) {
+    pthread_mutex_lock(&d_lock); listing *l = dir_of(c->args[1].i);
+    c->ret = vz(l && l->at >= 0 && l->at < l->n && l->names[l->at][0] == '.'); pthread_mutex_unlock(&d_lock);
+}
 static void DA_close(tl_jcall *c)
 {
+    pthread_mutex_lock(&d_lock);
     listing *l = dir_of(c->args[1].i);
-    if (!l) return;
-    for (int i = 0; i < l->n; i++) free(l->names[i]);
-    free(l->names); free(l->dirs);
-    memset(l, 0, sizeof(*l));
+    if (l) {
+        for (int i = 0; i < l->n; i++) free(l->names[i]);
+        free(l->names); free(l->dirs); memset(l, 0, sizeof(*l));
+    }
+    pthread_mutex_unlock(&d_lock);
 }
 static bool asset_entry(const char *path, bool dir)
 {
@@ -277,6 +301,7 @@ static bool disk_is(const char *path, bool dir)
 static void DA_dirExists(tl_jcall *c)
 {
     const char *p = S(c->args[1].l);
+    if (p[0] == '/' && !disk_is(p, true)) { char host[1100]; host_path(p, host, sizeof(host)); mkdirs(host); }
     c->ret = vz(in_assets(c->args[0].i, p) ? asset_entry(p, true) : disk_is(p, true));
     if (getenv("TL_GODOT_TRACE")) tl_log_line("godot: dirExists(%d, %s) -> %d", c->args[0].i, p, c->ret.z);
 }
@@ -287,7 +312,8 @@ static void DA_makeDir(tl_jcall *c)
 {
     if (in_assets(c->args[0].i, S(c->args[1].l))) { c->ret = vz(0); return; }
     char host[1100]; host_path(S(c->args[1].l), host, sizeof(host));
-    c->ret = vz(mkdir(host, 0755) == 0 || errno == EEXIST);
+    mkdirs(host);
+    c->ret = vz(disk_is(S(c->args[1].l), true));
     if (getenv("TL_GODOT_TRACE")) tl_log_line("godot: makeDir(%d, %s) -> %d", c->args[0].i, host, c->ret.z);
 }
 static void DA_remove(tl_jcall *c)
@@ -419,6 +445,12 @@ static const char *const k_classes[] = {
     "org/godotengine/godot/GodotRenderView", "org/godotengine/godot/input/GodotInputHandler", GD, IO, FA, DA, "org/godotengine/godot/GodotLib", "org/godotengine/godot/utils/GodotNetUtils", "org/godotengine/godot/tts/GodotTTS",
 };
 
+tl_jhle_fn tl_godot_file_hle(const char *cls, const char *name, const char *sig)
+{
+    for (const tl_jhle *e = k_godot; e->cls; e++)
+        if (!strcmp(e->cls, cls) && !strcmp(e->name, name) && !strcmp(e->sig, sig)) return e->fn;
+    return NULL;
+}
 void tl_godot_kotlin_install(void);
 
 void tl_godot_hle_install(const char *pkg, const char *apk, const char *data, int w, int h)

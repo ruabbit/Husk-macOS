@@ -20,7 +20,7 @@ if not android:
 web = len(sys.argv) > 2 and sys.argv[2] == 'web'
 keystore = len(sys.argv) > 2 and sys.argv[2] == 'keystore'
 source = Path(__file__).parent/('java/WebStorageActivity.java' if web else 'java/KeyStoreActivity.java' if keystore else 'java/LifecycleActivity.java')
-sources = [source] if web or keystore else [source, Path(__file__).parent/'java/FrameworkChecks.java', Path(__file__).parent/'java/DocumentChecks.java']
+sources = [source] if web or keystore else [source, Path(__file__).parent/'java/FrameworkChecks.java', Path(__file__).parent/'java/DocumentChecks.java', Path(__file__).parent/'java/Runtime31Checks.java']
 if web:
     sources += sorted((Path(__file__).parent/'java/webkit').glob('*.java'))
 if not web and not keystore:

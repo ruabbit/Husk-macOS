@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import SharedLibrary
 
 /// macOS uses real AppKit game windows; the library remains available while a game runs.
@@ -11,6 +12,9 @@ struct MacHomeShell: View {
     @AppStorage(Holiday.key) private var holiday = true
     @AppStorage("macos.appearance") private var appearance = "system"
     @State private var tab = "home"
+    @State private var loading = true
+    @ObservedObject private var account = Account.shared
+    @AppStorage(AppLanguage.key) private var language = "system"
     @State private var featuredID: String?
     private var recentGames: [LibraryGame] {
         model.games.sorted { ($0.lastPlayed ?? $0.importedAt) > ($1.lastPlayed ?? $1.importedAt) }
@@ -19,16 +23,40 @@ struct MacHomeShell: View {
         recentGames.first { $0.id == featuredID } ?? recentGames.first
     }
     var body: some View {
-        TabView(selection: $tab) {
-            home.tabItem { Label("首页", systemImage: "house") }.tag("home")
-            LibraryView(model: model).tabItem { Label("资料库", systemImage: "square.grid.2x2") }.tag("library")
-            MacPlayStoreView(model: model, store: model.playStore).tabItem { Label("商店", systemImage: "bag") }.tag("store")
-            MacHelpView().tabItem { Label("帮助", systemImage: "questionmark.circle") }.tag("help")
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) { HuskLogo(size: 28); Text("Husk").font(.title2.bold()) }.padding(.bottom, 22)
+                navigation("首页", "house", "home")
+                navigation("资料库", "square.grid.2x2", "library")
+                navigation("商店", "bag", "store")
+                Button { tab = "library"; model.showImporter = true } label: { Label("导入应用", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity, alignment: .leading).padding(9) }
+                    .buttonStyle(.plain).disabled(model.importBusy)
+                Divider().padding(.vertical, 8)
+                navigation("帮助", "questionmark.circle", "help")
+                Spacer()
+                Button { tab = "account" } label: {
+                    HStack { AccountAvatar(size: 28); Text(account.user?.displayName ?? String(localized: "Husk Account")).lineLimit(1) }
+                        .padding(9).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(tab == "account" ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                }.buttonStyle(.plain)
+            }.padding(16).frame(width: 180).frame(maxHeight: .infinity).background(.bar)
+            Divider()
+            Group {
+                switch tab {
+                case "library": LibraryView(model: model)
+                case "store": MacPlayStoreView(model: model, store: model.playStore)
+                case "help": MacHelpView()
+                case "account": MacAccountView()
+                default: home
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .environment(\.locale, language == "system" ? .autoupdatingCurrent : Locale(identifier: language))
+        .overlay { if loading { SplashScreen() } }
         .overlay { if holiday && Holiday.inSeason && !reduceMotion { Snowfall() } }
         .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
         .frame(minWidth: 900, minHeight: 620)
-        .task { await model.reload() }
+        .task { await model.reload(); loading = false }
         .onOpenURL { url in
             if url.isFileURL { model.importURLs([url]); tab = "library"; return }
             guard url.scheme == "husk-macos", url.host == "open_app",
@@ -41,7 +69,19 @@ struct MacHomeShell: View {
                 else if model.session.gameID == id { window("show") }
             }
         }
+        .fileImporter(isPresented: $model.showImporter, allowedContentTypes: ["apk", "xapk", "apkm", "apks"].compactMap { UTType(filenameExtension: $0) }, allowsMultipleSelection: true) { result in
+            switch result { case .success(let urls): tab = "library"; model.importURLs(urls); case .failure(let error): model.error = error.localizedDescription }
+        }
+        .alert("无法完成操作", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            Button("好") { model.error = nil }
+        } message: { Text(model.error ?? "") }
         .onChange(of: model.selection) { _, _ in if model.importing { tab = "library" } }
+    }
+    private func navigation(_ title: LocalizedStringKey, _ symbol: String, _ destination: String) -> some View {
+        Button { tab = destination } label: {
+            Label(title, systemImage: symbol).frame(maxWidth: .infinity, alignment: .leading).padding(9)
+                .background(tab == destination ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 10))
+        }.buttonStyle(.plain).accessibilityAddTraits(tab == destination ? .isSelected : [])
     }
     private var home: some View {
         ScrollView {
@@ -125,7 +165,7 @@ struct MacHomeShell: View {
                                        startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 22))
     }
     private func window(_ action: String) { model.session.send("window", values: ["action": action]) }
-    private func tile(_ title: String, _ subtitle: String, _ icon: String, action: @escaping () -> Void) -> some View {
+    private func tile(_ title: LocalizedStringKey, _ subtitle: LocalizedStringKey, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon).font(.title2).foregroundStyle(.mint)
@@ -157,7 +197,7 @@ struct MacHelpView: View {
             TextField("搜索问题", text: $query).textFieldStyle(.roundedBorder).padding(.horizontal, 20)
             List {
                 ForEach(answers.filter { query.isEmpty || $0.0.localizedCaseInsensitiveContains(query) || $0.1.localizedCaseInsensitiveContains(query) }, id: \.0) { answer in
-                    DisclosureGroup(answer.0) { Text(answer.1).foregroundStyle(.secondary).textSelection(.enabled).padding(.vertical, 8) }
+                    DisclosureGroup(LocalizedStringKey(answer.0)) { Text(LocalizedStringKey(answer.1)).foregroundStyle(.secondary).textSelection(.enabled).padding(.vertical, 8) }
                 }
                 Link("上游社区兼容性列表", destination: CompatibilityStore.site)
             }

@@ -5,11 +5,16 @@ import SharedLibrary
 @main struct JavaSession {
     @MainActor static func main() async {
         let args = CommandLine.arguments
-        guard args.count == 4 || (args.count == 5 && args[4] == "nativeactivity") else { exit(64) }
-        let nativeActivity = args.count == 5
+        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "en", "zh-Hans"].contains(args[4])) else { exit(64) }
+        let nativeActivity = args.count == 5 && args[4] == "nativeactivity"
         let app = URL(fileURLWithPath: args[1]), fixture = URL(fileURLWithPath: args[2])
         let paths = LibraryPaths(root: URL(fileURLWithPath: args[3]).appendingPathComponent("Java Session-\(UUID().uuidString)"))
-        let session = SessionController()
+        let suite = "org.husk.java.language." + UUID().uuidString
+        let defaults = UserDefaults(suiteName:suite)!
+        defer { defaults.removePersistentDomain(forName:suite) }
+        let language = args.count > 4 && ["en","zh-Hans"].contains(args[4]) ? args[4] : "system"
+        AppLanguage.set(language,defaults:defaults)
+        let session = SessionController(languageDefaults:defaults)
         func check(_ condition: Bool, _ message: String) throws {
             if !condition { throw LibraryFailure(message) }; print("PASS \(message)")
         }
@@ -28,6 +33,13 @@ import SharedLibrary
             session.send("input", values: ["source":"touch", "phase":2, "x":200, "y":400])
             session.send("input", values: ["source":"key", "code":0, "down":true])
             session.send("input", values: ["source":"key", "code":0, "down":false])
+            if !nativeActivity {
+                session.send("keyboard")
+                try await session.wait(until: { session.events.contains { $0["event"] as? String == "text-input" && $0["manual"] as? Bool == true && $0["active"] as? Bool == true } }, timeout: 5)
+                session.send("input", values: ["source":"text", "text":"中😀"])
+                session.send("keyboard")
+                try await session.wait(until: { session.events.contains { $0["event"] as? String == "text-input" && $0["manual"] as? Bool == true && $0["active"] as? Bool == false } }, timeout: 5)
+            }
             session.send("input", values: ["source":"controller", "buttons":1 | (1 << 14), "x":0.25, "y":-0.5,
                 "rx":0.75, "ry":-0.25, "lt":0.8, "rt":0.6])
             session.send("input", values: ["source":"controller", "slot":1, "buttons":2])
@@ -55,6 +67,8 @@ import SharedLibrary
             if !nativeActivity {
                 try check(prefs.contains("b host_environment true"), "packaged Java battery-clock-locale-identity checks completed")
                 let log = try String(contentsOf: paths.logs.appendingPathComponent(session.sessionID!).appendingPathComponent("stderr.log"), encoding: .utf8)
+                if language != "system" { try check(log.contains("HUSK_GUEST_STDOUT_MARKER " + language), "selected Mac language reaches the packaged Java VM before Application startup") }
+                try check(log.contains("HUSK_MANUAL_INPUT 中") && log.contains("HUSK_MANUAL_INPUT 😀"), "manual AppKit text bridge delivers Unicode keys without an InputConnection")
                 try check(log.contains("HUSK_GUEST_STDOUT_MARKER") && log.contains("HUSK_GUEST_STDERR_MARKER") && log.contains("HUSK_GUEST_DESTROY_STDOUT") && log.contains("guest-print"),
                           "guest stdout/stderr and final destruction output retained in diagnostics")
                 try check(!session.events.contains { $0["event"] as? String == "guest-print" }, "guest JSON text is never a control event")

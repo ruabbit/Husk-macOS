@@ -1,5 +1,19 @@
 # 审计发现
 
+
+## 2026-10-27：3.1 增量审计与适配
+
+- `3b87cbc..9519faf` 共 27 提交、66 路径，普通合并 main=99169de、macOS merge=52c17da，均无冲突；origin 没有外来提交。第一次 SSH fetch 失败，重试成功，未改变远程地址或网络设置。
+- 对照 TLReport.nativeEngine、TLUnityView、project.yml、CMake、Models/NativeLaunch、Runner、Play/登录和图形构建，新 Godot Kotlin 文件原先未编入 Mac；compressed heap 提前预留原先仅由 iOS `JITBootstrap.prewarm` 调用。现在编入 NativeRuntime，并在 NativeRunner 的 autoreleasepool/AppKit/Java 之前预留，退出时回收未使用部分；沿用现有权限与依赖 pin。
+- 上游 Kotlin 文件自带另一套文件/目录存储，但已有 canonical HLE 表优先命中，导致在一个对象打开后从另一别名访问同一 ID 不一致。现在各别名共用既有实现与 APK asset 支持；补 void resize 的 IOException、真实写入结果、翻译后路径建父目录、受锁保护且不复用的目录 ID。二进制保存/重开、别名交叉使用、并行目录、过期句柄、seek/eof/resize 的后台测试通过。
+- 共享 font-path、V8 jitless、JNI native 注册代际和 W^X 修改已实际编入。复用上游真实 Mach 映射/font 测试到唯一 build/macos；压缩堆早预留与晚预留回归启用断言。受控 Android ELF 在 JNI_OnLoad 中核对此前已经设置 `--jitless`，不是 Cocos Creator 真游戏验收。
+- 真 DEX 覆盖无 InputConnection 的 `A!?中😀`、按键/shift/ACTION_MULTIPLE 恰好一次、退格/确认、GLSurfaceView resize 与 fullscreen insets，以及系统设置 Activity 的 RESULT_CANCELED。同一已缓存 native 方法重新注册后从 17 变为 41。Mac ⌘T/keyboard 控制接到现有输入层，补旧 Unity 分支和 SDL ASCII/shift 按键映射；实体 IME/手柄仍开放。
+- APK 主包排序改复用 manifest 判定；签名夹具故意把 base 命名为 config.arm64_v8a.apk、split 命名为 base.apk，仍正确识别。包身份/版本/split/签名校验和现有大小/数量限制保留。
+- Mac 侧栏、共享 H 标志/启动页、账号页、资料库游玩计时、Store All/Games/Apps 与应用语言已连接。Account.swift 保持同一服务协议，用 AppKit 处理 256px PNG；离线 URLProtocol 验证服务回退、登录/注册、同步/编辑、头像、退出/401 和凭据写入失败。真实 Keychain 更新失败不先删除原 token；没有真实账号登录/上传或 Play 认证。
+- 语言仅保存到 Husk 自身偏好并通过白名单环境传给新 Runner，系统语言未变；中英文各 331 条资源进入 Product，两个真实打包 DEX 验证 Application 前语言。旧帮助长文和动态诊断仍有未翻译文本，不能称全部界面完全本地化。
+- 首轮 font 测试缺 tl_log_line 链接依赖，已补 MacDiagnostics；Godot 首轮暴露上述双表问题。账号测试最初把继承的全局 AppleLanguages 当成自身偏好，并由顶层 async throws 导致一次意外 SIGTRAP；现只检查临时 suite 的 persistentDomain，测试失败明确 exit 1。保留 current-upstream-account-first.log；没有主动制造游戏崩溃。
+- iOS 27 SDK/deployment 15 对共享 Account/HuskLogo 的 Swift 语法和 Godot C 语法检查通过；没有完整 iOS 构建或真机证据。WebView 已交付的 HTTP/导航保存保持，历史恢复/host-stop、导航/destroy、Activity recreate、加载中/跨源和真实插件继续开放。War Thunder 沿用 10-25 用户日志的更新器完成后设备黑名单 exit 1，未重跑。
+
 ## 2026-10-26：HTTP 保存与用户会话证据
 
 - origin/upstream 无新增；引擎分类与 macOS CMake、资料库、Runner 分发/输入/暂停/关闭、共享 PlayAPI/登录和固定图形依赖已逐项复核，没有遗漏的上游增量。

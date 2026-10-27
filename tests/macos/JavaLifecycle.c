@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <sqlite3.h>
 
+static int rebound_first(void *env,void *cls){(void)env;(void)cls;return 17;}
+static int rebound_second(void *env,void *cls){(void)env;(void)cls;return 41;}
 static char **args;
 static int failed;
 static char document_paths[2][1400];
@@ -70,7 +72,25 @@ static void *run(void *unused)
         }
         CHECK(result.i==7&&document_requests==3&&!failed);
     }
-    tl_javaapp_touch(0,0,80,180);tl_javaapp_touch(2,0,80,180);tl_javaapp_key(29,true);tl_javaapp_key(29,false);
+    bool runtime31=!strcmp(args[5],"runtime31");
+    tl_javaapp_touch(0,0,80,180);tl_javaapp_touch(2,0,80,180);
+    if(runtime31){
+        tl_javaapp_text("A!?中😀");tl_javaapp_text_delete();tl_javaapp_text_action();
+        jvalue result={0};
+        for(int i=0;i<3000;i++){
+            CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","runtime31Result","()I",NULL,&result));
+            if(result.i==15)break;usleep(1000);
+        }
+        CHECK(result.i==15);
+        void *env=tl_jni_env();const void **jni=*(const void ***)env;
+        int (*reg)(void *,void *,void *,int)=(void *)jni[215];
+        struct {const char *name,*signature;void *function;} method={"rebound","()I",rebound_first};
+        CHECK(reg(env,tl_jni_class_object("org/husk/lifecycle/LifecycleActivity"),&method,1)==0);
+        CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","callRebound","()I",NULL,&result)&&result.i==17);
+        method.function=rebound_second;
+        CHECK(reg(env,tl_jni_class_object("org/husk/lifecycle/LifecycleActivity"),&method,1)==0);
+        CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","callRebound","()I",NULL,&result)&&result.i==41);
+    }else{tl_javaapp_key(29,true);tl_javaapp_key(29,false);}
     bool controller=!strcmp(args[5],"controller");
     if(controller){
         tl_pad_connect(0,"Fixture One");tl_pad_connect(1,"Fixture Two");CHECK(wait_controller(64));
@@ -94,7 +114,7 @@ static void *run(void *unused)
         }
         CHECK(result.i==1);
     }
-    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||!strcmp(args[5],"framework")||controller||documents;
+    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||!strcmp(args[5],"framework")||controller||documents||runtime31;
     CHECK(ok==success);CHECK(tl_javaapp_get_state()==(success?TL_JAVA_DESTROYED:TL_JAVA_FAILED));
     if(success){
         if(documents){jvalue result;CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","documentResult","()I",NULL,&result));CHECK(result.i==15);}

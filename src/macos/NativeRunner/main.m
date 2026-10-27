@@ -76,6 +76,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property NSMutableSet<NSNumber *> *heldKeys;
 @property NSMapTable<GCController *,NSNumber *> *controllerSlots;
 @property MacTextInput *textInput;
+@property BOOL manualTextInput;
 @property MacDocumentPicker *documentPicker;
 @property BOOL captureRequested, cursorCaptured;
 - (void)updateCursorCapture;
@@ -93,6 +94,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (void)stop:(NSString *)reason;
 - (void)stopRuntime:(NSString *)reason;
 - (void)togglePause:(id)sender;
+- (void)toggleTextInput:(id)sender;
 - (void)clearInput;
 @end
 
@@ -113,7 +115,7 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)event {(void)event;return YES;}
 - (void)keyDown:(NSEvent *)event
 {
-    if((minecraft||javaapp||nativeDriver)&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
+    if((minecraft||javaapp||unity||nativeDriver)&&[self.runner.state isEqual:@"running"]&&[self handleTextKey:event])return;
     if(event.modifierFlags & NSEventModifierFlagCommand) {[super keyDown:event];return;}
     if(!guestRuntime() && (event.keyCode==53 || event.keyCode==35)) {if(!event.isARepeat)[self.runner togglePause:nil];return;}
     if([self.runner.state isEqual:@"running"]) {[self.runner guestKey:event.keyCode down:YES repeat:event.isARepeat];}
@@ -195,6 +197,9 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 - (void)scrollWheel:(NSEvent *)event {if(minecraft)[self pointer:event down:NO];}
 @end
 
+static BOOL manualKeyboardSupported(void) {
+    return minecraft||unity||javaapp||(nativeDriver&&[@[@"cocos",@"sdl"] containsObject:mac_driver_name()]);
+}
 static __weak Runner *javaHost;
 static void javaRequestFinish(void) {
     // AppMain stays live for WebView save plugins until the lifecycle worker
@@ -203,7 +208,7 @@ static void javaRequestFinish(void) {
 }
 static void javaKeyboard(int show,int inputType,int imeOptions) {
     (void)inputType;(void)imeOptions;
-    dispatch_async(dispatch_get_main_queue(),^{javaHost.textInput.textInputActive=show!=0;});
+    dispatch_async(dispatch_get_main_queue(),^{javaHost.manualTextInput=NO;javaHost.textInput.textInputActive=show!=0;});
 }
 static void nativeKeyboard(int action) { javaKeyboard(action==1,1,0); }
 static int unityKeyboardKind;
@@ -211,7 +216,7 @@ static void unityKeyboard(int action,int kind) {
     dispatch_async(dispatch_get_main_queue(),^{
         Runner *host=javaHost;
         if(!host || ![@[@"starting",@"running",@"paused"] containsObject:host.state])return;
-        unityKeyboardKind=kind;
+        unityKeyboardKind=kind;host.manualTextInput=NO;
         [host.textInput receiveText:@"" selection:NSMakeRange(0,0) marked:NSMakeRange(NSNotFound,0)];
         host.textInput.textInputActive=action==1;
     });
@@ -549,6 +554,7 @@ static int androidKey(unsigned code)
     else if([command isEqual:@"pause"]&&[self.state isEqual:@"running"]) [self togglePause:nil];
     else if([command isEqual:@"resume"]&&[self.state isEqual:@"paused"]) [self togglePause:nil];
     else if([command isEqual:@"status"]) [self statusForRequest:message[@"request"]];
+    else if([command isEqual:@"keyboard"]&&manualKeyboardSupported()&&[self.state isEqual:@"running"]) [self toggleTextInput:nil];
     else if(automation&&javaapp&&[command isEqual:@"evaluate"]&&[self.state isEqual:@"running"]&&[message[@"script"] isKindOfClass:NSString.class]) {
         tl_web_evaluate_for_host([message[@"view"] intValue],message[@"script"],^(id value,NSError *error){
             if(!atomic_load(&finished))[self event:@"evaluation" detail:@{@"request":message[@"request"]?:@"",@"value":value?:NSNull.null,@"error":error.localizedDescription?:@""}];
@@ -578,7 +584,7 @@ static int androidKey(unsigned code)
             else tl_unity_touch([message[@"phase"] intValue],0,[message[@"x"] floatValue],[message[@"y"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"mouse"]) {tl_ga_mouse([message[@"action"] intValue],[message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue],[message[@"scroll"] floatValue]);self.pointerEvents++;}
         else if(minecraft&&[source isEqual:@"relative-mouse"]) {tl_ga_mouse_relative([message[@"x"] floatValue],[message[@"y"] floatValue],[message[@"buttons"] intValue]);self.pointerEvents++;}
-        else if((minecraft||javaapp||unity)&&[source isEqual:@"text"]&&self.textInput.textInputActive&&[message[@"text"] isKindOfClass:NSString.class]) {
+        else if(manualKeyboardSupported()&&[source isEqual:@"text"]&&self.textInput.textInputActive&&[message[@"text"] isKindOfClass:NSString.class]) {
             if([message[@"selectAll"] boolValue])[self.textInput selectAll:nil];
             [self.textInput insertText:message[@"text"] replacementRange:NSMakeRange(NSNotFound,0)];
         }
@@ -701,6 +707,7 @@ static int androidKey(unsigned code)
         NSMenu *main=[NSMenu new];NSMenuItem *root=[NSMenuItem new];[main addItem:root];
         NSMenu *menu=[[NSMenu alloc] initWithTitle:@"Husk Game"];
         NSMenuItem *pause=[menu addItemWithTitle:@"暂停 / 继续" action:@selector(togglePause:) keyEquivalent:@"p"];pause.target=self;
+        if(manualKeyboardSupported()){NSMenuItem *keyboard=[menu addItemWithTitle:@"文字输入 / 键盘控制" action:@selector(toggleTextInput:) keyEquivalent:@"t"];keyboard.target=self;}
         [menu addItem:NSMenuItem.separatorItem];
         [menu addItemWithTitle:@"结束游戏" action:@selector(terminate:) keyEquivalent:@"q"];
         root.submenu=menu;NSApp.mainMenu=main;
@@ -738,7 +745,12 @@ static int androidKey(unsigned code)
         }
         if(nativeDriver){
             javaHost=self; mac_driver_keyboard(nativeKeyboard);
-            self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])mac_driver_text(text.UTF8String);};
+            self.textInput.committedText=^(NSString *text){
+                if(![weakSelf.state isEqual:@"running"])return;
+                if(weakSelf.manualTextInput&&[mac_driver_name() isEqual:@"sdl"])
+                    mac_send_android_text_keys(text,^(int code,BOOL down){mac_driver_key(code,down);});
+                else mac_driver_text(text.UTF8String);
+            };
             self.textInput.textCommand=^(unsigned code){if(code==51)mac_driver_delete();else{[weakSelf guestKey:code down:YES repeat:NO];[weakSelf guestKey:code down:NO repeat:NO];}};
         }
         if(javaapp){
@@ -748,6 +760,7 @@ static int androidKey(unsigned code)
             self.textInput.committedText=^(NSString *text){if([weakSelf.state isEqual:@"running"])tl_javaapp_text(text.UTF8String);};
             self.textInput.textCommand=^(unsigned code){
                 if(code==51)tl_javaapp_text_delete();else if(code==36)tl_javaapp_text_action();
+                else if(code==53&&weakSelf.manualTextInput)[weakSelf toggleTextInput:nil];
                 else {[weakSelf guestKey:code down:YES repeat:NO];[weakSelf guestKey:code down:NO repeat:NO];}
             };
             // The shared WebKit host attaches to this canvas; never create the harness's visible fallback window.
@@ -849,6 +862,14 @@ static int androidKey(unsigned code)
     }];
     [self status];
 }
+- (void)toggleTextInput:(id)sender {
+    (void)sender;if(!manualKeyboardSupported()||![self.state isEqual:@"running"])return;
+    [self clearInput];self.manualTextInput=!self.textInput.textInputActive;
+    self.textInput.textInputActive=self.manualTextInput;
+    [self.textInput receiveText:@"" selection:NSMakeRange(0,0) marked:NSMakeRange(NSNotFound,0)];
+    if(self.window)[self.window makeFirstResponder:self.textInput];
+    [self event:@"text-input" detail:@{@"active":@(self.manualTextInput),@"manual":@YES}];
+}
 - (void)windowDidResignKey:(NSNotification *)note {(void)note;[self clearInput];if(pauseInactive&&[self.state isEqual:@"running"])[self togglePause:nil];}
 - (void)applicationDidResignActive:(NSNotification *)note {(void)note;[self clearInput];}
 - (void)windowDidBecomeKey:(NSNotification *)note {(void)note;[self updateCursorCapture];}
@@ -859,7 +880,17 @@ static int androidKey(unsigned code)
 
 int main(int argc,const char **argv)
 {
+    // NativeRunner is a fresh process per game. Reserve before AppKit, Java and
+    // the native loader create mappings; the reservation commits no physical RAM.
+    husk_prepare_compressed_heap();
+    atexit(husk_release_unused_compressed_heap);
     @autoreleasepool {
+        const char *language=getenv("HUSK_APP_LANGUAGE");
+        if(language&&(!strcmp(language,"en")||!strcmp(language,"zh-Hans"))){
+            NSMutableDictionary *domain=[[NSUserDefaults.standardUserDefaults volatileDomainForName:NSArgumentDomain] mutableCopy];
+            domain[@"AppleLanguages"]=@[@(language)];
+            [NSUserDefaults.standardUserDefaults setVolatileDomain:domain forName:NSArgumentDomain];
+        }
         if(argc==3&&(!strcmp(argv[1],"--delete-web-store")||!strcmp(argv[1],"--has-web-store"))){
             NSUUID *identifier=[[NSUUID alloc] initWithUUIDString:@(argv[2])];
             if(!identifier||[identifier.UUIDString isEqual:@"00000000-0000-0000-0000-000000000000"])return 64;

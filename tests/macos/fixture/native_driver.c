@@ -47,7 +47,14 @@ static void setup_gl(void) {
     surface=eglCreateWindowSurface(display,cfg,ANativeWindow_fromSurface(0,0),0);eglMakeCurrent(display,surface,surface,context);
 }
 static void close_gl(void) {eglMakeCurrent(display,0,0,0);eglDestroySurface(display,surface);eglDestroyContext(display,context);}
+#ifdef V8_FIXTURE
+static int jitless;
+void set_v8_flags(const char *) __asm__("_ZN2v82V818SetFlagsFromStringEPKc");
+void set_v8_flags(const char *flags) { jitless = !strcmp(flags,"--jitless"); }
+int JNI_OnLoad(void *vm,void *r) {(void)vm;(void)r;return jitless ? 0x10006 : -1;}
+#else
 int JNI_OnLoad(void *vm,void *r) {(void)vm;(void)r;return 0x10006;}
+#endif
 #define COCOS(n) Java_org_cocos2dx_lib_Cocos2dxRenderer_##n
 #define GODOT(n) Java_org_godotengine_godot_GodotLib_##n
 #define GM(n) Java_com_yoyogames_runner_RunnerJNILib_##n
@@ -133,7 +140,7 @@ void SDL(nativeResume)(void *e,void *c){record(16);atomic_store(&paused,0);}
 void SDL(nativeSendQuit)(void *e,void *c){atomic_store(&quit_requested,1);}
 /* SDL accepts input on the platform event thread, separate from SDLMain. */
 void SDL(onNativeTouch)(void *e,void *c,int device,int finger,int action,float x,float y,float pressure){record_on(action==0?2:action==3?64:4,&event_owner);}
-void SDL(onNativeKeyDown)(void *e,void *c,int key){record_on(32,&event_owner);}
+void SDL(onNativeKeyDown)(void *e,void *c,int key){record_on(32,&event_owner);if(key==29)record_on(512,&event_owner);}
 void SDL(onNativeKeyUp)(void *e,void *c,int key){}
 void GTA(implOnActivityCreated)(void *e,void *c,void *svc,unsigned char initialized){record(1);}
 void GTA(implOnInitialSetup)(void *e,void *c,void *device,void *assets,void *apks,void *none){setup_gl();}

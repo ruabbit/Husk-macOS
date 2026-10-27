@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #import <AppKit/AppKit.h>
 
+/// Manual SDL keyboard mode uses the same US Android key layout as upstream.
+/// Characters without a hardware key remain the guest's text-input responsibility.
+void mac_send_android_text_keys(NSString *text, void (^send)(int key, BOOL down));
+
 /* NSTextInputClient uses UTF-16 offsets, as GameTextInput.State does. The game
  * draws the field; this view supplies native editing and IME composition. */
 @interface MacTextInput : NSView <NSTextInputClient>

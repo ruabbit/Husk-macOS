@@ -25,7 +25,11 @@ struct HuskLogo: View {
         HuskHShape()
             .fill(Color.white)
             .frame(width: size, height: size)
+            #if os(macOS)
+            .shadow(color: Color.accentColor.opacity(0.55), radius: size * 0.12)
+            #else
             .shadow(color: AppTheme.husk.opacity(0.55), radius: size * 0.12)
+            #endif
             .accessibilityLabel("Husk")
     }
 }
@@ -35,7 +39,11 @@ struct SplashScreen: View {
     @State private var shown = false
     var body: some View {
         ZStack {
+            #if os(macOS)
+            Color(red: 0.04, green: 0.06, blue: 0.12).ignoresSafeArea()
+            #else
             Console.page.ignoresSafeArea()
+            #endif
             VStack(spacing: 14) {
                 HuskLogo(size: 92)
                 Text("Husk")

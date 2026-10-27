@@ -63,7 +63,8 @@ final class PipeReader: @unchecked Sendable {
     private var runtime: String?
     private var javaWebStore: WebStorage.JavaStore?
 
-    public init() { signal(SIGPIPE, SIG_IGN) }
+    private let languageDefaults: UserDefaults
+    public init(languageDefaults: UserDefaults = .standard) { self.languageDefaults = languageDefaults; signal(SIGPIPE, SIG_IGN) }
 
     public func start(executable: URL, game: LibraryGame, apk: URL, checkpoint: URL,
                       logs: URL, headless: Bool = false, automation: Bool = false,
@@ -108,6 +109,7 @@ final class PipeReader: @unchecked Sendable {
         if let diagnostics { child.arguments! += ["--diagnostics", diagnostics.path] }
         child.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory(), "TMPDIR": NSTemporaryDirectory(),
                              "TL_XMEM_MIB": guestManagedStorage ? "1024" : "64"]
+        child.environment!.merge(AppLanguage.runnerEnvironment(languageDefaults)) { _, language in language }
         child.standardInput = input; child.standardOutput = output; child.standardError = errors
         commandPipe = input; outputPipe = output; errorPipe = errors; process = child
         child.terminationHandler = { [weak self] child in

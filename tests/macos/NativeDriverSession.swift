@@ -24,6 +24,12 @@ import SharedLibrary
                 game:game,apk:files[0],checkpoint:checkpoint,logs:paths.logs,headless:true,automation:true)
             try await session.wait(until:{session.state=="running" || !session.active},timeout:30)
             try check(session.state=="running",session.error ?? "first frame")
+            if engine=="sdl" {
+                session.send("keyboard")
+                try await session.wait(until:{session.events.contains{$0["event"] as? String=="text-input" && $0["active"] as? Bool==true}},timeout:5)
+                session.send("input",values:["source":"text","text":"A!?\n"])
+                session.send("keyboard")
+            }
             for phase in [0,2] { session.send("input",values:["source":"touch","phase":phase,"x":100,"y":100]) }
             for down in [true,false] { session.send("input",values:["source":"key","code":53,"down":down]) }
             try await Task.sleep(for:.milliseconds(100))
@@ -41,6 +47,7 @@ import SharedLibrary
             let mask=data.withUnsafeBytes{$0.loadUnaligned(as:UInt32.self)}
             let wrong=data.withUnsafeBytes{$0.loadUnaligned(fromByteOffset:4,as:UInt32.self)}
             try check(mask&127==127 && wrong==0,"real input, pause and stop callbacks on owner thread")
+            if engine=="sdl" { try check(mask&512 != 0,"manual SDL keyboard delivered Android key events to the ELF") }
             if profile != "cocos" { try check(mask&128 != 0,"native destruction acknowledged") }
             if engine=="geode" {
                 let data=checkpoint.deletingLastPathComponent().appendingPathComponent("data")

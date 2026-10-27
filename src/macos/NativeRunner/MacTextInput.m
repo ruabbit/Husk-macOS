@@ -1,6 +1,27 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #import "MacTextInput.h"
 
+void mac_send_android_text_keys(NSString *text, void (^send)(int, BOOL)) {
+    NSString *plain=@",.\t \n`-=[]\\;'/", *shifted=@"<>\t \n~_+{}|:\"?", *numbers=@")!@#$%^&*(";
+    const int keys[]={55,56,61,62,66,68,69,70,71,72,73,74,75,76};
+    for(NSUInteger i=0;i<text.length;i++){
+        unichar ch=[text characterAtIndex:i];int code=0;BOOL shift=NO;
+        if(ch>='a'&&ch<='z')code=29+ch-'a';
+        else if(ch>='A'&&ch<='Z'){code=29+ch-'A';shift=YES;}
+        else if(ch>='0'&&ch<='9')code=7+ch-'0';
+        else {
+            if(ch=='\r')ch='\n';
+            NSString *character=[NSString stringWithCharacters:&ch length:1];
+            NSRange n=[numbers rangeOfString:character],p=[plain rangeOfString:character],s=[shifted rangeOfString:character];
+            if(n.location!=NSNotFound){code=7+(int)n.location;shift=YES;}
+            else if(p.location!=NSNotFound)code=keys[p.location];
+            else if(s.location!=NSNotFound){code=keys[s.location];shift=YES;}
+        }
+        if(!code)continue;
+        if(shift)send(59,YES);send(code,YES);send(code,NO);if(shift)send(59,NO);
+    }
+}
+
 @implementation MacTextInput {
     NSMutableString *_text;
     NSRange _selection, _marked;

@@ -39,15 +39,16 @@ def manifest():
     body+=begin('action',[('name','android.intent.action.MAIN')])+end('action')+begin('category',[('name','android.intent.category.LAUNCHER')])+end('category')
     body+=end('intent-filter')+end('activity')+end('application')+end('manifest')
     return struct.pack('<HHI',3,8,len(body)+8)+body
-for mode in ['normal', 'missing', 'ue4', 'pause-failed', 'godot4']:
+for mode in ['normal', 'missing', 'ue4', 'pause-failed', 'godot4', 'v8']:
     missing = mode == 'missing'
     suffix = '' if mode == 'normal' else '-' + mode
     obj = out/f'driver{suffix}.o'; lib = out/f'driver{suffix}.so'
     subprocess.run([cc, '--target=aarch64-linux-android29', '-O2', '-fPIC', '-ffreestanding', '-fno-stack-protector',
-        '-mno-outline-atomics', *(['-DMISSING_DESTROY'] if missing else []), *(['-DACTIVITY_FIXTURE'] if mode == 'ue4' else []), *(['-DPAUSE_FAILURE'] if mode == 'pause-failed' else []), *(['-DGODOT4'] if mode == 'godot4' else []), '-c', root/'tests/macos/fixture/native_driver.c', '-o', obj], check=True)
+        '-mno-outline-atomics', *(['-DMISSING_DESTROY'] if missing else []), *(['-DACTIVITY_FIXTURE'] if mode == 'ue4' else []), *(['-DPAUSE_FAILURE'] if mode == 'pause-failed' else []), *(['-DV8_FIXTURE'] if mode == 'v8' else []), *(['-DGODOT4'] if mode == 'godot4' else []), '-c', root/'tests/macos/fixture/native_driver.c', '-o', obj], check=True)
     subprocess.run([ld, '-shared', '--no-relax', '--hash-style=gnu', '-z', 'max-page-size=16384', obj, '-o', lib], check=True)
     engines = [('ue4','libUE4.so')] if mode == 'ue4' else [('cocos','libcocos2dcpp.so'), ('godot','libgodot_android.so'), ('gamemaker','libyoyo.so'), ('sdl','libSDL3.so'), ('gta','libGame.so')]
     if mode in ['pause-failed', 'godot4']: engines = [('godot','libgodot_android.so')]
+    if mode == 'v8': engines = [('cocos','libcocos2dcpp.so')]
     for name, soname in engines:
         with zipfile.ZipFile(out/f'{name}{suffix if mode != "ue4" else ""}.apk','w') as apk:
             apk.writestr('AndroidManifest.xml',manifest())
