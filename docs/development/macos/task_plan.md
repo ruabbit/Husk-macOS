@@ -4,12 +4,13 @@
 ## 当前执行：2026-10-27 上游 3.1 接入
 
 - [x] 从干净 1c9cafe 核对分支、远端、build 20/CI 成功记录与进程；首次 SSH fetch 连接关闭，重试成功。origin 无新增；upstream 新增 27 提交/66 路径。
-- [x] 普通合并 upstream/main=9519faf 到 main，再合回 macOS；两次无冲突，尚未推送。
+- [x] 普通合并 upstream/main=9519faf 到 main，再合回 macOS；两次无冲突，已正常推送并读回。
 - [x] 逐项落实 Godot Kotlin 共用文件句柄、V8/压缩堆/运行时修复、APK manifest 主包排序、Java 键盘/布局及共享语言；15 项针对性后台回归通过。
 - [x] 接入 3.1 的 Mac 侧栏/首页/资料库/商店/导入与共享账号、游玩计时；中英文资源、离线账号协议与打包语言传递通过，保留 AppKit/Runner/关闭协议与已删除分类。
 - [x] 退出空闲候选后，唯一 build/macos 完整构建；最终默认 164/164（256.95 秒）、18 Mach-O/406 Java 资源及中英文资源通过。CUA 单次启动 build 21/PID 13975，首页 11 应用、图标/侧栏和账号页验证后回到首页。
-- [ ] 更新来源锁/parity/交付记录与过期每日提示，推送自己的两分支、CI 与远端 SHA 读回，最后保持 codex/macos-p0。
-- [ ] 既有 WebView 历史恢复、真实应用/实体设备/Play/VM/P6 保持开放，本轮优先完整接入上游新增范围。
+- [x] 来源锁/parity/交付记录与每日提示更新；源码 fb1e7b0 与 main 99169de 已推送、远端 SHA 读回。CI 40434410977 completed/success，41 hosted 核心回归及 P0 memory/core 通过；保持 codex/macos-p0。
+- [ ] 继续 WebView 历史恢复/host-stop、导航/destroy、Activity replacement/recreate、加载中/跨源和真实 HTTP 第三方插件回归；保留失败证据与已有实现，不重复迁移已交付路径。
+- [ ] 完成剩余动态文案/帮助诊断翻译及可见中文界面验收；真实账号/Keychain 服务、Godot/Cocos/Flutter 等真实应用、实体 IME/手柄和 Play/VM/P6 保持开放。
 
 ## 当前执行：2026-10-26 HTTP WebView 与停止交叠
 

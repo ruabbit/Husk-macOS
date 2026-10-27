@@ -14,6 +14,8 @@
 - 首轮 font 测试缺 tl_log_line 链接依赖，已补 MacDiagnostics；Godot 首轮暴露上述双表问题。账号测试最初把继承的全局 AppleLanguages 当成自身偏好，并由顶层 async throws 导致一次意外 SIGTRAP；现只检查临时 suite 的 persistentDomain，测试失败明确 exit 1。保留 current-upstream-account-first.log；没有主动制造游戏崩溃。
 - iOS 27 SDK/deployment 15 对共享 Account/HuskLogo 的 Swift 语法和 Godot C 语法检查通过；没有完整 iOS 构建或真机证据。WebView 已交付的 HTTP/导航保存保持，历史恢复/host-stop、导航/destroy、Activity recreate、加载中/跨源和真实插件继续开放。War Thunder 沿用 10-25 用户日志的更新器完成后设备黑名单 exit 1，未重跑。
 
+- 最终 build 21 默认 164/164（256.95 秒）、18 arm64 Mach-O/406 Java 资源与语言资源通过；CUA 单次启动 PID 13975，主程序路径、首页 11 应用/图标/侧栏、账号页和返回首页均确认。源码 fb1e7b0 与 main 99169de 正常推送并读回；CI 40434410977 completed/success，41 hosted 核心测试（48.68 秒）和 P0 memory/core 通过，hardware skipped。
+
 ## 2026-10-26：HTTP 保存与用户会话证据
 
 - origin/upstream 无新增；引擎分类与 macOS CMake、资料库、Runner 分发/输入/暂停/关闭、共享 PlayAPI/登录和固定图形依赖已逐项复核，没有遗漏的上游增量。

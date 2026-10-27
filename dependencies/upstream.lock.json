@@ -5,10 +5,10 @@
   "integratedRevision": "9519faf819abed9807cd11eff088f314c993f35f",
   "checkedOn": "2026-10-27",
   "commitCount": 27,
-  "integration": "Fetched origin then upstream; origin had no external commits. Ordinarily merged 27 commits / 66 paths through 9519faf into fork main 99169de, then macOS merge 52c17da, without conflicts. Integrated 3.1 into the Mac runtime, library, input, language, shell and shared account. Final build 21 passed all 164 default tests and package validation, then was launched once through CUA; push and current CI are pending.",
+  "integration": "Fetched origin then upstream; origin had no external commits. Ordinarily merged 27 commits / 66 paths through 9519faf into fork main 99169de, then macOS merge 52c17da, without conflicts. Integrated 3.1 into the Mac runtime, library, input, language, shell and shared account. Final build 21 passed all 164 default tests and package validation, then was launched once through CUA; both branches were pushed normally and their remote SHAs matched. Hosted CI 40434410977 completed successfully: build, package verification, 41 core tests and P0 memory/core; hardware job was skipped.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-pending-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.0",
     "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
@@ -35,10 +35,21 @@
         "sha256": "446a903f14da18b6ee3cc7ca5dac640c625f757bfb0bf7a8ca25be5a509a139a"
       }
     },
-    "sourceRevision": null,
-    "deliveryStatus": "verified-pending-push",
+    "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Exact build 21 Product launched once through CUA as PID 13975; full executable path, AX and screenshots confirmed the new sidebar/home, original 11 applications and visible icons, account sign-in view and sync disclosure, then returned home. No real login/upload, user game or Android VM launch.",
-    "ci": null
+    "ci": {
+      "run": 40434410977,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977",
+      "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 41,
+      "hostedCoreTestSeconds": 48.68
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 27,
@@ -47,7 +58,7 @@
     "mainRevision": "99169de4e6a419678003d8ab0a6aea6613392d77",
     "macOSBaseRevision": "1c9cafe7cb6c157598b44af8ebe4d06a6ad2b536",
     "macOSMergeRevision": "52c17dad7522b6f2ba1fb65b8f1bdb0983d4cf23",
-    "macOSRevision": null,
+    "macOSRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
     "macOSAdaptation": "Godot Kotlin aliases share canonical file/listing handles; earliest compressed heap reservation; V8 jitless, font paths, JNI registration generation and W^X compiled and exercised. Java/manual SDL input, GL resize/insets/settings cancellation, manifest base APK order, application/guest locale, sidebar/shared account/avatar/library/playtime and Store categories are connected. Real application/device/service acceptance remains open.",
     "defaultSuiteTests": 164,
     "defaultTestSeconds": 256.95,
@@ -59,8 +70,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 40253576983,
@@ -74,7 +85,18 @@
       "hostedCoreTests": 36,
       "hostedCoreTestSeconds": 48.98
     },
-    "ci": null
+    "ci": {
+      "run": 40434410977,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977",
+      "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 41,
+      "hostedCoreTestSeconds": 48.68
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",

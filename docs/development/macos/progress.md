@@ -15,7 +15,7 @@ Godot Kotlin 别名编入并共用既有文件/目录句柄，修复双表导致
 
 真实 Godot/Cocos/Flutter/Geode 应用、实体 IME/手柄、真实账号服务、认证 Play 与 VM/P6 继续开放。下一轮继续 WebView 历史恢复与 host-stop、导航/destroy、Activity replacement/recreate、加载中/跨来源和真实插件；本轮未将这些关闭。War Thunder 已知用户日志是更新器完成后的 Vulkan 设备黑名单 exit 1，具体规则仍未知。本轮没有运行用户游戏或 Android VM、操作 USB、修改 APK/存档/Android 磁盘，未向上游发布任何内容。
 
-本地验证与候选启动完成；源码提交、两分支推送、远端 SHA 和本批 CI 回读待收尾。
+源码 [fb1e7b0](https://github.com/ruabbit/Husk-macOS/commit/fb1e7b0b0e87724908a5f915ad84d479df54cda9) 与 [main 99169de](https://github.com/ruabbit/Husk-macOS/commit/99169de4e6a419678003d8ab0a6aea6613392d77) 已正常原子推送，两分支远端 SHA 读回一致。[CI 40434410977](https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977) 已 **completed/success**，head=fb1e7b0：构建、包检查、**41 项 hosted 核心回归（48.68 秒）**及 P0 memory/core 均通过；hardware job skipped。每日自动化已通过工具更新到 build 21 与当前 War Thunder/WebView 状态，原聊天、每日 09:00、贡献范围与会话保护约束均保留，提示全文已精确读回。
 
 ## 2026-10-26：HTTP WebView 保存与停止交叠，build 20
 

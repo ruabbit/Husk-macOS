@@ -13,7 +13,7 @@
 | 侧栏、H 标志、账号、游玩时长、Store 分类 | 复用 Account/HuskLogo，加入 AppKit 头像、账号页、Mac library rows、暂停时停止计时、导入后/游玩后的同步调度及 All/Games/Apps。离线服务测试覆盖登录/注册/回退/资料库/编辑/退出/401/凭据失败；CUA 核对首页 11 应用与账号登录页 | 未创建或登录真实账号、上传个人资料、验证线上服务或 Google Play 认证 |
 | 应用与 guest 语言 | en/zh-Hans 各 331 条文案进入 Product；仅改 Husk 自身偏好，白名单环境传给新 NativeRunner/WebRunner；真打包 DEX 在 Application 前取得对应语言 | CUA 当前核对英文主要界面，动态计数/旧帮助诊断仍有中文；运行中 guest 语言变化未实现 |
 
-唯一 Product 为 **3.1.0/build 21**。针对性 **15/15（11.95 秒）**、最终默认 **164/164（256.95 秒）**、包检查 **18 arm64 Mach-O/406 Java 资源**及两语言资源通过；其中原 WebView **48 项（161.14 秒）**和 HTTP **5 项（21.62 秒）**保持通过。iOS 共享 Swift/C 语法通过，未做完整构建/真机验证。CUA 单次启动 PID **13975**，完整候选路径、首页/侧栏/账号页 AX 与截图核对成功；没有启动用户游戏/VM。推送与本批 CI 的最终状态见 progress.md 顶部交付记录。
+唯一 Product 为 **3.1.0/build 21**。针对性 **15/15（11.95 秒）**、最终默认 **164/164（256.95 秒）**、包检查 **18 arm64 Mach-O/406 Java 资源**及两语言资源通过；其中原 WebView **48 项（161.14 秒）**和 HTTP **5 项（21.62 秒）**保持通过。iOS 共享 Swift/C 语法通过，未做完整构建/真机验证。CUA 单次启动 PID **13975**，完整候选路径、首页/侧栏/账号页 AX 与截图核对成功；没有启动用户游戏/VM。源码 [fb1e7b0](https://github.com/ruabbit/Husk-macOS/commit/fb1e7b0b0e87724908a5f915ad84d479df54cda9) 与 main 99169de 已正常推送并读回；[CI 40434410977](https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977) completed/success，41 项 hosted 核心回归（48.68 秒）、构建/包检查与 P0 memory/core 通过，hardware job skipped。
 
 既有 WebView 主程序/Activity/destroy/导航与受控 HTTP 保存已交付；历史恢复/host-stop 交叠、导航/destroy 专门回归、Activity replacement/recreate、加载中文档、跨源 child frame 与真实 HTTP 第三方插件继续开放。下一轮先完成这些具体回归，再验合法真实应用；保留物理 IME/手柄、文件面板/URI、真实 .NET、真实 Geode、Play/VM/P6 等下文待办。War Thunder 最新真实证据仍是更新器完成后设备黑名单主动 exit 1，不能因这轮构建通过改记为游戏兼容。
 
