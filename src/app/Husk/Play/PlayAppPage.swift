@@ -332,14 +332,6 @@ struct PlayAppDetailSheet: View {
     }
 }
 
-/// Play's images come in any size: the same picture at the height asked for.
-enum PlayImages {
-    static func sized(_ url: String, height: Int) -> URL? {
-        guard url.contains("googleusercontent.com"), !url.contains("=") else { return URL(string: url) }
-        return URL(string: url + "=h\(height)")
-    }
-}
-
 /// Text cut to a few lines, with More to read the rest.
 private struct ExpandableText: View {
     let text: AttributedString

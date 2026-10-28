@@ -79,7 +79,7 @@ struct MacCompatReportSheet: View {
                 Text("仅附带所选文件末尾最多 400 KB。请检查预览中的账号、路径或其他个人信息。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("将公开发布到 antiweb.lol：应用包名、名称、图标、类型、所选结果、称呼和说明，以及 \(CompatibilityStore.device)、\(CompatibilityStore.systemVersion)、Husk build \(CompatibilityStore.build)、运行组件 \(subject.runtime ?? "unknown")。")
+            Text("将公开发布到 itslevii.dev（备用 antiweb.lol）：应用包名、名称、图标、类型、所选结果、称呼和说明，以及 \(CompatibilityStore.device)、\(CompatibilityStore.systemVersion)、Husk build \(CompatibilityStore.build)、运行组件 \(subject.runtime ?? "unknown")。")
                 .font(.caption).foregroundStyle(.secondary)
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             HStack {

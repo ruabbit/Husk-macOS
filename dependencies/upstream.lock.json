@@ -1,91 +1,69 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
-  "integratedRevision": "9519faf819abed9807cd11eff088f314c993f35f",
-  "checkedOn": "2026-10-27",
-  "commitCount": 27,
-  "integration": "Fetched origin then upstream; origin had no external commits. Ordinarily merged 27 commits / 66 paths through 9519faf into fork main 99169de, then macOS merge 52c17da, without conflicts. Integrated 3.1 into the Mac runtime, library, input, language, shell and shared account. Final build 21 passed all 164 default tests and package validation, then was launched once through CUA; both branches were pushed normally and their remote SHAs matched. Hosted CI 40434410977 completed successfully: build, package verification, 41 core tests and P0 memory/core; hardware job was skipped.",
+  "previousRevision": "9519faf819abed9807cd11eff088f314c993f35f",
+  "integratedRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
+  "checkedOn": "2026-10-28",
+  "commitCount": 7,
+  "integration": "Fetched origin then upstream; no origin additions. Ordinarily merged 7 commits / 26 paths through a06a74d into fork main e3b08b8, then macOS merge 3e5e8c3. Resolved the sole HuskLogo modify/delete conflict according to upstream removal, restoring the original icon and native tabs. Mac Play details, shared rich text and website migration are integrated; build 22 passes 166 default tests and package verification, with a single verified CUA restart. Push and hosted CI pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-pending-push",
   "release": {
-    "tag": "3.0",
-    "revision": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139"
+    "tag": "3.1",
+    "revision": "7cc583ce3fccd271eea9087483ddc5e49af14d8d"
   },
   "candidate": {
     "version": "3.1.0",
-    "build": "21",
-    "defaultTests": 164,
-    "defaultTestSeconds": 256.95,
+    "build": "22",
+    "defaultTests": 166,
+    "defaultTestSeconds": 275.0,
     "bundleMachO": 18,
     "javaResources": 406,
-    "appSHA256": "1d13b6ad80dff155c072c113182caf3414876beda173c15cac90db4edc941dfd",
+    "localizations": {
+      "en": {
+        "entries": 766,
+        "sha256": "75cbaa3f01c1690fbde61f350521c39a952a23f8a94c849c18fa46f0e9d4f2b0"
+      },
+      "zh-Hans": {
+        "entries": 766,
+        "sha256": "af5d99637fe9bb2f5a30fb7e848c961961fb97fad815e4e35d006bd122366911"
+      }
+    },
+    "sourceRevision": null,
+    "deliveryStatus": "locally-verified-pending-push",
+    "gui": "Exact build 22 Product launched once through CUA as PID 70008; full executable path, AX and screenshots confirmed original icon, native tabs, original 11 applications and visible icons, Home avatar menu, independent account sign-in window and Settings account entry with itslevii.dev link. Returned home. No preference changes, real login/upload, user game or Android VM launch.",
+    "pid": 70008,
+    "ci": null,
+    "appSHA256": "590a5f6e16c9a0246cfd308acd448a1fb6e2193297ebd9038f46c0d1d25bcc35",
     "nativeRunnerSHA256": "1ca327f32f405f3a61e2175625ff9b5a392d6589e90926d7ac9b3f88fa6a360a",
     "webRunnerSHA256": "5a53066917a1c7d41991df88f06ce358184512c5c939a632dbb4d2f792e48487",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "frameworkSHA256": "e3ed98a47c0a28b573eb986e9c47cede8dd9cb7e87defab916f797c387e64489",
-    "localizations": {
-      "en": {
-        "entries": 331,
-        "sha256": "dc356f00db841fac242dd183b925b4859cc5ed73bcffcd5321a49b4ce57f0c63"
-      },
-      "zh-Hans": {
-        "entries": 331,
-        "sha256": "446a903f14da18b6ee3cc7ca5dac640c625f757bfb0bf7a8ca25be5a509a139a"
-      }
-    },
-    "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Exact build 21 Product launched once through CUA as PID 13975; full executable path, AX and screenshots confirmed the new sidebar/home, original 11 applications and visible icons, account sign-in view and sync disclosure, then returned home. No real login/upload, user game or Android VM launch.",
-    "ci": {
-      "run": 40434410977,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977",
-      "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 41,
-      "hostedCoreTestSeconds": 48.68
-    }
+    "frameworkSHA256": "e3ed98a47c0a28b573eb986e9c47cede8dd9cb7e87defab916f797c387e64489"
   },
   "lastCheck": {
-    "upstreamNewCommits": 27,
-    "upstreamChangedPaths": 66,
+    "upstreamNewCommits": 7,
+    "upstreamChangedPaths": 26,
     "originNewCommits": 0,
-    "mainRevision": "99169de4e6a419678003d8ab0a6aea6613392d77",
-    "macOSBaseRevision": "1c9cafe7cb6c157598b44af8ebe4d06a6ad2b536",
-    "macOSMergeRevision": "52c17dad7522b6f2ba1fb65b8f1bdb0983d4cf23",
-    "macOSRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
-    "macOSAdaptation": "Godot Kotlin aliases share canonical file/listing handles; earliest compressed heap reservation; V8 jitless, font paths, JNI registration generation and W^X compiled and exercised. Java/manual SDL input, GL resize/insets/settings cancellation, manifest base APK order, application/guest locale, sidebar/shared account/avatar/library/playtime and Store categories are connected. Real application/device/service acceptance remains open.",
-    "defaultSuiteTests": 164,
-    "defaultTestSeconds": 256.95,
-    "targetedTests": 15,
-    "targetedTestSeconds": 11.95,
+    "mainRevision": "e3b08b8805cf6ae063cd98fd4cb149544107e8dc",
+    "macOSBaseRevision": "406554b10caef841d7b46eb8fcb23006f63e896a",
+    "macOSMergeRevision": "3e5e8c3e6fe68e64f664a57870057c5e80929559",
+    "macOSRevision": null,
+    "macOSAdaptation": "Original icon and TabView; Home avatar/Settings account windows; shared itslevii.dev primary and antiweb.lol fallback; Play rich metadata/text, independent screenshot browsing and explicit trailer links; 766 English and Chinese strings. Shared bounded install counts and safe image/link URLs. Experimental ELF conversion verified as a development tool, not Runner integration.",
+    "defaultSuiteTests": 166,
+    "defaultTestSeconds": 275.0,
+    "targetedTests": 6,
+    "targetedTestSeconds": 4.06,
     "javaWebTests": 48,
-    "javaWebTestSeconds": 161.14,
+    "javaWebTestSeconds": 164.83,
     "candidateDependentTestsPending": 0,
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
     "blocker": null,
     "previousCI": {
-      "run": 40253576983,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40253576983",
-      "sourceRevision": "97de7623fca14f5d5e8e8bec4a0d7e48601d225c",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 36,
-      "hostedCoreTestSeconds": 48.98
-    },
-    "ci": {
       "run": 40434410977,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977",
       "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
@@ -96,7 +74,8 @@
       "hardware": "skipped",
       "hostedCoreTests": 41,
       "hostedCoreTestSeconds": 48.68
-    }
+    },
+    "ci": null
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -174,11 +153,11 @@
     ]
   },
   "lastUpstreamMerge": {
-    "date": "2026-10-27",
-    "previousRevision": "3b87cbc79079aadf7feb31d99988b8cdb2910750",
-    "integratedRevision": "9519faf819abed9807cd11eff088f314c993f35f",
-    "commitCount": 27,
-    "mainRevision": "99169de4e6a419678003d8ab0a6aea6613392d77"
+    "date": "2026-10-28",
+    "previousRevision": "9519faf819abed9807cd11eff088f314c993f35f",
+    "integratedRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
+    "commitCount": 7,
+    "mainRevision": "e3b08b8805cf6ae063cd98fd4cb149544107e8dc"
   },
   "runtime31Integration": {
     "status": "macos-packaged-and-fixture-verified",
@@ -200,6 +179,35 @@
       "Real Husk account service and Keychain session acceptance, authenticated Google Play.",
       "Some dynamic counters, older help and diagnostics remain Chinese; complete translation and visible Chinese UI acceptance remain open.",
       "Running guest language changes are not applied."
+    ]
+  },
+  "playDetailsIntegration": {
+    "status": "macos-built-offline-fixture-verified",
+    "implementation": "Shared PlayAPI.PlayApp and PlayText are compiled into Mac; richer Store details retain original download/auth/install transactions. Banners, counts, ratings, descriptions, updates, tags, highlights, dates, links, explicit trailers and separate resizable screenshot windows are connected. Version-code fallback preserves metadata. Invalid huge counts and unsafe link/image schemes are bounded.",
+    "validation": "Offline protobuf details transport covers direct/fallback/prefetched responses, rich metadata, status failures, safe attributed text and image URLs; actual Mac views lay out at narrow width and restore empty galleries without visible test windows. Six targeted tests and the full default suite pass.",
+    "remaining": [
+      "Authenticated Google Play details and actual network media/gallery interaction.",
+      "Physical screenshot gesture/fullscreen acceptance; current offscreen tests cover layout and data, not user interactions."
+    ]
+  },
+  "elf2machoExperiment": {
+    "upstreamRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
+    "status": "development-layout-fixture-verified",
+    "validation": "Controlled Android ELF converted, temporarily ad-hoc signed and loaded by dyld; byte identity, 16 KiB alignment and RX/RW image separation verified. Tool stays outside the app bundle and library/Runner dispatch.",
+    "remaining": [
+      "ELF relocations and instruction rewriting for dual image offsets.",
+      "Runner/library integration, real Android libraries/games and iOS device validation."
+    ]
+  },
+  "shellIntegration": {
+    "status": "gui-verified",
+    "description": "Upstream removes H logo/splash/sidebar; Mac restores original bundled icon and native tabs. Home avatar menu and Settings open the independent account window. Original 11 apps and icons retained; Mac system appearance remains selected.",
+    "website": "https://itslevii.dev",
+    "fallback": "https://antiweb.lol",
+    "localizations": 766,
+    "remaining": [
+      "Real account/Keychain service sign-in and uploads.",
+      "Visible Chinese UI acceptance and remaining Mac help/dynamic diagnostic translation."
     ]
   }
 }

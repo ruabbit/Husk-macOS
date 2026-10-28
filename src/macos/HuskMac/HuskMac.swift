@@ -425,6 +425,8 @@ struct GameDetail: View {
 }
 
 struct SettingsView: View {
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var account = Account.shared
     @ObservedObject var model: LibraryModel
     @AppStorage(CompatibilityStore.askKey) private var askCompatibility = false
     @AppStorage(Holiday.key) private var holiday = true
@@ -432,6 +434,16 @@ struct SettingsView: View {
     @AppStorage(AppLanguage.key) private var language = "system"
     var body: some View {
         Form {
+            Button { openWindow(id: "account") } label: {
+                HStack(spacing: 14) {
+                    AccountAvatar(size: 46)
+                    VStack(alignment: .leading) {
+                        Text(account.user?.displayName ?? String(localized: "Sign in")).font(.headline)
+                        Text("Profile, playtime and achievements").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(); Image(systemName: "chevron.right")
+                }
+            }.buttonStyle(.plain)
             Picker("Language", selection: $language) {
                 Text("System default").tag("system"); Text("English").tag("en"); Text("简体中文").tag("zh-Hans")
             }.onChange(of: language) { _, value in AppLanguage.set(value) }
@@ -489,6 +501,10 @@ struct HuskMacApp: App {
             MacPlayStoreView(model: model, store: model.playStore)
         }.defaultSize(width: 1040, height: 700)
         Window("Husk 帮助", id: "help") { MacHelpView() }.defaultSize(width: 720, height: 600)
+        Window("Husk Account", id: "account") { MacAccountView() }.defaultSize(width: 760, height: 660)
+        WindowGroup("Screenshots", id: "play-screenshots", for: MacPlayGallery.self) { gallery in
+            if let value = gallery.wrappedValue { MacPlayGalleryView(gallery: value) }
+        }.defaultSize(width: 1000, height: 720)
         Settings { SettingsView(model: model) }
     }
 }

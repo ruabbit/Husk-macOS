@@ -1,5 +1,23 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-28：Play 详情与原标志导航，build 22
+
+`9519faf..a06a74d` 共 **7 提交/26 路径**已普通合并为 main=`e3b08b8`、macOS merge=`3e5e8c3`；origin 无外来提交。唯一冲突是 HuskLogo 的修改/删除，按上游恢复原图标的明确意图移除旧 H 组件，并在 Mac 保留原图标与标签导航。3.1 tag 指向 `7cc583c`。
+
+| 上游增量 | macOS 接入与验证 | 证据边界 |
+| --- | --- | --- |
+| 原标志、无启动页/侧栏、账号入口 | Mac 使用原 Husk.icns、原生 TabView；首页头像菜单及设置打开独立账号窗口，保留独立游戏窗口、导入和资料库操作；首页移除重复上次使用时间 | CUA 单次启动确认首页/11 应用、头像菜单与两个账号入口；Mac 列表/表单继续尊重系统浅色/深色偏好 |
+| itslevii.dev 与中文资源 | 共享 CompatibilityStore/Account 采用新主域及 antiweb.lol 回退，Mac 披露同步更新；合入上游中文，中英文各 766 条资源验证通过；账号/社区服务离线回归通过 | 未注册/登录真实账号或上传资料；旧 Mac 帮助长文和动态诊断仍有未翻译部分 |
+| Play 富详情 | 共享 PlayApp/PlayText 实际编入 Mac，接到既有 Store 选中详情与安装事务；横幅、评分/下载/年龄、富描述/更新、标签/亮点、日期/开发者链接、独立截图翻页/缩放/全屏及主动点击预告链接 | 离线 protobuf/实际解析、版本号回退保留元数据、富文本/URL边界、窄窗口/空截图后台布局通过；真实 Google Play 详情与网络图片操作仍待已认证会话验收 |
+| ELF→Mach-O 实验工具 | 上游工具编入独立开发目标；自建 Android ELF 转换后临时 ad-hoc 签名，实际 dyld 加载检查映像字节、16 KiB 对齐及 RX/RW 双副本，通过后清理夹具产物 | 未接到资料库/Runner；重定位、代码改写、无 JIT 游戏和 iOS 真机仍未实现或验证，不能视为新增运行引擎 |
+
+对照 TLReport.nativeEngine、TLUnityView/project.yml、Mac CMake/资料库判断/Runner 启动与输入/暂停/正常关闭、Store 登录和图形依赖构建，本批没有运行引擎、图形依赖或权限增量。既有 Java/Dalvik/Unity、Cocos/Godot/SDL 等及独立 WebRunner 接线保持。最终默认 CTest **166/166（275.00 秒）**、原 WebView **48 项（164.83 秒）**及 HTTP **5 项（22.16 秒）**通过；针对性 **6/6（4.06 秒）**、包检查 **18 arm64 Mach-O/406 Java 资源**及 iOS 共享 Swift 语法已通过，后者不代表完整 iOS 构建或真机验证。
+
+既有 WebView 主程序/Activity/destroy/导航/受控 HTTP 保存保持，历史恢复与 host-stop、导航/destroy、Activity replacement/recreate、加载中/跨源及真实 HTTP 第三方插件继续开放。本轮未重复启动 War Thunder、Egg 或 Clash；War Thunder 当前仍是更新器完成后设备黑名单主动 exit 1，无正常存储关闭回执。实体 IME/手柄、真实账号与 Play、Geode/.NET、文件面板/URI、VM/P6 继续保留专门验收。
+
+
+唯一 build 22 已单次通过 CUA 启动，PID **70008**，完整路径、首页/头像菜单/账号页/设置的 AX 与截图通过，现已返回首页。源码提交、两分支推送及 CI 尚待最终收尾。
+
 ## 2026-10-27：上游 3.1，build 21
 
 `3b87cbc..9519faf` 的 **27 提交/66 路径**已普通合并到 fork main=`99169de`，再合回 macOS=`52c17da`，没有冲突或 origin 外来提交。按 TLReport.nativeEngine、TLUnityView/project.yml、CMake、资料库判断、Runner 输入/暂停/关闭、共享 PlayAPI/登录及图形构建逐项核对；没有新增图形依赖 pin 或 Mac 权限。iOS 的 Bonjour RemotePairing、TrollStore/JIT fallback 与 jetsam 诊断保留上游源码，不映射成 Mac 平台能力。

@@ -97,6 +97,12 @@ enum PlayText {
                 out[r].link = url
             }
         }
+        // Only expose ordinary web/email links; descriptions are untrusted text.
+        for run in out.runs {
+            if let url = run.link, !["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "") {
+                out[run.range].link = nil
+            }
+        }
         return out
     }
 
@@ -142,5 +148,21 @@ enum PlayText {
             rest = after
         }
         return out + rest
+    }
+}
+
+/// Shared image sizing for both platform detail pages.
+enum PlayImages {
+    static func webURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              url.host?.isEmpty == false else { return nil }
+        return url
+    }
+    static func sized(_ value: String, height: Int) -> URL? {
+        guard let url = webURL(value) else { return nil }
+        let host = url.host?.lowercased() ?? ""
+        guard (host == "googleusercontent.com" || host.hasSuffix(".googleusercontent.com")),
+              !value.contains("="), url.query == nil, url.fragment == nil else { return url }
+        return URL(string: value + "=h\(max(1, min(height, 4096)))")
     }
 }

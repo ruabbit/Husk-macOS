@@ -63,31 +63,9 @@ struct MacPlayStoreView: View {
                     }.frame(minWidth: 270, idealWidth: 330)
                     ScrollView {
                         if let app = details {
-                            VStack(alignment: .leading, spacing: 18) {
-                                HStack(spacing: 16) {
-                                    PlayIcon(url: app.iconURL, size: 80)
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(app.title).font(.title.weight(.semibold))
-                                        Text(app.developer).foregroundStyle(.secondary)
-                                        Text(app.id).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                                    }
-                                }
-                                HStack {
-                                    Text(app.versionString.isEmpty ? "版本 \(app.versionCode)" : app.versionString)
-                                    if app.sizeBytes > 0 { Text(ByteCountFormatter.string(fromByteCount: app.sizeBytes, countStyle: .file)) }
-                                    if app.rating > 0 { Label(String(format: "%.1f", app.rating), systemImage: "star.fill") }
-                                }.font(.caption).foregroundStyle(.secondary)
-                                downloadControls(app)
-                                MacCompatibilitySection(subject: CompatSubject(package: app.id, name: app.title, isGame: false), reporting: $reporting)
-                                Text(app.summary.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
-                                    .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-                                ScrollView(.horizontal) {
-                                    HStack { ForEach(app.screenshotURLs, id: \.self) { url in
-                                        AsyncImage(url: URL(string: url)) { image in image.resizable().scaledToFit() }
-                                            placeholder: { Color.clear }.frame(height: 220)
-                                    } }
-                                }
-                            }.padding(24)
+                            MacPlayDetails(app: app) { downloadControls(app) } compatibility: {
+                                MacCompatibilitySection(subject: CompatSubject(package: app.id, name: app.title, isGame: app.isGame), reporting: $reporting)
+                            }.id(app.id)
                         } else if let detailError { Text(detailError).foregroundStyle(.red).padding(24) }
                         else { Text(selected == nil ? "选择一个应用查看详情" : "正在加载详情…").foregroundStyle(.secondary).padding(40) }
                     }.frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
@@ -170,15 +148,5 @@ struct MacPlayStoreView: View {
                 }
             }
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.bar)
-    }
-}
-
-private struct PlayIcon: View {
-    let url: String?
-    let size: CGFloat
-    var body: some View {
-        AsyncImage(url: url.flatMap(URL.init(string:))) { image in image.resizable().scaledToFit() }
-            placeholder: { Image(systemName: "app.fill").resizable().scaledToFit().foregroundStyle(.secondary).padding(8) }
-            .frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: size * 0.2))
     }
 }

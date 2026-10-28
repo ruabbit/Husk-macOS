@@ -12,7 +12,6 @@ struct MacHomeShell: View {
     @AppStorage(Holiday.key) private var holiday = true
     @AppStorage("macos.appearance") private var appearance = "system"
     @State private var tab = "home"
-    @State private var loading = true
     @ObservedObject private var account = Account.shared
     @AppStorage(AppLanguage.key) private var language = "system"
     @State private var featuredID: String?
@@ -23,40 +22,17 @@ struct MacHomeShell: View {
         recentGames.first { $0.id == featuredID } ?? recentGames.first
     }
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) { HuskLogo(size: 28); Text("Husk").font(.title2.bold()) }.padding(.bottom, 22)
-                navigation("首页", "house", "home")
-                navigation("资料库", "square.grid.2x2", "library")
-                navigation("商店", "bag", "store")
-                Button { tab = "library"; model.showImporter = true } label: { Label("导入应用", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity, alignment: .leading).padding(9) }
-                    .buttonStyle(.plain).disabled(model.importBusy)
-                Divider().padding(.vertical, 8)
-                navigation("帮助", "questionmark.circle", "help")
-                Spacer()
-                Button { tab = "account" } label: {
-                    HStack { AccountAvatar(size: 28); Text(account.user?.displayName ?? String(localized: "Husk Account")).lineLimit(1) }
-                        .padding(9).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(tab == "account" ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 10))
-                }.buttonStyle(.plain)
-            }.padding(16).frame(width: 180).frame(maxHeight: .infinity).background(.bar)
-            Divider()
-            Group {
-                switch tab {
-                case "library": LibraryView(model: model)
-                case "store": MacPlayStoreView(model: model, store: model.playStore)
-                case "help": MacHelpView()
-                case "account": MacAccountView()
-                default: home
-                }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        TabView(selection: $tab) {
+            home.tabItem { Label("首页", systemImage: "house") }.tag("home")
+            LibraryView(model: model).tabItem { Label("资料库", systemImage: "square.grid.2x2") }.tag("library")
+            MacPlayStoreView(model: model, store: model.playStore).tabItem { Label("商店", systemImage: "bag") }.tag("store")
+            MacHelpView().tabItem { Label("帮助", systemImage: "questionmark.circle") }.tag("help")
         }
         .environment(\.locale, language == "system" ? .autoupdatingCurrent : Locale(identifier: language))
-        .overlay { if loading { SplashScreen() } }
         .overlay { if holiday && Holiday.inSeason && !reduceMotion { Snowfall() } }
         .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
         .frame(minWidth: 900, minHeight: 620)
-        .task { await model.reload(); loading = false }
+        .task { await model.reload() }
         .onOpenURL { url in
             if url.isFileURL { model.importURLs([url]); tab = "library"; return }
             guard url.scheme == "husk-macos", url.host == "open_app",
@@ -77,22 +53,25 @@ struct MacHomeShell: View {
         } message: { Text(model.error ?? "") }
         .onChange(of: model.selection) { _, _ in if model.importing { tab = "library" } }
     }
-    private func navigation(_ title: LocalizedStringKey, _ symbol: String, _ destination: String) -> some View {
-        Button { tab = destination } label: {
-            Label(title, systemImage: symbol).frame(maxWidth: .infinity, alignment: .leading).padding(9)
-                .background(tab == destination ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain).accessibilityAddTraits(tab == destination ? .isSelected : [])
-    }
     private var home: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 HStack {
+                    MacAppMark(size: 56)
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Husk").font(.largeTitle.bold())
                         Text("你的 Android 应用与游戏").foregroundStyle(.secondary)
                     }
                     Spacer()
                     if holiday && Holiday.inSeason { ChristmasTree(size: 66) }
+                    Menu {
+                        Button("Husk Account") { openWindow(id: "account") }
+                        Button("导入应用") { tab = "library"; model.showImporter = true }.disabled(model.importBusy)
+                        Button("Google Play") { tab = "store" }
+                        Divider()
+                        SettingsLink { Label("Settings", systemImage: "gearshape") }
+                    } label: { AccountAvatar(size: 36) }.menuStyle(.borderlessButton).fixedSize()
+                        .accessibilityLabel("Menu")
                 }
                 if let game = featured { featuredGame(game) }
                 HStack(spacing: 16) {
@@ -145,9 +124,6 @@ struct MacHomeShell: View {
             GameIcon(url: model.paths.game(game.id).appendingPathComponent("icon.data"), size: 116).snowCap(height: 7)
             VStack(alignment: .leading, spacing: 12) {
                 Text(game.title).font(.largeTitle.bold()).lineLimit(2)
-                if let date = game.lastPlayed {
-                    Text("上次使用 \(date.formatted(date: .abbreviated, time: .shortened))").foregroundStyle(.secondary)
-                }
                 HStack {
                     if model.session.active && model.session.gameID == game.id {
                         Button("显示窗口") { window("show") }.buttonStyle(.borderedProminent)
@@ -202,5 +178,16 @@ struct MacHelpView: View {
                 Link("上游社区兼容性列表", destination: CompatibilityStore.site)
             }
         }.padding(.top, 20)
+    }
+}
+
+struct MacAppMark: View {
+    var size: CGFloat = 40
+    var body: some View {
+        Group {
+            if let url = Bundle.main.url(forResource: "Husk", withExtension: "icns"), let image = NSImage(contentsOf: url) {
+                Image(nsImage: image).resizable().scaledToFit()
+            } else { Image(systemName: "cube.fill").resizable().scaledToFit() }
+        }.frame(width: size, height: size).accessibilityLabel("Husk")
     }
 }

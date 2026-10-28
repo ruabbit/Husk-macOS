@@ -192,11 +192,12 @@ target_link_libraries(WebRunner PRIVATE SharedLibrary "-framework AppKit" "-fram
 set_target_properties(WebRunner PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${MAC}/WebRunner/Info.plist.in)
 
 set(MAC_PLAY_SOURCES
+    src/app/Husk/Play/PlayText.swift
     src/app/Husk/Play/Protobuf.swift src/app/Husk/Play/PlayDevice.swift src/app/Husk/Play/PlayAPI.swift
     ${MAC}/Play/GoogleLoginPolicy.swift ${MAC}/Play/GoogleBrowserLogin.swift
     ${MAC}/Play/PlayCredentials.swift ${MAC}/Play/PlayDownload.swift ${MAC}/Play/MacPlayStore.swift)
-add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/GoogleLoginView.swift
-    ${MAC}/HuskMac/MacAccount.swift src/app/Husk/Account.swift src/app/Husk/HuskLogo.swift
+add_executable(HuskMac MACOSX_BUNDLE ${MAC_PLAY_SOURCES} ${MAC}/Play/PlayStoreView.swift ${MAC}/Play/MacPlayDetails.swift ${MAC}/Play/GoogleLoginView.swift
+    ${MAC}/HuskMac/MacAccount.swift src/app/Husk/Account.swift
     ${MAC}/HuskMac/HuskMac.swift ${MAC}/HuskMac/MacShell.swift ${MAC}/HuskMac/MacCompatibility.swift src/app/Husk/Holiday.swift src/app/Husk/Compatibility.swift "${HUSK_ICON}")
 # Swift's whole-module link does not follow the object-level resource copy rule.
 add_custom_target(HuskMacResources DEPENDS "${CMAKE_BINARY_DIR}/HuskMac.app/Contents/Resources/Husk.icns")
@@ -464,6 +465,13 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${C
         tests/macos/java/nativeactivity/Game.java tests/macos/fixture/native_bootstrap.c tests/macos/fixture/java_nativeactivity.c
         ${NEXT}/husk-tl-nativeactivity-abi.h VERBATIM)
 add_custom_target(NativeBootstrapFixture DEPENDS "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks")
+
+# Upstream 3.2 experiment: layout verification only, never shipped as a Runner.
+add_executable(Elf2MachOProbe tools/elf2macho-test.c)
+add_dependencies(Elf2MachOProbe NativeBootstrapFixture)
+add_test(NAME macos-elf2macho-layout COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/elf2macho_layout.py
+    $<TARGET_FILE:Elf2MachOProbe> "${CMAKE_BINARY_DIR}/NativeBootstrap/libnative_fixture.so" "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(macos-elf2macho-layout PROPERTIES TIMEOUT 60)
 add_executable(JavaNativeActivityTests tests/macos/JavaNativeActivity.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaNativeActivityTests PRIVATE ${MAC}/NativeRunner)
 target_link_libraries(JavaNativeActivityTests PRIVATE NativeRuntime)
@@ -650,6 +658,11 @@ target_compile_options(MacPlayTests PRIVATE -parse-as-library -I ${MAC}/SharedCo
 target_link_libraries(MacPlayTests PRIVATE SharedLibrary "-framework AppKit")
 add_test(NAME macos-play-support COMMAND MacPlayTests ${CMAKE_BINARY_DIR}/PlayCases ${CMAKE_BINARY_DIR}/TestResults)
 set_tests_properties(macos-play-support PROPERTIES TIMEOUT 30)
+add_executable(MacPlayDetailsTests tests/macos/PlayDetails.swift ${MAC_PLAY_SOURCES} ${MAC}/Play/MacPlayDetails.swift)
+target_compile_options(MacPlayDetailsTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
+target_link_libraries(MacPlayDetailsTests PRIVATE SharedLibrary "-framework AppKit" "-framework SwiftUI")
+add_test(NAME macos-play-details COMMAND MacPlayDetailsTests)
+set_tests_properties(macos-play-details PROPERTIES TIMEOUT 30)
 add_executable(APKSplitTests tests/macos/APKSplits.c)
 add_dependencies(APKSplitTests PlayCases)
 target_compile_options(APKSplitTests PRIVATE -UNDEBUG)

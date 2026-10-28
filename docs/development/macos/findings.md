@@ -1,5 +1,14 @@
 # 审计发现
 
+## 2026-10-28：上游 UI/Play 增量审计
+
+- 7 提交/26 路径没有引擎、Runner 协议或图形依赖 pin 增量；TLReport.nativeEngine、TLUnityView/project.yml 与 Mac CMake/资料库/分发/输入/暂停/关闭按已有链路核对，保留固定画布、鼠标修复、默认失焦继续及存储关闭回执。
+- 上游撤销昨天的 H 标志/启动页/侧栏。Mac 跟随恢复原图标及标签导航，账号页保留独立窗口，首页头像菜单和设置可进入；列表/表单继续尊重 Mac 系统浅色/深色偏好。
+- PlayApp 新元数据与 PlayText 复用共享源码；Mac detail/截图窗口接到现有下载、鉴权与安装事务。共享图片助手移动到 PlayText，避免 iOS/Mac 两套；外部图片只接受 http(s)，富文本仅允许 web/email 链接。超大下载量数字转 Int 前加 finite/范围判断。
+- tools/elf2macho-test.c 是 3.2 实验工具：已有 ELF 布局双副本、签名 dylib/dyld 检查，缺重定位/代码改写及真实 Runner 接入。纳入 Mac 开发回归但不打包为引擎，不改变权限。
+- 最终 build 22 默认 166/166（275 秒）、针对性 6/6、包检查 18 Mach-O/406 Java 资源与中英文各 766 条通过；iOS 共享 Swift 语法通过。CUA 单次启动 PID 70008，主程序路径、原图标/TabView/11 应用、头像菜单及设置账号入口的 AX/截图通过，现返回首页。真实 Google Play 下载、个人认证、第三方游戏与设备验收仍开放；没有重复启动 War Thunder/Egg/Clash。
+
+
 
 ## 2026-10-27：3.1 增量审计与适配
 

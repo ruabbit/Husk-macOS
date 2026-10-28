@@ -282,7 +282,7 @@ enum PlayAPI {
     /// One /fdfe call; the reply's payload (ResponseWrapper.payload, or the prefetched one when that is where the answer is).
     @discardableResult
     static func fdfeCall(_ path: String, session s: PlaySession, query: [(String, String)] = [], body: Data? = nil,
-                         post: Bool = false) async throws -> ProtoMessage {
+                         post: Bool = false, using client: URLSession? = nil) async throws -> ProtoMessage {
         var comps = URLComponents(string: fdfe + path)!
         if !query.isEmpty { comps.queryItems = (comps.queryItems ?? []) + query.map { URLQueryItem(name: $0.0, value: $0.1) } }
         var req = URLRequest(url: comps.url!)
@@ -292,7 +292,7 @@ enum PlayAPI {
             req.httpBody = body
             req.setValue("application/x-protobuf", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await urlSession.data(for: req)
+        let (data, response) = try await (client ?? urlSession).data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let wrapper = ProtoMessage(data)
         if status == 401 { throw PlayError("Google Play 会话已过期，请重新登录。", httpStatus: status) }
@@ -345,7 +345,7 @@ enum PlayAPI {
         public var installs: String {
             if !downloadsShort.isEmpty { return downloadsShort }
             let digits = downloads.filter(\.isNumber)
-            guard let n = Double(digits), n > 0 else { return downloads }
+            guard let n = Double(digits), n.isFinite, n > 0, n < Double(Int.max) else { return downloads }
             for (size, unit) in [(1e9, "B"), (1e6, "M"), (1e3, "K")] where n >= size {
                 let v = n / size
                 return (v == v.rounded() ? String(Int(v)) : String(format: "%.1f", v)) + unit + "+"
@@ -706,11 +706,11 @@ enum PlayAPI {
     }
 
     /// Get full details for a single app
-    static func details(packageName: String, session: PlaySession) async throws -> PlayApp? {
+    static func details(packageName: String, session: PlaySession, using client: URLSession? = nil) async throws -> PlayApp? {
         let q = [
             ("doc", packageName)
         ]
-        let payload = try await fdfeCall("details", session: session, query: q)
+        let payload = try await fdfeCall("details", session: session, query: q, using: client)
 
         // Payload -> detailsResponse (field 2) -> docV2 (field 4)
         let detResp = payload.message(2)
