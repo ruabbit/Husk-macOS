@@ -16,7 +16,7 @@
 既有 WebView 主程序/Activity/destroy/导航/受控 HTTP 保存保持，历史恢复与 host-stop、导航/destroy、Activity replacement/recreate、加载中/跨源及真实 HTTP 第三方插件继续开放。本轮未重复启动 War Thunder、Egg 或 Clash；War Thunder 当前仍是更新器完成后设备黑名单主动 exit 1，无正常存储关闭回执。实体 IME/手柄、真实账号与 Play、Geode/.NET、文件面板/URI、VM/P6 继续保留专门验收。
 
 
-唯一 build 22 已单次通过 CUA 启动，PID **70008**，完整路径、首页/头像菜单/账号页/设置的 AX 与截图通过，现已返回首页。源码提交、两分支推送及 CI 尚待最终收尾。
+唯一 build 22 已单次通过 CUA 启动，PID **70008**，完整路径、首页/头像菜单/账号页/设置的 AX 与截图通过，现已返回首页。源码 [59bacda](https://github.com/ruabbit/Husk-macOS/commit/59bacda14d7d53a21fa20612ff854964c7cfaa75) 与 main e3b08b8 已正常推送并读回；[CI 40615007325](https://github.com/ruabbit/Husk-macOS/actions/runs/40615007325) completed/success，43 项 hosted 核心回归（46.56 秒）、构建/包检查及 P0 memory/core 通过；hardware job skipped。
 
 ## 2026-10-27：上游 3.1，build 21
 

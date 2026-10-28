@@ -7,7 +7,7 @@
 - 新离线详情回归验证真实 protobuf/解析器、直接与回退版本号、预取包装、元数据完整性、鉴权错误、下载量溢出边界、富文本安全链接、图片 URL、窄页/空截图布局。实验性 ELF 工具将自建 Android ELF 转成临时签名 dylib，实际 dyld 检查字节/16 KiB/RX-RW 分离通过；未接入 Runner/重定位/代码改写，不代表真实游戏无 JIT。
 - 针对性 **6/6（4.06 秒）**；最终默认 **166/166（275.00 秒）**，其中 WebView **48 项（164.83 秒）**、HTTP **5 项（22.16 秒）**。包检查 **18 arm64 Mach-O/406 Java 资源**及两个语言资源通过；iOS 共享 Swift 仅语法检查。日志复用 build/logs/current-upstream-*。
 - CUA 单次启动准确 Product，PID **70008**；18 个二进制哈希对照包验证一致，主程序完整路径、原图标/标签导航、11 应用/图标、头像菜单、独立账号登录页及设置账号入口/新社区域名均通过 AX/截图确认，最后返回首页。没有登录/上传、修改偏好、启动用户游戏/VM或碰其他项目 UTM。
-- 源码与来源锁已本地验证；提交推送两分支及 hosted CI 待本轮收尾。
+- 源码 [59bacda](https://github.com/ruabbit/Husk-macOS/commit/59bacda14d7d53a21fa20612ff854964c7cfaa75) 与 main e3b08b8 已正常推送，两分支远端 SHA 已读回。[CI 40615007325](https://github.com/ruabbit/Husk-macOS/actions/runs/40615007325) completed/success：构建、包检查、43 项 hosted 核心回归（46.56 秒）和 P0 memory/core 通过，hardware job skipped。来源锁、parity 与每日续跑记录保留本次最终状态，交付文档使用 [skip ci] 随后推送。
 - 真实 Play 详情/网络图片和截图操作、真实账号/Keychain、可见中文、WebView 具体交叠/加载中/跨源/真实第三方插件、实体 IME/手柄、Geode/.NET/文件面板/URI、Play/VM/P6 继续开放。War Thunder 仍为更新器完成后的设备黑名单 exit 1；本轮未重跑该游戏、Egg或Clash。
 
 ## 2026-10-27：上游 3.1 接入，build 21

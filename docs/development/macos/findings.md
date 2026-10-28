@@ -10,6 +10,8 @@
 
 
 
+- 源码 59bacda 与 main e3b08b8 已正常推送，远端 SHA 读回一致；CI 40615007325 completed/success，43 hosted 核心回归（46.56 秒）、构建/签名/包及 P0 memory/core 通过，hardware skipped。全部 GitHub 写入仅在自己的 fork。
+
 ## 2026-10-27：3.1 增量审计与适配
 
 - `3b87cbc..9519faf` 共 27 提交、66 路径，普通合并 main=99169de、macOS merge=52c17da，均无冲突；origin 没有外来提交。第一次 SSH fetch 失败，重试成功，未改变远程地址或网络设置。

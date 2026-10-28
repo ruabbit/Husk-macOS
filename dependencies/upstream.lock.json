@@ -5,10 +5,10 @@
   "integratedRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
   "checkedOn": "2026-10-28",
   "commitCount": 7,
-  "integration": "Fetched origin then upstream; no origin additions. Ordinarily merged 7 commits / 26 paths through a06a74d into fork main e3b08b8, then macOS merge 3e5e8c3. Resolved the sole HuskLogo modify/delete conflict according to upstream removal, restoring the original icon and native tabs. Mac Play details, shared rich text and website migration are integrated; build 22 passes 166 default tests and package verification, with a single verified CUA restart. Push and hosted CI pending.",
+  "integration": "Fetched origin then upstream; no origin additions. Ordinarily merged 7 commits / 26 paths through a06a74d into fork main e3b08b8, then macOS merge 3e5e8c3. Resolved the sole HuskLogo modify/delete conflict according to upstream removal, restoring the original icon and native tabs. Mac Play details, shared rich text and website migration are integrated; build 22 passes 166 default tests and package verification, with a single verified CUA restart. Both fork branches were normally pushed and exact remote SHAs read back; hosted CI 40615007325 completed successfully: build, package verification, 43 core tests (46.56 seconds) and P0 memory/core; hardware was skipped.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-pending-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.1",
     "revision": "7cc583ce3fccd271eea9087483ddc5e49af14d8d"
@@ -30,11 +30,22 @@
         "sha256": "af5d99637fe9bb2f5a30fb7e848c961961fb97fad815e4e35d006bd122366911"
       }
     },
-    "sourceRevision": null,
-    "deliveryStatus": "locally-verified-pending-push",
+    "sourceRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Exact build 22 Product launched once through CUA as PID 70008; full executable path, AX and screenshots confirmed original icon, native tabs, original 11 applications and visible icons, Home avatar menu, independent account sign-in window and Settings account entry with itslevii.dev link. Returned home. No preference changes, real login/upload, user game or Android VM launch.",
     "pid": 70008,
-    "ci": null,
+    "ci": {
+      "run": 40615007325,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40615007325",
+      "sourceRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 43,
+      "hostedCoreTestSeconds": 46.56
+    },
     "appSHA256": "590a5f6e16c9a0246cfd308acd448a1fb6e2193297ebd9038f46c0d1d25bcc35",
     "nativeRunnerSHA256": "1ca327f32f405f3a61e2175625ff9b5a392d6589e90926d7ac9b3f88fa6a360a",
     "webRunnerSHA256": "5a53066917a1c7d41991df88f06ce358184512c5c939a632dbb4d2f792e48487",
@@ -48,7 +59,7 @@
     "mainRevision": "e3b08b8805cf6ae063cd98fd4cb149544107e8dc",
     "macOSBaseRevision": "406554b10caef841d7b46eb8fcb23006f63e896a",
     "macOSMergeRevision": "3e5e8c3e6fe68e64f664a57870057c5e80929559",
-    "macOSRevision": null,
+    "macOSRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
     "macOSAdaptation": "Original icon and TabView; Home avatar/Settings account windows; shared itslevii.dev primary and antiweb.lol fallback; Play rich metadata/text, independent screenshot browsing and explicit trailer links; 766 English and Chinese strings. Shared bounded install counts and safe image/link URLs. Experimental ELF conversion verified as a development tool, not Runner integration.",
     "defaultSuiteTests": 166,
     "defaultTestSeconds": 275.0,
@@ -60,8 +71,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 40434410977,
@@ -75,7 +86,18 @@
       "hostedCoreTests": 41,
       "hostedCoreTestSeconds": 48.68
     },
-    "ci": null
+    "ci": {
+      "run": 40615007325,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40615007325",
+      "sourceRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 43,
+      "hostedCoreTestSeconds": 46.56
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
