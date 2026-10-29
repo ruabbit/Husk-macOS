@@ -1,25 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * elf2macho-test: an arm64 Android library (.so) as a Mach-O dylib, for running Android code with no JIT (Husk 3.2, M1;
- * see HUSK_UPDATE.md).
+ * elf2macho-test: an arm64 Android library (.so) as a Mach-O dylib, for running Android code with no JIT (Husk 3.2; see
+ * Husk_3.2.MD and 3.2-progress.md). The work is in the translation layer (husk-tl-aot.c, tl_ld_aot_build in husk-tl-ld.c), which
+ * the app uses too; this is the Mac harness for it.
  *
- * The translation layer runs a library from memory it copies the image into, which needs an executable region iOS only
- * grants with a debugger attached. A dylib is code iOS runs once it is signed, so the image goes into one:
- *
- *   __TEXT  r-x   the Mach-O header, padded to 16 KiB, then the ELF image at its own vaddr layout (lowest PT_LOAD at
- *                 the image start, rounded down to 16 KiB): what the loader's executable view is today
- *   __DATA  rw-   a second copy of the image, the writable view: relocations, .data, .bss and the GOT are written here
- *   __LINKEDIT    empty fixups, export trie and symbol table (dyld wants them), then the code signature
- *
- * The distance from the image to its copy is the image size, a whole number of 16 KiB pages, and dyld keeps segment
- * distances, so `rw = rx + delta` holds with a constant delta: the model the loader's patching (patch_image) already
- * works in. Rewriting the code for that delta is M1.3; this tool lays the image out, writes the dylib and checks it.
- *
- *   clang -O2 -Wall -o elf2macho-test tools/elf2macho-test.c
- *   elf2macho-test <lib.so> <out.dylib> [--ios]       write (macOS by default; --ios marks it for iOS)
- *   codesign -s - -f <out.dylib>                      ad-hoc signature, for the Mac
- *   elf2macho-test --load <out.dylib> <lib.so> [fn [arg]]   dlopen it, compare with the .so, call fn(arg) from the dylib's code
- *                                                     (a leaf that needs no relocation: mpg123_plain_strerror -1)
+ *   tools/regress/build.sh tools/elf2macho-test.c <out>           (it links the translation layer)
+ *   elf2macho-test <lib.so> <out.dylib> [--ios]       write it (macOS: also ad-hoc signed; --ios marks it for iOS, unsigned);
+ *                                                     an output ending in / names it aot-<hash>-<lib>.dylib there, as the app wants
+ *   elf2macho-test --prepare <cache dir> <apk>...      what the app does before a JIT-less launch (husk_aot_prepare), ad-hoc signed
+ *                                                     (or with TL_P12=<file> TL_P12_PASSWORD=<password>)
+ *   elf2macho-test --load <out.dylib> <lib.so> [fn [arg]]   dlopen it, check it against a fresh build, call fn(arg) from the
+ *                                                     dylib's code (a leaf that needs no relocation: mpg123_plain_strerror -1)
  */
 #include <dlfcn.h>
 #include <errno.h>
@@ -34,10 +25,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+
+#include "husk-tl-aot.h"
+#include "husk-tl-codesign.h"
 
 #define PAGE ((uint64_t)16384)
 #define ROUND_DOWN(x) ((x) & ~(PAGE - 1))
 #define ROUND_UP(x) (((x) + PAGE - 1) & ~(PAGE - 1))
+
+void tl_log_line(const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap); fputc('\n', stderr);
+    va_end(ap);
+}
 
 /* ------------------------------------------------------------------ ELF */
 
@@ -92,13 +94,13 @@ static bool elf_open(elf *E, const char *path)
     return true;
 }
 
-/* The image as the loader lays it out: every PT_LOAD's bytes at vaddr - lo, the rest (bss, gaps) zero. */
-static void elf_fill(const elf *E, uint8_t *img)
+/* The data copy as the dylib must hold it: the PT_LOADs' file bytes at their vaddrs from base, the rest zero. */
+static void elf_fill(const elf *E, uint64_t base, uint8_t *img, size_t size)
 {
-    memset(img, 0, E->hi - E->lo);
+    memset(img, 0, size);
     for (int i = 0; i < E->eh->e_phnum; i++) {
         const elf_phdr *p = &E->ph[i];
-        if (p->p_type == PT_LOAD_) memcpy(img + (p->p_vaddr - E->lo), E->file + p->p_offset, p->p_filesz);
+        if (p->p_type == PT_LOAD_) memcpy(img + (p->p_vaddr - base), E->file + p->p_offset, p->p_filesz);
     }
 }
 
@@ -138,105 +140,6 @@ static uint64_t elf_lookup(const elf *E, const char *name)
     return 0;
 }
 
-/* ------------------------------------------------------------------ Mach-O */
-
-typedef struct { uint8_t *b; size_t n, cap; } buf;
-static void put(buf *B, const void *p, size_t n)
-{
-    if (B->n + n > B->cap) { B->cap = (B->n + n) * 2 + 4096; B->b = realloc(B->b, B->cap); }
-    memcpy(B->b + B->n, p, n); B->n += n;
-}
-static void pad(buf *B, size_t to) { static const uint8_t z[64]; while (B->n < to) put(B, z, to - B->n < 64 ? to - B->n : 64); }
-
-static bool write_dylib(const elf *E, const char *out, const char *install_name, bool ios)
-{
-    const uint64_t S = E->hi - E->lo;        /* image size = the delta from the image to its writable copy */
-    const uint64_t HDR = PAGE;               /* header and load commands, then the image at the next page */
-    const uint64_t text_size = HDR + S, data_vm = text_size, link_vm = data_vm + S;
-
-    /* __LINKEDIT: chained-fixups header with no fixups, an empty export trie, an empty string table */
-    buf L = {0};
-    struct dyld_chained_fixups_header fh = {0};
-    fh.fixups_version = 0;
-    fh.starts_offset = sizeof(fh);
-    uint32_t starts[1 + 3] = { 3, 0, 0, 0 };            /* seg_count, then no fixups in __TEXT, __DATA, __LINKEDIT */
-    fh.imports_offset = fh.starts_offset + sizeof(starts);
-    fh.symbols_offset = fh.imports_offset;
-    fh.imports_count = 0;
-    fh.imports_format = DYLD_CHAINED_IMPORT;
-    fh.symbols_format = 0;
-    put(&L, &fh, sizeof(fh)); put(&L, starts, sizeof(starts)); pad(&L, (L.n + 7) & ~7ul);
-    const uint32_t fix_off = 0, fix_size = (uint32_t)L.n;
-    const uint32_t trie_off = (uint32_t)L.n; const uint8_t trie[8] = { 0, 0 }; put(&L, trie, 8);
-    const uint32_t str_off = (uint32_t)L.n; const uint8_t strs[8] = { ' ', 0 }; put(&L, strs, 8);
-    const uint64_t link_file = link_vm;      /* file offsets equal vm addresses for every segment */
-
-    /* load commands */
-    buf C = {0};
-    struct segment_command_64 text = { LC_SEGMENT_64, sizeof(struct segment_command_64) + sizeof(struct section_64), "__TEXT",
-        0, text_size, 0, text_size, VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_READ | VM_PROT_EXECUTE, 1, 0 };
-    struct section_64 img = { "__husk_image", "__TEXT", HDR, S, (uint32_t)HDR, 14, 0, 0,
-        S_REGULAR | S_ATTR_SOME_INSTRUCTIONS, 0, 0, 0 };
-    put(&C, &text, sizeof(text)); put(&C, &img, sizeof(img));
-    struct segment_command_64 data = { LC_SEGMENT_64, sizeof(struct segment_command_64) + sizeof(struct section_64), "__DATA",
-        data_vm, S, data_vm, S, VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, 1, 0 };
-    struct section_64 dat = { "__husk_data", "__DATA", data_vm, S, (uint32_t)data_vm, 14, 0, 0, S_REGULAR, 0, 0, 0 };
-    put(&C, &data, sizeof(data)); put(&C, &dat, sizeof(dat));
-    struct segment_command_64 link = { LC_SEGMENT_64, sizeof(struct segment_command_64), "__LINKEDIT",
-        link_vm, ROUND_UP(L.n), link_file, L.n, VM_PROT_READ, VM_PROT_READ, 0, 0 };
-    put(&C, &link, sizeof(link));
-
-    size_t nl = strlen(install_name) + 1, idsize = (sizeof(struct dylib_command) + nl + 7) & ~7ul;
-    struct dylib_command id = { LC_ID_DYLIB, (uint32_t)idsize, { { sizeof(struct dylib_command) }, 2, 0x10000, 0x10000 } };
-    size_t at = C.n; put(&C, &id, sizeof(id)); put(&C, install_name, nl); pad(&C, at + idsize);
-
-    /* dyld refuses a dylib that links nothing: libSystem, as every dylib has */
-    static const char libsystem[] = "/usr/lib/libSystem.B.dylib";
-    size_t lssize = (sizeof(struct dylib_command) + sizeof(libsystem) + 7) & ~7ul;
-    struct dylib_command ls = { LC_LOAD_DYLIB, (uint32_t)lssize, { { sizeof(struct dylib_command) }, 2, 0x05470000, 0x00010000 } };
-    at = C.n; put(&C, &ls, sizeof(ls)); put(&C, libsystem, sizeof(libsystem)); pad(&C, at + lssize);
-
-    struct linkedit_data_command fix = { LC_DYLD_CHAINED_FIXUPS, sizeof(struct linkedit_data_command), (uint32_t)link_file + fix_off, fix_size };
-    put(&C, &fix, sizeof(fix));
-    struct linkedit_data_command exp = { LC_DYLD_EXPORTS_TRIE, sizeof(struct linkedit_data_command), (uint32_t)link_file + trie_off, 8 };
-    put(&C, &exp, sizeof(exp));
-    struct symtab_command st = { LC_SYMTAB, sizeof(struct symtab_command), 0, 0, (uint32_t)link_file + str_off, 8 };
-    put(&C, &st, sizeof(st));
-    struct dysymtab_command dst = { LC_DYSYMTAB, sizeof(struct dysymtab_command) };
-    put(&C, &dst, sizeof(dst));
-    struct build_version_command bv = { LC_BUILD_VERSION, sizeof(struct build_version_command),
-        ios ? PLATFORM_IOS : PLATFORM_MACOS, ios ? 0x000F0000u : 0x000B0000u, ios ? 0x001A0000u : 0x001A0000u, 0 };
-    put(&C, &bv, sizeof(bv));
-    struct uuid_command uu = { LC_UUID, sizeof(struct uuid_command) };
-    uint64_t h = 1469598103934665603ull;                 /* the same library always gets the same UUID */
-    for (size_t i = 0; i < E->flen; i += 4096) { h ^= E->file[i]; h *= 1099511628211ull; }
-    memcpy(uu.uuid, &h, 8); h = h * 6364136223846793005ull + S; memcpy(uu.uuid + 8, &h, 8);
-    put(&C, &uu, sizeof(uu));
-
-    struct mach_header_64 mh = { MH_MAGIC_64, CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_ALL, MH_DYLIB, 11, (uint32_t)C.n,
-        MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL | MH_NO_REEXPORTED_DYLIBS, 0 };
-    if (sizeof(mh) + C.n + 256 > HDR) { fprintf(stderr, "load commands do not fit\n"); return false; }
-
-    /* the file: header, padding, image, its copy, linkedit */
-    buf F = {0};
-    put(&F, &mh, sizeof(mh)); put(&F, C.b, C.n); pad(&F, HDR);
-    uint8_t *image = malloc(S);
-    elf_fill(E, image);
-    put(&F, image, S);                    /* __TEXT image */
-    put(&F, image, S);                    /* __DATA copy */
-    put(&F, L.b, L.n);
-    free(image);
-
-    FILE *f = fopen(out, "wb");
-    if (!f || fwrite(F.b, 1, F.n, f) != F.n) { fprintf(stderr, "%s: %s\n", out, strerror(errno)); if (f) fclose(f); return false; }
-    fclose(f);
-    printf("%s: image 0x%llx-0x%llx (%llu KiB, PT_LOAD align up to 0x%llx), __TEXT 0x%llx, __DATA at +0x%llx (delta 0x%llx), %s\n",
-           out, (unsigned long long)E->lo, (unsigned long long)E->hi, (unsigned long long)(S >> 10), (unsigned long long)E->max_align,
-           (unsigned long long)text_size, (unsigned long long)data_vm, (unsigned long long)S, ios ? "iOS" : "macOS");
-    free(F.b); free(C.b); free(L.b);
-    return true;
-}
-
 /* ------------------------------------------------------------------ check */
 
 static const struct mach_header_64 *header_of(const char *path)
@@ -259,42 +162,92 @@ static vm_prot_t prot_at(const void *p)
     return info.protection;
 }
 
+static bool build(const elf *E, const char *so, tl_ld_aot_image *A)
+{
+    const char *slash = strrchr(so, '/');
+    if (!tl_ld_aot_build(slash ? slash + 1 : so, E->file, E->flen, A)) { fprintf(stderr, "%s: %s\n", so, A->err); return false; }
+    return true;
+}
+
 static int check(const char *dylib, const char *so, const char *fn, long arg)
 {
     elf E; if (!elf_open(&E, so)) return 1;
+    tl_ld_aot_image A; if (!build(&E, so, &A)) return 1;
     void *h = dlopen(dylib, RTLD_NOW | RTLD_LOCAL);
     if (!h) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 1; }
     const struct mach_header_64 *mh = header_of(dylib);
     if (!mh) { fprintf(stderr, "loaded, but dyld does not list it\n"); return 1; }
-    unsigned long isz = 0, dsz = 0;
-    uint8_t *rx = getsectiondata(mh, "__TEXT", "__husk_image", &isz);
-    uint8_t *rw = getsectiondata(mh, "__DATA", "__husk_data", &dsz);
-    const uint64_t S = E.hi - E.lo;
-    printf("dlopen ok: header %p, image %p (%lu KiB), copy %p, delta 0x%lx\n", (void *)mh, (void *)rx, isz >> 10, (void *)rw, (long)(rw - rx));
-    if (!rx || !rw || isz != S || dsz != S || (uint64_t)(rw - rx) != S) { fprintf(stderr, "FAIL: sections are not where they belong\n"); return 1; }
-    if ((uintptr_t)rx % PAGE || (uintptr_t)rw % PAGE) { fprintf(stderr, "FAIL: not 16 KiB aligned\n"); return 1; }
-    uint8_t *want = malloc(S); elf_fill(&E, want);
-    if (memcmp(rx, want, S) || memcmp(rw, want, S)) { fprintf(stderr, "FAIL: the image differs from the .so\n"); return 1; }
-    vm_prot_t px = prot_at(rx), pw = prot_at(rw);
-    printf("image matches the .so; image %c%c%c, copy %c%c%c\n", px & 1 ? 'r' : '-', px & 2 ? 'w' : '-', px & 4 ? 'x' : '-',
-           pw & 1 ? 'r' : '-', pw & 2 ? 'w' : '-', pw & 4 ? 'x' : '-');
-    if ((px & (VM_PROT_WRITE | VM_PROT_EXECUTE)) != VM_PROT_EXECUTE || (pw & (VM_PROT_WRITE | VM_PROT_EXECUTE)) != VM_PROT_WRITE) {
-        fprintf(stderr, "FAIL: protections\n"); return 1;
+    size_t msz = 0;
+    uint8_t *rx = (uint8_t *)(uintptr_t)mh + PAGE;      /* the image starts on the page after the header */
+    uint8_t *rw = rx;                                   /* its data pages are writable there, at their own addresses */
+    const tl_aot_manifest *M = (const tl_aot_manifest *)getsectiondata(mh, "__TEXT", "__husk_manifest", &msz);
+    const uint64_t S = A.size;
+    printf("dlopen ok: header %p, image %p (%zu pages, %llu KiB), %u segments\n", (void *)mh, (void *)rx, A.page_count,
+           (unsigned long long)(S >> 10), mh->ncmds);
+    if (!M || msz != sizeof(*M) || memcmp(M->magic, TL_AOT_MAGIC, 8) || M->version != TL_AOT_VERSION || M->so_hash != tl_aot_hash(E.file, E.flen)
+        || M->size != S || M->base_vaddr != A.base_vaddr) { fprintf(stderr, "FAIL: the manifest does not describe this library\n"); return 1; }
+    if ((uintptr_t)rx % PAGE) { fprintf(stderr, "FAIL: not 16 KiB aligned\n"); return 1; }
+    /* The same library patched again, in other memory at another address, must give the same bytes: nothing in the image depends
+     * on where it was built. */
+    if (memcmp(rx, A.text, S)) {
+        size_t k = 0; while (k < S && rx[k] == A.text[k]) k++;
+        fprintf(stderr, "FAIL: the dylib differs from a fresh build at +%#zx\n", k); return 1;
     }
-    rw[S - 1] = 0x5a;                     /* the copy takes writes */
+    /* Every page is mapped as its class says: executable pages read + execute, data pages read + write at the very address the code
+     * uses for them (so data read at a code address is the relocated data, with no remapping at run time). */
+    for (size_t p = 0; p < A.page_count; p++) {
+        vm_prot_t prot = prot_at(rx + p * PAGE), want = (A.page_class[p] & 1) ? VM_PROT_EXECUTE : VM_PROT_WRITE;
+        if ((prot & (VM_PROT_WRITE | VM_PROT_EXECUTE)) != want) {
+            fprintf(stderr, "FAIL: page %zu is %c%c%c, expected %s\n", p, prot & 1 ? 'r' : '-', prot & 2 ? 'w' : '-', prot & 4 ? 'x' : '-',
+                    want == VM_PROT_EXECUTE ? "r-x" : "rw-");
+            return 1;
+        }
+    }
+    printf("%zu pages mapped as laid out\n", A.page_count);
+    /* A library built for 4 KiB pages has its data in writable copies after the image, at the image's size plus the page's index:
+     * the code reads its data there. */
+    size_t ncopy = 0;
+    for (size_t p = 0; p < A.page_count; p++) {
+        if (!(A.page_class[p] & 2)) continue;
+        ncopy++;
+        uint8_t *c = rx + S + p * PAGE;
+        vm_prot_t prot = prot_at(c);
+        if ((prot & (VM_PROT_WRITE | VM_PROT_EXECUTE)) != VM_PROT_WRITE) {
+            fprintf(stderr, "FAIL: the copy of page %zu is %c%c%c, expected rw-\n", p, prot & 1 ? 'r' : '-', prot & 2 ? 'w' : '-',
+                    prot & 4 ? 'x' : '-');
+            return 1;
+        }
+        if (memcmp(c, A.text + p * PAGE, PAGE)) { fprintf(stderr, "FAIL: the copy of page %zu differs from the image\n", p); return 1; }
+    }
+    if (ncopy) printf("%zu data pages have writable copies after the image\n", ncopy);
+    rw[S - 1] = 0x5a;                     /* the last data page takes writes */
     if (fn) {
         uint64_t v = elf_lookup(&E, fn);
         if (!v) { fprintf(stderr, "FAIL: %s is not a defined symbol of %s\n", fn, so); return 1; }
-        const char *(*f)(long) = (const char *(*)(long))(rx + (v - E.lo));
+        const char *(*f)(long) = (const char *(*)(long))(rx + (v - A.base_vaddr));
         const char *r = f(arg);
-        printf("%s(%ld) from the dylib's code at %p returned %p: \"%s\"\n", fn, arg, (void *)f, (void *)r, r && (uint8_t *)r >= rx && (uint8_t *)r < rx + S ? r : "(outside the image)");
+        bool in = r && (uint8_t *)r >= rx && (uint8_t *)r < rx + S;
+        printf("%s(%ld) from the dylib's code at %p returned %p: \"%s\"%s\n", fn, arg, (void *)f, (void *)r, in ? r : "(outside the image)",
+               in ? "" : " -- WARNING");
     }
+    tl_ld_aot_free(&A);
     printf("OK\n");
     return 0;
 }
 
 int main(int argc, char **argv)
 {
+    tl_ld_set_verbosity(getenv("TL_VERBOSE") ? atoi(getenv("TL_VERBOSE")) : 0);
+    if (argc >= 4 && !strcmp(argv[1], "--prepare")) {
+        uint8_t *p12 = NULL; size_t p12len = 0;
+        if (getenv("TL_P12") && !(p12 = slurp(getenv("TL_P12"), &p12len))) return 1;
+        char err[300] = "";
+        int n = husk_aot_prepare((const char *const *)argv + 3, argc - 3, argv[2], p12, p12len, getenv("TL_P12_PASSWORD") ? getenv("TL_P12_PASSWORD") : "",
+                                 p12 ? "test-p12" : "adhoc", NULL, NULL, err, sizeof(err));
+        if (n < 0) { fprintf(stderr, "prepare failed: %s\n", err); return 1; }
+        printf("%d libraries ready in %s\n", n, argv[2]);
+        return 0;
+    }
     if (argc >= 4 && !strcmp(argv[1], "--load")) return check(argv[2], argv[3], argc > 4 ? argv[4] : NULL, argc > 5 ? strtol(argv[5], NULL, 0) : 0);
     if (argc < 3) {
         fprintf(stderr, "usage: %s <lib.so> <out.dylib> [--ios]\n       %s --load <out.dylib> <lib.so> [leaf function [argument]]\n", argv[0], argv[0]);
@@ -302,7 +255,24 @@ int main(int argc, char **argv)
     }
     bool ios = argc > 3 && !strcmp(argv[3], "--ios");
     elf E; if (!elf_open(&E, argv[1])) return 1;
-    const char *slash = strrchr(argv[2], '/');
-    char install[256]; snprintf(install, sizeof(install), "@rpath/%s", slash ? slash + 1 : argv[2]);
-    return write_dylib(&E, argv[2], install, ios) ? 0 : 1;
+    const char *slash = strrchr(argv[1], '/');
+    tl_ld_aot_image A; char err[200];
+    /* an output ending in / is a folder: the dylib is named as the app looks for it, aot-v<version>-<hash of the .so>-<library>.dylib */
+    char out[1200]; size_t ol = strlen(argv[2]);
+    if (ol && argv[2][ol - 1] == '/') {
+        char nm[200]; tl_aot_file_name(nm, sizeof(nm), tl_aot_hash(E.file, E.flen), slash ? slash + 1 : argv[1]);
+        snprintf(out, sizeof(out), "%s%s", argv[2], nm);
+    }
+    else snprintf(out, sizeof(out), "%s", argv[2]);
+    argv[2] = out;
+    if (!tl_aot_make_dylib(slash ? slash + 1 : argv[1], E.file, E.flen, argv[2], ios, &A, err, sizeof(err))) { fprintf(stderr, "%s\n", err); return 1; }
+    printf("%s: image at vaddr 0x%llx, %zu + %zu stub + 2 pages (%zu KiB, PT_LOAD align up to 0x%llx), %s\n"
+           "  rewritten: %zu x18 (%zu not), %zu svc (%zu out of range), %zu tpidr, %zu adrp, %zu adr (%zu not); %zu data pages copied\n",
+           argv[2], (unsigned long long)A.base_vaddr, A.npages, A.nstub, A.size >> 10, (unsigned long long)E.max_align, ios ? "iOS" : "macOS",
+           A.n_x18, A.n_x18_failed, A.n_svc, A.n_svc_far, A.n_tpidr, A.n_adrp, A.n_adr, A.n_adr_failed, A.n_mixed);
+    if (!ios) {
+        char cmd[2048]; snprintf(cmd, sizeof(cmd), "codesign -s - -f '%s' 2>/dev/null", argv[2]);
+        if (system(cmd) != 0) { fprintf(stderr, "%s: codesign failed\n", argv[2]); return 1; }
+    }
+    return 0;
 }
