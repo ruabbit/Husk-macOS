@@ -5,10 +5,10 @@
   "integratedRevision": "ee85db63ff9ff038103f7e1b5d77ac3f77eddf80",
   "checkedOn": "2026-10-29",
   "commitCount": 13,
-  "integration": "Fetched origin then upstream with no origin additions. Ordinarily merged 13 commits / 25 paths through ee85db6 into fork main 5258ed8, then macOS merge 1b4acff. Resolved the loader conflict using ELF-address classification and AOT data-copy semantics. Mac opt-in JIT-less conversion/cache/Runner routing, namespace isolation, Mono metadata and binary128 JNI/math adaptations passed build 23 local verification and a single CUA launch. Push and hosted CI are pending.",
+  "integration": "Fetched origin then upstream with no origin additions. Ordinarily merged 13 commits / 25 paths through ee85db6 into fork main 5258ed8, then macOS merge 1b4acff. Resolved the loader conflict using ELF-address classification and AOT data-copy semantics. Mac opt-in JIT-less conversion/cache/Runner routing, namespace isolation, Mono metadata and binary128 JNI/math adaptations passed build 23 local verification and a single CUA launch. Both fork branches were pushed normally and exact remote SHAs read back; hosted CI 40824326328 completed successfully: build/package verification, 45 core tests (51.90 seconds) and P0 memory/core; hardware was skipped.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-awaiting-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.1",
     "revision": "7cc583ce3fccd271eea9087483ddc5e49af14d8d"
@@ -30,11 +30,22 @@
         "sha256": "be187c39c2d2083843a921db43f8a9d4887bbcffe2c6dddde1bcd5b5ea8dd6ad"
       }
     },
-    "sourceRevision": null,
-    "deliveryStatus": "locally-verified-awaiting-push",
+    "sourceRevision": "33987448da6c4979da2b37cc73d4540a6e87ac29",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Exact build 23 Product launched once through CUA as PID 74471; full executable path, AX and screenshots confirmed original icon/tabs, original 11 apps and visible icons, and the per-game JIT-less checkbox off with its limitation text. Returned home without changing preferences or starting any user game or VM.",
     "pid": 74471,
-    "ci": null,
+    "ci": {
+      "run": 40824326328,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40824326328",
+      "sourceRevision": "33987448da6c4979da2b37cc73d4540a6e87ac29",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 45,
+      "hostedCoreTestSeconds": 51.9
+    },
     "appSHA256": "9e3e51a456b954aff7d7b2b5b5083c4b58f1afa1f4205f6b976deaa16ba741d9",
     "nativeRunnerSHA256": "7832c1e5e8713789584295fcf87fb0813b481a2ddc1c2653d513027a386b85de",
     "webRunnerSHA256": "0f091184e5be36c293608200dd49f16b4a645de332fb4b32e82d984562eb4a44",
@@ -48,7 +59,7 @@
     "mainRevision": "5258ed80fc45b25f3be3379838a6885a47309c59",
     "macOSBaseRevision": "84eaea8014d57d46fa4fda87bc86e753f2fad9de",
     "macOSMergeRevision": "1b4acff54dfb48537067be09203f134a5bdf476f",
-    "macOSRevision": null,
+    "macOSRevision": "33987448da6c4979da2b37cc73d4540a6e87ac29",
     "macOSAdaptation": "Per-game opt-in signed AOT and isolated Runner dispatch; zero executable arena, no guest JIT/fallback, source/signature/cache checks, separate system namespace, mixed pages/Go/Mono metadata, Python tar, Java runtime and storage reopen. Three-argument Class.forName, Display.Mode accessors and Android binary128 nexttoward ABI. Existing AppKit/input/pause/storage contracts retained.",
     "defaultSuiteTests": 176,
     "defaultTestSeconds": 336.09,
@@ -60,8 +71,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 40615007325,
@@ -75,7 +86,18 @@
       "hostedCoreTests": 43,
       "hostedCoreTestSeconds": 46.56
     },
-    "ci": null
+    "ci": {
+      "run": 40824326328,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40824326328",
+      "sourceRevision": "33987448da6c4979da2b37cc73d4540a6e87ac29",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 45,
+      "hostedCoreTestSeconds": 51.9
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",

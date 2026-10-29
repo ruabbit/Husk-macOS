@@ -11,7 +11,7 @@
 | 生产窗口/输入/生命周期 | 8 条打包 profile：Cocos/Godot/GameMaker/SDL/GTA/UE4/Java/Java NativeActivity，沿用固定窗口与输入、暂停/继续、正常销毁和单次 storage-closed；进程状态确认执行 arena=0 | 后台真实 ELF/DEX 夹具，不是相应商业游戏兼容；实体 IME、手柄、前台游戏仍需单独验收。Geode、已知 Mono JIT/LuaJIT、Web profile 拒绝该选项 |
 | JNI/数学兼容 | 三参数 Class.forName 复用真实 ClassLoader/initialize 语义，去除重复 HLE；Display.Mode 补宽高/60 Hz/ID；nexttoward/nexttowardf 通过 binary128 shim 接 Android q1 ABI | 真 DEX、自定义 ClassLoader、延迟初始化、fake JNI mode 与真 Android ELF 的一 quad ULP 方向验证；不是新版 Unity 游戏或显示器刷新率实测 |
 
-最终默认 **176/176（336.09 秒）**、18 arm64 Mach-O/406 Java 资源与中英文各 771 条文案包检查通过。八条 AOT 打包会话确认零执行 arena，Java 第二进程读到前次偏好和 SQLite 记录并正常关闭。首次完整套件的夹具重复建表失败已修正并保留证据；单项重开复测 1/1（5.56 秒）。CUA 单次启动准确 build 23/PID 74471，AX/截图确认原有 11 应用、原图标/标签和默认关闭的 JIT-less 选项，返回首页；未启动游戏或改设置。首轮针对性 **22/22（22.44 秒）**通过。源码推送与当前 CI 待收尾。9 个共享 C 文件 iOS SDK 语法通过；仅 macOS 完整构建，本轮未做 iOS 完整构建或真机验证。
+最终默认 **176/176（336.09 秒）**、18 arm64 Mach-O/406 Java 资源与中英文各 771 条文案包检查通过。八条 AOT 打包会话确认零执行 arena，Java 第二进程读到前次偏好和 SQLite 记录并正常关闭。首次完整套件的夹具重复建表失败已修正并保留证据；单项重开复测 1/1（5.56 秒）。CUA 单次启动准确 build 23/PID 74471，AX/截图确认原有 11 应用、原图标/标签和默认关闭的 JIT-less 选项，返回首页；未启动游戏或改设置。首轮针对性 **22/22（22.44 秒）**通过。源码 3398744 与 main 5258ed8 已正常推送并读回；CI [40824326328](https://github.com/ruabbit/Husk-macOS/actions/runs/40824326328) completed/success，45 项 hosted 核心回归（51.90 秒）、构建/包检查及 P0 memory/core 通过，hardware skipped。9 个共享 C 文件 iOS SDK 语法通过；仅 macOS 完整构建，本轮未做 iOS 完整构建或真机验证。
 
 JIT-less 仍开放转换期间停止的专门回归、旧 Unity/Minecraft 的 JIT-less 打包会话、真实游戏、解包后才出现/下载的动态库、未能确定代码范围的 Mono 文件信息、运行时生成代码的引擎与模组、iOS 个人证书及设备验收。下一轮先补转换取消与旧引擎专门回归，再对合法真实应用做独立存档验证。默认模式中既有 .NET/Java/Geode 支持保持；不能把 JIT-less 的限制写成这些功能整项未实现。WebView 的具体顺序交叠/加载中/跨源/第三方插件、实体输入/电源/文件面板/持久 URI、真实账号/Play、VM/P6 等既有待办保持开放；War Thunder 仍是已记录的更新器完成后黑名单 exit 1，本轮没有相关修复或重跑。
 

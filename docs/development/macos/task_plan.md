@@ -7,7 +7,7 @@
 - [x] 接入共享 AOT 转换/本地签名、每游戏 opt-in 与独立 Runner 分发、禁止静默回退、缓存验证；保留默认模式/窗口/输入/暂停/关闭。
 - [x] 真 ELF/DEX 与八条 AOT 打包会话、Java 暖缓存/偏好和 SQLite 重开；唯一 build 23 默认 176/176（336.09 秒）、18 Mach-O/406 Java 资源/两语言各 771 条通过；共享 iOS 仅语法证据。
 - [x] CUA 单次启动 Product/PID 74471；AX/截图核对原图标/TabView/11 应用及默认关闭的 JIT-less 选项，返回首页。
-- [ ] 更新最终 lock/parity/progress，正常推送两分支并读回，核对 CI 和续跑提示。
+- [x] 来源锁/parity/progress 已更新；源码 3398744 与 main 5258ed8 正常推送并读回。CI 40824326328 success（45 hosted 核心回归、51.90 秒及 P0 memory/core，hardware skipped）；每日续跑提示经工具更新到 build 23/AOT/具体开放项，原时间与线程/约束保持并精确读回。
 - [ ] 既有 WebView 顺序交叠/第三方插件、真实游戏/实体设备/Play/VM/P6 继续开放。
 
 

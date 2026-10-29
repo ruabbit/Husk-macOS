@@ -10,7 +10,7 @@
 
 CUA 单次启动准确 Product，PID **74471**；完整可执行路径、AX/截图确认原图标/TabView、原有 **11 个应用**和图标、游戏详情 JIT-less 默认关闭及限制说明，已返回首页。未修改游戏设置、启动用户游戏/VM、碰用户 APK/存档/Android 磁盘或其他项目 VM。所有运行证据均为受控 ELF/DEX；真实游戏兼容、转换取消和旧 Unity/Minecraft 的专门 JIT-less 回归、WebView 交叠/第三方插件、实体输入/Play/VM/P6 继续开放。War Thunder 仍是既有更新器完成后设备黑名单 exit 1，未做相关修复或重跑。
 
-本地验证与候选启动已完成，源码提交、两分支推送读回及当前 CI 尚待收尾。日志复用 build/logs/current-upstream-*，来源锁记录当前实际状态。
+源码 [3398744](https://github.com/ruabbit/Husk-macOS/commit/33987448da6c4979da2b37cc73d4540a6e87ac29) 与 main 5258ed8 已正常原子推送，两分支远端 SHA 已读回一致。本批 [CI 40824326328](https://github.com/ruabbit/Husk-macOS/actions/runs/40824326328) 已 completed/success：构建、包检查、**45 项 hosted 核心回归（51.90 秒）**及 P0 memory/core 通过，hardware job skipped。每日续跑提示经工具更新到 build 23/AOT/当前开放项，原每日 09:00、线程和约束保留，全文已精确读回。最终来源锁与交付记录使用 [skip ci] 文档提交收尾。日志复用 build/logs/current-upstream-*，来源锁记录当前实际状态。
 
 ## 2026-10-28：Play 详情与原标志导航，build 22
 

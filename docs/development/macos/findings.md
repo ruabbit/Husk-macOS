@@ -1,6 +1,6 @@
 # 审计发现
 
-## 2026-10-29 工作中：上游 AOT 增量
+## 2026-10-29：上游 AOT 接入与验证
 
 最终套件新增的 Java 暖缓存重开失败已定位：第二进程成功完成 AOT 缓存验证且打印 `HUSK_REOPEN_DESTROYED 1`，随后测试 APK 重复 `CREATE TABLE lifecycle` 抛出 table already exists。原测试只设计为单次启动；改为 IF NOT EXISTS，并额外验证首轮 SQLite 行数为 0、第二进程读到首轮已提交的 1 行。没有抑制 Runner 失败或弱化关闭回执。首次完整失败日志和隔离会话保留，修正后重新验证。
 
@@ -17,6 +17,8 @@ Mac 每游戏 JIT-less 默认关闭；Geode/已知 Mono JIT/LuaJIT 与 Web profi
 新增 Display.Mode getter 补齐宽高/60 Hz/ID；移除合并重复的 forName HLE，并用真实 DEX 检查自定义 ClassLoader 与 initialize=false/true。上游 nexttoward/nexttowardf 不能直接映射 Darwin：Android 第二参数是 q1 中 binary128。已改走 quad shim，全位比较保留一 quad ULP 的方向、符号零/NaN/极小数，真实 Android ELF 调用回归通过。
 
 失败证据保留 current-upstream-aot-first.log（Mono 元数据）、aot-repair.log（namespace 共享映射）、build-first.log（鼠标测试漏链接 AOT），修复后首轮针对性 22/22（22.44 秒）；最终默认 176/176（336.09 秒）、包检查与 CUA 单次启动 build 23/PID 74471 均通过。iOS 27 SDK/deployment 15.5 的九个共享 C 文件语法通过，不是完整 iOS 构建或真机证据。
+
+源码 3398744 与 main 5258ed8 已正常推送并读回。CI 40824326328 completed/success，45 hosted 核心回归（51.90 秒）和 P0 memory/core、构建/包检查通过，hardware skipped；真实游戏与设备边界保持。
 
 ## 2026-10-28：上游 UI/Play 增量审计
 
