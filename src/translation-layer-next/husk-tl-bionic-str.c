@@ -896,6 +896,5 @@ const tl_bionic_entry tl_tab_str2[] = {
     TL_DIRECT(regcomp), TL_DIRECT(regexec), TL_DIRECT(regfree), TL_DIRECT(regerror), TL_DIRECT(sinh), TL_DIRECT(sinhf), TL_DIRECT(scalbnf), TL_DIRECT(mbstowcs), TL_DIRECT(wcstombs), TL_DIRECT(exp2), TL_DIRECT(expm1), TL_DIRECT(log1p), TL_DIRECT(hypotf), TL_DIRECT(ilogbf), TL_DIRECT(nextafter),
     TL_DIRECT(nextafterf), TL_DIRECT(frexpf), TL_DIRECT(if_indextoname),
     /* C99: the neighbour of a value, and of a value in the direction of another (Unity's il2cpp calls these) */
-    TL_DIRECT(nexttoward), TL_DIRECT(nexttowardf),
     TL_END
 };

@@ -53,6 +53,11 @@ typedef void (*tl_aot_progress_fn)(void *user, int index, int total, const char 
 int husk_aot_prepare(const char *const *apks, int napks, const char *cache_dir, const uint8_t *p12, size_t p12_len,
                      const char *password, const char *cert_tag, tl_aot_progress_fn progress, void *user, char *err, size_t errlen);
 
+/* Runtime libraries are a separate loader namespace, including when an app
+ * ships identical bytes. This writes system-prefixed signed dylibs. */
+int husk_aot_prepare_runtime(const char *const *paths,int count,const char *cache,const uint8_t *p12,size_t len,
+                             const char *password,const char *tag,tl_aot_progress_fn progress,void *user,char *err,size_t errlen);
+
 #ifdef __cplusplus
 }
 #endif

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 #include <unistd.h>
 
 void tl_log_line(const char *format, ...) { (void)format; }
@@ -44,6 +45,9 @@ int main(void) {
     CHECK(length(tl_jni_env(), s) == 5);
     tl_jni_unref(s);
 
+    typedef uint64_t quad __attribute__((vector_size(16)));
+    float (*toward)(float,quad)=tl_bionic_find("nexttowardf");
+    CHECK(toward && toward(1.f,(quad){1,0x3fff000000000000ull})==nextafterf(1.f,2.f));
     float (*nearby)(float) = tl_bionic_find("nearbyintf");
     float (*remainder)(float, float) = tl_bionic_find("remainderf");
     char *(*message)(int, char *, size_t) = tl_bionic_find("__gnu_strerror_r");

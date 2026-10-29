@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Exercise upstream's experimental layout tool with a controlled Android ELF.
 
-This verifies signed dyld loading, image bytes and RX/RW separation, not ELF
-relocation, code rewriting, Runner dispatch or real-game compatibility.
+This verifies signed dyld loading, patched image bytes and RX/RW separation.
+AOTLoad and packaged session tests cover relocation and dispatch separately;
+controlled fixtures do not establish real-game compatibility.
 """
 import pathlib
 import subprocess

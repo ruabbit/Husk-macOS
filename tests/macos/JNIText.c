@@ -36,6 +36,17 @@ int main(void) {
     tl_jni_unref(class_args[0].l);class_args[0].l=tl_jni_new_string("org.husk.missing.TestClass");
     CHECK(!tl_jni_call(tl_jni_class_object("java/lang/Class"),"forName","(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",class_args).l&&tl_jni_pending());
     tl_jni_clear();tl_jni_unref(class_args[0].l);
+    jobj *display=tl_jni_new_object(tl_jni_class("android/view/Display"));
+    jobj *mode=tl_jni_call(display,"getMode","()Landroid/view/Display$Mode;",NULL).l;
+    jobj *modes=tl_jni_call(display,"getSupportedModes","()[Landroid/view/Display$Mode;",NULL).l;
+    CHECK(mode&&modes&&modes->kind==TL_K_OBJ_ARRAY&&modes->oarr.len==1);
+    for(int i=0;i<2;i++) {
+        jobj *m=i?modes->oarr.v[0]:mode;
+        CHECK(tl_jni_call(m,"getPhysicalWidth","()I",NULL).i==1280);
+        CHECK(tl_jni_call(m,"getPhysicalHeight","()I",NULL).i==720);
+        CHECK(tl_jni_call(m,"getRefreshRate","()F",NULL).f==60.f);
+        CHECK(tl_jni_call(m,"getModeId","()I",NULL).i==0&&!tl_jni_pending());
+    }
     jvalue name={.l=tl_jni_new_string("UTF-8")};
     jobj *charset=tl_jni_call(tl_jni_class_object("java/nio/charset/Charset"),"forName","(Ljava/lang/String;)Ljava/nio/charset/Charset;",&name).l;
     CHECK(charset&&!tl_jni_pending());

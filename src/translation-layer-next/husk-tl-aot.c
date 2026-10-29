@@ -238,7 +238,7 @@ static bool is_arm64_elf(const uint8_t *p, size_t n)
 /* Converts one library into the cache, or leaves a non-library alone. 1 = done (or already there), 0 = not a library,
  * -1 = failed (err has the reason). */
 static int prepare_one(const char *name, const uint8_t *data, size_t len, const char *cache_dir, const uint8_t *p12,
-                       size_t p12_len, const char *password, const char *cert_tag, char *err, size_t errlen)
+                       size_t p12_len, const char *password, const char *cert_tag, bool system, char *err, size_t errlen)
 {
     if (!is_arm64_elf(data, len)) {
         tl_log_line("aot: %s is not an arm64 ELF library, left alone", name);
@@ -246,7 +246,7 @@ static int prepare_one(const char *name, const uint8_t *data, size_t len, const 
     }
     char path[1200], signer[1220], tag[256] = "";
     char dylib[160]; tl_aot_file_name(dylib, sizeof(dylib), tl_aot_hash(data, len), name);
-    snprintf(path, sizeof(path), "%s/%s", cache_dir, dylib);
+    snprintf(path, sizeof(path), "%s/%s%s", cache_dir, system ? "system-" : "", dylib);
     snprintf(signer, sizeof(signer), "%s.signer", path);
     struct stat st;
     bool have = stat(path, &st) == 0, signed_now = have && read_text(signer, tag, sizeof(tag)) && cert_tag && !strcmp(tag, cert_tag);
@@ -300,7 +300,7 @@ static int prepare_tar(const uint8_t *t, size_t n, const char *what, const char 
             const char *base = strrchr(name, '/'); base = base ? base + 1 : name;
             size_t bl = strlen(base);
             if (bl > 3 && !strcmp(base + bl - 3, ".so") && is_arm64_elf(t + off, size)) {
-                int r = prepare_one(base, t + off, size, cache_dir, p12, p12_len, password, cert_tag, err, errlen);
+                int r = prepare_one(base, t + off, size, cache_dir, p12, p12_len, password, cert_tag, false, err, errlen);
                 if (r < 0) return -1;
                 done += r;
             }
@@ -311,8 +311,8 @@ static int prepare_tar(const uint8_t *t, size_t n, const char *what, const char 
     return done;
 }
 
-int husk_aot_prepare(const char *const *apks, int napks, const char *cache_dir, const uint8_t *p12, size_t p12_len,
-                     const char *password, const char *cert_tag, tl_aot_progress_fn progress, void *user, char *err, size_t errlen)
+static int prepare(const char *const *apks, int napks, const char *cache_dir, const uint8_t *p12, size_t p12_len,
+                     const char *password, const char *cert_tag, tl_aot_progress_fn progress, void *user, char *err, size_t errlen, bool system)
 {
     static const char prefix[] = "lib/arm64-v8a/";
     mkdir(cache_dir, 0755);
@@ -325,9 +325,8 @@ int husk_aot_prepare(const char *const *apks, int napks, const char *cache_dir, 
         size_t al = strlen(apks[a]);
         if (al > 3 && !strcmp(apks[a] + al - 3, ".so")) {   /* a library file (the Java runtime's, from the app) */
             const char *slash = strrchr(apks[a], '/'), *base = slash ? slash + 1 : apks[a];
-            bool seen = false;
-            for (int k = 0; k < nlibs && !seen; k++) seen = !strcmp(libs[k].name, base);
-            if (seen) continue;
+            /* Runtime and app namespaces may contain distinct bytes under one basename.
+             * Both hashed dylibs are needed; APK-to-APK precedence is handled below. */
             if (nlibs == cap) { cap = cap ? cap * 2 : 16; lib *nl = realloc(libs, (size_t)cap * sizeof(lib)); if (!nl) { snprintf(err, errlen, "out of memory"); goto out; } libs = nl; }
             libs[nlibs++] = (lib){ a, NULL, base };
             continue;
@@ -371,7 +370,7 @@ int husk_aot_prepare(const char *const *apks, int napks, const char *cache_dir, 
         }
         int r;
         if (is_arm64_elf(data, len))
-            r = prepare_one(libs[k].name, data, len, cache_dir, p12, p12_len, password, cert_tag, err, errlen);
+            r = prepare_one(libs[k].name, data, len, cache_dir, p12, p12_len, password, cert_tag, system, err, errlen);
         else if (len > 512 && !memcmp(data + 257, "ustar", 5))
             r = prepare_tar(data, len, libs[k].name, cache_dir, p12, p12_len, password, cert_tag, err, errlen);
         else {
@@ -388,3 +387,12 @@ out:
     free(z); free(libs);
     return ready;
 }
+
+/* Namespace is part of the Mach-O install name. Identical ELF bytes can bind to
+ * different dependencies; dyld must not share their relocated writable state. */
+int husk_aot_prepare(const char *const *paths,int count,const char *cache,const uint8_t *p12,size_t len,
+                     const char *password,const char *tag,tl_aot_progress_fn progress,void *user,char *err,size_t errlen)
+{ return prepare(paths,count,cache,p12,len,password,tag,progress,user,err,errlen,false); }
+int husk_aot_prepare_runtime(const char *const *paths,int count,const char *cache,const uint8_t *p12,size_t len,
+                             const char *password,const char *tag,tl_aot_progress_fn progress,void *user,char *err,size_t errlen)
+{ return prepare(paths,count,cache,p12,len,password,tag,progress,user,err,errlen,true); }

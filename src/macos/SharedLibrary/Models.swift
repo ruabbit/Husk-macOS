@@ -6,14 +6,16 @@ public struct GameSettings: Codable, Equatable, Sendable {
     public var pauseWhenInactive = false
     public var openFullScreen = false
     public var geode = false
+    public var jitless = false
     public init() {}
-    private enum CodingKeys: String, CodingKey { case muted, pauseWhenInactive, openFullScreen, geode }
+    private enum CodingKeys: String, CodingKey { case muted, pauseWhenInactive, openFullScreen, geode, jitless }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         muted = try c.decodeIfPresent(Bool.self, forKey: .muted) ?? false
         pauseWhenInactive = try c.decodeIfPresent(Bool.self, forKey: .pauseWhenInactive) ?? false
         openFullScreen = try c.decodeIfPresent(Bool.self, forKey: .openFullScreen) ?? false
         geode = try c.decodeIfPresent(Bool.self, forKey: .geode) ?? false
+        jitless = try c.decodeIfPresent(Bool.self, forKey: .jitless) ?? false
     }
 }
 
@@ -81,6 +83,14 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
             if engine == "Rockstar" { return "gta" }
             if engine == "NativeActivity" { return "nativeactivity" }
             if engine?.hasPrefix("Unity") == true { return "unity" }
+        }
+        return nil
+    }
+    public var jitlessUnavailableReason: String? {
+        guard let runtime, runtime != "web" else { return "JIT-less 适用于原生运行组件。" }
+        if settings.geode { return "Geode 模组需要动态代码，不能使用 JIT-less。" }
+        if (libraryNames ?? []).contains(where: { $0.contains("luajit") || $0.contains("monobdwgc") || $0.contains("monosgen") }) {
+            return "此应用包含需要动态代码的运行时，暂不支持 JIT-less。"
         }
         return nil
     }

@@ -4,7 +4,8 @@ import SharedLibrary
 @main struct NativeDriverSession {
     @MainActor static func main() async {
         let args=CommandLine.arguments
-        guard args.count==5 else { exit(64) }
+        guard args.count==5 || (args.count==6 && args[5]=="jitless") else { exit(64) }
+        let jitless=args.count==6
         let app=URL(fileURLWithPath:args[1]), fixture=URL(fileURLWithPath:args[2]), engine=args[3]
         let paths=LibraryPaths(root:URL(fileURLWithPath:args[4]).appendingPathComponent("Native-\(UUID().uuidString)"))
         let session=SessionController()
@@ -19,11 +20,18 @@ import SharedLibrary
                 try FileManager.default.copyItem(at:fixture.deletingLastPathComponent().appendingPathComponent("geode"),to:Geode.directory(apk:apk))
                 try await repository.update(imported.id,geode:true)
             }
+            if jitless { try await repository.update(imported.id, jitless: true) }
             let (game,files,checkpoint)=try await repository.prepare(imported.id)
             try session.start(executable:app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
                 game:game,apk:files[0],checkpoint:checkpoint,logs:paths.logs,headless:true,automation:true)
-            try await session.wait(until:{session.state=="running" || !session.active},timeout:30)
+            try await session.wait(until:{session.state=="running" || !session.active},timeout:180)
             try check(session.state=="running",session.error ?? "first frame")
+            if jitless {
+                try check(game.settings.jitless, "per-game JIT-less setting persists")
+                try check(session.events.contains{$0["event"] as? String=="aot-ready"}, "packaged Runner prepares signed AOT code")
+                session.send("status")
+                try await session.wait(until:{session.events.contains{$0["jitless"] as? Bool==true && $0["executableRegionBytes"] as? Int==0}},timeout:5)
+            }
             if engine=="sdl" {
                 session.send("keyboard")
                 try await session.wait(until:{session.events.contains{$0["event"] as? String=="text-input" && $0["active"] as? Bool==true}},timeout:5)

@@ -160,11 +160,11 @@ import ImageIO
         do { try PropertyListSerialization.data(fromPropertyList: ["URL": link.url!.absoluteString], format: .xml, options: 0).write(to: url, options: .atomic) }
         catch { self.error = error.localizedDescription }
     }
-    func settings(_ game: LibraryGame, muted: Bool? = nil, pause: Bool? = nil, fullScreen: Bool? = nil) {
+    func settings(_ game: LibraryGame, muted: Bool? = nil, pause: Bool? = nil, fullScreen: Bool? = nil, jitless: Bool? = nil) {
         guard geodeBusyID != game.id, let repository else { return }
         Task {
             do {
-                try await repository.update(game.id, muted: muted, pauseWhenInactive: pause, openFullScreen: fullScreen)
+                try await repository.update(game.id, muted: muted, pauseWhenInactive: pause, openFullScreen: fullScreen, jitless: jitless)
                 if let pause, session.gameID == game.id { session.setPauseWhenInactive(pause) }
                 await reload()
             } catch { self.error = error.localizedDescription }
@@ -380,10 +380,14 @@ struct GameDetail: View {
                         Toggle("启动时全屏", isOn: Binding(get: { game.settings.openFullScreen }, set: { model.settings(game, fullScreen: $0) })).disabled(running)
                         Toggle("游戏窗口失去焦点时暂停", isOn: Binding(get: { game.settings.pauseWhenInactive }, set: { model.settings(game, pause: $0) }))
                         Text("失焦暂停立即生效；静音在下次启动游戏时生效。").font(.caption).foregroundStyle(.secondary)
+                        Toggle("JIT-less（实验性）", isOn: Binding(get: { game.settings.jitless }, set: { model.settings(game, jitless: $0) }))
+                            .disabled(running || (!game.settings.jitless && game.jitlessUnavailableReason != nil))
+                        Text(LocalizedStringKey(game.jitlessUnavailableReason ?? "首次启动会在本机转换并签名游戏库，可能需要较长时间。需要动态代码的游戏或模组不受支持；失败时可关闭此选项。"))
+                            .font(.caption).foregroundStyle(.secondary)
                         if Geode.supports(game) {
                             Divider()
                             Toggle("启用 Geode 模组加载器", isOn: Binding(get: { game.settings.geode }, set: { model.setGeode(game, enabled: $0) }))
-                                .disabled(model.session.active || model.vm.active || model.importBusy)
+                                .disabled(model.session.active || model.vm.active || model.importBusy || game.settings.jitless)
                             Text(model.geodeStatus[game.id] ?? (game.settings.geode ? "启动时加载 Geode" : "启用时下载与游戏版本匹配的 Geode"))
                                 .font(.caption).foregroundStyle(.secondary)
                             HStack {
@@ -392,7 +396,7 @@ struct GameDetail: View {
                                     Button("取消") { model.cancelGeode() }
                                 } else {
                                     Button(game.settings.geode ? "检查 Geode 更新" : "下载并启用 Geode") { model.prepareGeode(game, checkForUpdates: true) }
-                                        .disabled(model.session.active || model.vm.active || model.importBusy)
+                                        .disabled(model.session.active || model.vm.active || model.importBusy || game.settings.jitless)
                                 }
                             }
                         }

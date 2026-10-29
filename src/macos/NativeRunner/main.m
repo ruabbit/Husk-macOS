@@ -9,6 +9,7 @@
 #include "MacInput.h"
 #include "HuskCore.h"
 #include "husk-tl-ld.h"
+#include "husk-tl-xmem.h"
 #include "husk-tl-egl.h"
 #include "husk-tl-gameactivity.h"
 #include "husk-tl-unity.h"
@@ -18,6 +19,7 @@
 #import "husk-tl-dvm-web-host.h"
 #import "MacNativeDrivers.h"
 #import "MacGeode.h"
+#import "MacAOT.h"
 #include "husk-tl-vulkan.h"
 #include "husk-tl-gamemaker.h"
 #include "husk-tl-bionic.h"
@@ -38,6 +40,7 @@ static NSMutableArray<NSString *> *splitPaths;
 static NSString *sessionID, *apkPath, *apkDigest, *checkpointPath, *gameTitle, *diagnostics;
 static BOOL headless=YES, muted, automation, pauseInactive, hiddenWindow, fullScreen;
 static int variant, exitStatus;
+static BOOL jitless;
 static BOOL minecraft, unity, nativeactivity, javaapp, javaNativeActivity, nativeDriver, ue4, portrait;
 static NSString *packageName, *nativeLibrary, *activityClass, *geodeDirectory;
 static NSUUID *javaWebStore;
@@ -68,6 +71,8 @@ void *mac_graphics_symbol(const char *name) { return [graphics symbol:name]; }
 @property NSDictionary *lastClick;
 @property NSDictionary *javaWebReceipt;
 @property BOOL loaded, changingPause, lifecycleDestroyed;
+@property BOOL preparingAOT, preparedAOT;
+@property NSTimer *preparationTimer;
 @property BOOL requestedPause;
 @property NSView *javaWebContainer;
 @property NSDate *pauseStarted, *launchStarted;
@@ -321,7 +326,7 @@ static int androidKey(unsigned code)
 {
     if(atomic_exchange(&finished,true))return;
     [self releaseCursor];
-    [self.timer invalidate];[self.audio close];[graphics close];
+    [self.timer invalidate];[self.preparationTimer invalidate];[self.audio close];[graphics close];
     exitStatus=success?0:70;
     [self transition:success?@"exited":@"failed" reason:reason];
     [self.window orderOut:nil];
@@ -362,6 +367,7 @@ static int androidKey(unsigned code)
 }
 - (void)stopRuntime:(NSString *)reason
 {
+    if(self.preparingAOT){[self finish:NO reason:@"JIT-less 准备已取消，游戏尚未启动。"];return;}
     if((unity||nativeactivity||javaapp||nativeDriver) && self.lifecycleQueue) {
         // Initialization and join share a queue, so stop during loading cannot
         // race the loader or miss a thread that has not been created yet.
@@ -538,7 +544,7 @@ static int androidKey(unsigned code)
 {
     OrbitSave save={0};if(self.loaded&&!guestRuntime())self.save(&save);
     NSMutableDictionary *detail=[@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
-        @"runtime":runtimeName(),@"presentedFrames":@(tl_egl_frames_presented()+tl_vk_frames_presented()),@"surfaceWidth":@(surfaceWidth),@"surfaceHeight":@(surfaceHeight),@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(guestRuntime()?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(guestRuntime()?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
+        @"jitless":@(jitless),@"executableRegionBytes":@(tl_xmem_size()),@"runtime":runtimeName(),@"presentedFrames":@(tl_egl_frames_presented()+tl_vk_frames_presented()),@"surfaceWidth":@(surfaceWidth),@"surfaceHeight":@(surfaceHeight),@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(guestRuntime()?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(guestRuntime()?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
         @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"lastClick":self.lastClick?:@{},@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)} mutableCopy];
     // Automation status replies must be distinguishable from periodic heartbeats.
     if(automation&&[request isKindOfClass:NSString.class]&&[request length]<=64)detail[@"request"]=request;
@@ -642,6 +648,10 @@ static int androidKey(unsigned code)
         if (!raw) return NO;
         NSData *data=[NSData dataWithBytes:raw length:strlen(raw)];husk_tl_free(raw);
         NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
+        if(jitless)for(NSDictionary *library in scan[@"libraries"]){
+            NSString *name=library[@"name"];
+            if([name containsString:@"luajit"]||[name containsString:@"monobdwgc"]||[name containsString:@"monosgen"])return NO;
+        }
         if(javaapp)return mac_java_accepts_scan(scan) && (!javaNativeActivity || [scan[@"engine"] isEqual:@"NativeActivity"]);
         if(nativeDriver)return mac_driver_accepts_scan(scan);
         return [scan isKindOfClass:NSDictionary.class] && [scan[@"ok"] boolValue] &&
@@ -693,8 +703,32 @@ static int androidKey(unsigned code)
     SecTaskRef task=SecTaskCreateFromSelf(NULL);
     CFTypeRef entitlement=task?SecTaskCopyValueForEntitlement(task,CFSTR("com.apple.security.cs.allow-unsigned-executable-memory"),NULL):NULL;
     BOOL allowed=entitlement&&CFEqual(entitlement,kCFBooleanTrue);if(entitlement)CFRelease(entitlement);if(task)CFRelease(task);
-    if(!allowed){[self finish:NO reason:@"运行组件缺少执行内存权限，请重新构建或安装。"];return;}
+    if(!allowed&&!jitless){[self finish:NO reason:@"运行组件缺少执行内存权限，请重新构建或安装。"];return;}
     if(![self validateFixture]){[self finish:NO reason:@"游戏文件校验或运行入口检查未通过，请重新导入完整 APK。"];return;}
+    if(jitless && !self.preparedAOT){
+        self.preparingAOT=YES;
+        [self event:@"aot-progress" detail:@{@"phase":@"preparing"}];
+        self.preparationTimer=[NSTimer scheduledTimerWithTimeInterval:1 repeats:YES block:^(NSTimer *timer){
+            if(!atomic_load(&finished))[self event:@"aot-progress" detail:@{@"phase":@"preparing"}];
+        }];
+        NSArray *apks=[@[apkPath] arrayByAddingObjectsFromArray:splitPaths];
+        NSString *root=guestRuntime()?[[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"../../Resources/JavaRuntime"] stringByStandardizingPath]:nil;
+        if(root&&!mac_runtime_configure(root)){[self finish:NO reason:@"Android 系统资源缺失或损坏，请重新构建 Husk。"];return;}
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{@autoreleasepool{
+            NSError *error=nil;
+            NSString *directory=mac_aot_prepare(apks,root,^(NSString *progress){
+                dispatch_async(dispatch_get_main_queue(),^{if(!atomic_load(&finished))[self event:@"aot-progress" detail:@{@"library":progress}];});
+            },&error);
+            dispatch_async(dispatch_get_main_queue(),^{
+                [self.preparationTimer invalidate];self.preparingAOT=NO;
+                if(atomic_load(&finished))return;
+                if(!directory){[self finish:NO reason:error.localizedDescription];return;}
+                tl_ld_set_aot_dir(directory.fileSystemRepresentation);self.preparedAOT=YES;
+                [self event:@"aot-ready" detail:@{@"dynamicExecutableMemory":@NO}];
+                [self applicationDidFinishLaunching:notification];
+            });
+        }});return;
+    }
     CAMetalLayer *layer=nil;
     if(!headless) {
         NSRect initialFrame=NSMakeRect(0,0,guestRuntime()?(portrait?405:960):800,guestRuntime()?(portrait?720:540):500);
@@ -911,7 +945,8 @@ int main(int argc,const char **argv)
         splitPaths=[NSMutableArray new];
         for(int i=1;i<argc;i++) {
             NSString *arg=@(argv[i]);
-            if([arg isEqual:@"--headless"])headless=YES;
+            if([arg isEqual:@"--jitless"])jitless=YES;
+            else if([arg isEqual:@"--headless"])headless=YES;
             else if([arg isEqual:@"--show-window"])headless=NO;
             else if([arg isEqual:@"--hidden-window"]){headless=NO;hiddenWindow=YES;}
             else if([arg isEqual:@"--fullscreen"])fullScreen=YES;
@@ -945,6 +980,8 @@ int main(int argc,const char **argv)
         if(javaapp&&(!javaWebStore||[javaWebStore.UUIDString isEqual:@"00000000-0000-0000-0000-000000000000"]))return 64;
         if(splitPaths.count>=TL_LD_MAX_APKS || (!guestRuntime() && splitPaths.count))return 64;
         if(portrait&&!unity&&!nativeactivity&&!javaapp&&!nativeDriver)return 64;
+        if(jitless&&geodeDirectory)return 64;
+        if(jitless){setenv("TL_NO_XMEM","1",1);setenv("TL_NO_GUEST_JIT","1",1);}
         if(geodeDirectory&&(!nativeDriver||![mac_driver_name() isEqual:@"cocos"]||![packageName isEqual:@"com.robtopx.geometryjump"]))return 64;
         if(nativeLibrary&&((!nativeactivity&&!javaNativeActivity)||!nativeLibrary.length||nativeLibrary.length>56||[nativeLibrary rangeOfCharacterFromSet:
             [[NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-"] invertedSet]].location!=NSNotFound))return 64;

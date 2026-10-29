@@ -1,92 +1,69 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "9519faf819abed9807cd11eff088f314c993f35f",
-  "integratedRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
-  "checkedOn": "2026-10-28",
-  "commitCount": 7,
-  "integration": "Fetched origin then upstream; no origin additions. Ordinarily merged 7 commits / 26 paths through a06a74d into fork main e3b08b8, then macOS merge 3e5e8c3. Resolved the sole HuskLogo modify/delete conflict according to upstream removal, restoring the original icon and native tabs. Mac Play details, shared rich text and website migration are integrated; build 22 passes 166 default tests and package verification, with a single verified CUA restart. Both fork branches were normally pushed and exact remote SHAs read back; hosted CI 40615007325 completed successfully: build, package verification, 43 core tests (46.56 seconds) and P0 memory/core; hardware was skipped.",
+  "previousRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
+  "integratedRevision": "ee85db63ff9ff038103f7e1b5d77ac3f77eddf80",
+  "checkedOn": "2026-10-29",
+  "commitCount": 13,
+  "integration": "Fetched origin then upstream with no origin additions. Ordinarily merged 13 commits / 25 paths through ee85db6 into fork main 5258ed8, then macOS merge 1b4acff. Resolved the loader conflict using ELF-address classification and AOT data-copy semantics. Mac opt-in JIT-less conversion/cache/Runner routing, namespace isolation, Mono metadata and binary128 JNI/math adaptations passed build 23 local verification and a single CUA launch. Push and hosted CI are pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-awaiting-push",
   "release": {
     "tag": "3.1",
     "revision": "7cc583ce3fccd271eea9087483ddc5e49af14d8d"
   },
   "candidate": {
     "version": "3.1.0",
-    "build": "22",
-    "defaultTests": 166,
-    "defaultTestSeconds": 275.0,
+    "build": "23",
+    "defaultTests": 176,
+    "defaultTestSeconds": 336.09,
     "bundleMachO": 18,
     "javaResources": 406,
     "localizations": {
       "en": {
-        "entries": 766,
-        "sha256": "75cbaa3f01c1690fbde61f350521c39a952a23f8a94c849c18fa46f0e9d4f2b0"
+        "entries": 771,
+        "sha256": "e0303d39e3892b51f89dbd0862683161833ae0fb15b05a644ef0abadc4c2395e"
       },
       "zh-Hans": {
-        "entries": 766,
-        "sha256": "af5d99637fe9bb2f5a30fb7e848c961961fb97fad815e4e35d006bd122366911"
+        "entries": 771,
+        "sha256": "be187c39c2d2083843a921db43f8a9d4887bbcffe2c6dddde1bcd5b5ea8dd6ad"
       }
     },
-    "sourceRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Exact build 22 Product launched once through CUA as PID 70008; full executable path, AX and screenshots confirmed original icon, native tabs, original 11 applications and visible icons, Home avatar menu, independent account sign-in window and Settings account entry with itslevii.dev link. Returned home. No preference changes, real login/upload, user game or Android VM launch.",
-    "pid": 70008,
-    "ci": {
-      "run": 40615007325,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40615007325",
-      "sourceRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 43,
-      "hostedCoreTestSeconds": 46.56
-    },
-    "appSHA256": "590a5f6e16c9a0246cfd308acd448a1fb6e2193297ebd9038f46c0d1d25bcc35",
-    "nativeRunnerSHA256": "1ca327f32f405f3a61e2175625ff9b5a392d6589e90926d7ac9b3f88fa6a360a",
-    "webRunnerSHA256": "5a53066917a1c7d41991df88f06ce358184512c5c939a632dbb4d2f792e48487",
+    "sourceRevision": null,
+    "deliveryStatus": "locally-verified-awaiting-push",
+    "gui": "Exact build 23 Product launched once through CUA as PID 74471; full executable path, AX and screenshots confirmed original icon/tabs, original 11 apps and visible icons, and the per-game JIT-less checkbox off with its limitation text. Returned home without changing preferences or starting any user game or VM.",
+    "pid": 74471,
+    "ci": null,
+    "appSHA256": "9e3e51a456b954aff7d7b2b5b5083c4b58f1afa1f4205f6b976deaa16ba741d9",
+    "nativeRunnerSHA256": "7832c1e5e8713789584295fcf87fb0813b481a2ddc1c2653d513027a386b85de",
+    "webRunnerSHA256": "0f091184e5be36c293608200dd49f16b4a645de332fb4b32e82d984562eb4a44",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
     "frameworkSHA256": "e3ed98a47c0a28b573eb986e9c47cede8dd9cb7e87defab916f797c387e64489"
   },
   "lastCheck": {
-    "upstreamNewCommits": 7,
-    "upstreamChangedPaths": 26,
+    "upstreamNewCommits": 13,
+    "upstreamChangedPaths": 25,
     "originNewCommits": 0,
-    "mainRevision": "e3b08b8805cf6ae063cd98fd4cb149544107e8dc",
-    "macOSBaseRevision": "406554b10caef841d7b46eb8fcb23006f63e896a",
-    "macOSMergeRevision": "3e5e8c3e6fe68e64f664a57870057c5e80929559",
-    "macOSRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
-    "macOSAdaptation": "Original icon and TabView; Home avatar/Settings account windows; shared itslevii.dev primary and antiweb.lol fallback; Play rich metadata/text, independent screenshot browsing and explicit trailer links; 766 English and Chinese strings. Shared bounded install counts and safe image/link URLs. Experimental ELF conversion verified as a development tool, not Runner integration.",
-    "defaultSuiteTests": 166,
-    "defaultTestSeconds": 275.0,
-    "targetedTests": 6,
-    "targetedTestSeconds": 4.06,
+    "mainRevision": "5258ed80fc45b25f3be3379838a6885a47309c59",
+    "macOSBaseRevision": "84eaea8014d57d46fa4fda87bc86e753f2fad9de",
+    "macOSMergeRevision": "1b4acff54dfb48537067be09203f134a5bdf476f",
+    "macOSRevision": null,
+    "macOSAdaptation": "Per-game opt-in signed AOT and isolated Runner dispatch; zero executable arena, no guest JIT/fallback, source/signature/cache checks, separate system namespace, mixed pages/Go/Mono metadata, Python tar, Java runtime and storage reopen. Three-argument Class.forName, Display.Mode accessors and Android binary128 nexttoward ABI. Existing AppKit/input/pause/storage contracts retained.",
+    "defaultSuiteTests": 176,
+    "defaultTestSeconds": 336.09,
+    "targetedTests": 22,
+    "targetedTestSeconds": 22.44,
     "javaWebTests": 48,
-    "javaWebTestSeconds": 164.83,
+    "javaWebTestSeconds": 194.24,
     "candidateDependentTestsPending": 0,
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
     "blocker": null,
     "previousCI": {
-      "run": 40434410977,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40434410977",
-      "sourceRevision": "fb1e7b0b0e87724908a5f915ad84d479df54cda9",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 41,
-      "hostedCoreTestSeconds": 48.68
-    },
-    "ci": {
       "run": 40615007325,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40615007325",
       "sourceRevision": "59bacda14d7d53a21fa20612ff854964c7cfaa75",
@@ -97,7 +74,8 @@
       "hardware": "skipped",
       "hostedCoreTests": 43,
       "hostedCoreTestSeconds": 46.56
-    }
+    },
+    "ci": null
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -175,11 +153,11 @@
     ]
   },
   "lastUpstreamMerge": {
-    "date": "2026-10-28",
-    "previousRevision": "9519faf819abed9807cd11eff088f314c993f35f",
-    "integratedRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
-    "commitCount": 7,
-    "mainRevision": "e3b08b8805cf6ae063cd98fd4cb149544107e8dc"
+    "date": "2026-10-29",
+    "previousRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
+    "integratedRevision": "ee85db63ff9ff038103f7e1b5d77ac3f77eddf80",
+    "commitCount": 13,
+    "mainRevision": "5258ed80fc45b25f3be3379838a6885a47309c59"
   },
   "runtime31Integration": {
     "status": "macos-packaged-and-fixture-verified",
@@ -196,7 +174,7 @@
   "accountAndLanguage": {
     "status": "macos-ui-and-isolated-protocol-verified",
     "account": "Shared Account.swift protocol with AppKit 256px avatar, Mac library rows, playtime tracking, sign-in/signup/edit/sync/refresh/signout UI. Intercepted HTTP tests use disposable credentials/preferences; no real authentication or upload. Failed Keychain updates retain the prior token.",
-    "language": "Application-only language override; whitelisted HUSK_APP_LANGUAGE for new NativeRunner/WebRunner. Both packaged Java locales initialize before Application. en and zh-Hans resource dictionaries each contain 331 entries.",
+    "language": "Application-only language override; whitelisted HUSK_APP_LANGUAGE for new NativeRunner/WebRunner. Both packaged Java locales initialize before Application. en and zh-Hans resource dictionaries each contain 771 entries.",
     "remaining": [
       "Real Husk account service and Keychain session acceptance, authenticated Google Play.",
       "Some dynamic counters, older help and diagnostics remain Chinese; complete translation and visible Chinese UI acceptance remain open.",
@@ -213,12 +191,13 @@
     ]
   },
   "elf2machoExperiment": {
-    "upstreamRevision": "a06a74dd97a54fff40b77cf7763e98e89c045d4f",
-    "status": "development-layout-fixture-verified",
-    "validation": "Controlled Android ELF converted, temporarily ad-hoc signed and loaded by dyld; byte identity, 16 KiB alignment and RX/RW image separation verified. Tool stays outside the app bundle and library/Runner dispatch.",
+    "upstreamRevision": "ee85db63ff9ff038103f7e1b5d77ac3f77eddf80",
+    "status": "macos-opt-in-runner-fixture-verified",
+    "validation": "Shared streaming converter, instruction rewrites, ad-hoc signing, dyld import and relocations are now connected to NativeRunner. Controlled Android ELF tests cover mixed 4/16 KiB pages, Go/Mono metadata, namespaces and Python gzip tar modules. Eight packaged profiles pass input/pause/normal close, with no executable arena. Java warm-cache process reopen reads prior preferences and SQLite records.",
     "remaining": [
-      "ELF relocations and instruction rewriting for dual image offsets.",
-      "Runner/library integration, real Android libraries/games and iOS device validation."
+      "Dedicated conversion-cancellation and legacy Unity/Minecraft JIT-less packaged-session regressions.",
+      "Real Android libraries/games, dynamically extracted or downloaded modules, unknown Mono metadata and engines/mods requiring generated code.",
+      "iOS personal signing and device validation; only shared C syntax checked."
     ]
   },
   "shellIntegration": {
@@ -226,10 +205,38 @@
     "description": "Upstream removes H logo/splash/sidebar; Mac restores original bundled icon and native tabs. Home avatar menu and Settings open the independent account window. Original 11 apps and icons retained; Mac system appearance remains selected.",
     "website": "https://itslevii.dev",
     "fallback": "https://antiweb.lol",
-    "localizations": 766,
+    "localizations": 771,
     "remaining": [
       "Real account/Keychain service sign-in and uploads.",
       "Visible Chinese UI acceptance and remaining Mac help/dynamic diagnostic translation."
+    ]
+  },
+  "jitlessIntegration": {
+    "status": "macos-opt-in-fixture-and-visible-option-verified",
+    "default": false,
+    "aotABI": 65540,
+    "cache": "Source SHA-256 plus format/fork revision; private locked staging directory, signature/hash verification before publication and on reuse. App/system namespaces have distinct install names.",
+    "enforcement": "TL_NO_XMEM and TL_NO_GUEST_JIT; missing converted libraries fail without fallback. Existing Runner entitlements retained.",
+    "packagedProfiles": [
+      "cocos",
+      "godot",
+      "gamemaker",
+      "sdl",
+      "gta",
+      "ue4",
+      "java",
+      "java-nativeactivity"
+    ],
+    "excluded": [
+      "Web profiles",
+      "Geode",
+      "known Mono JIT and LuaJIT runtimes"
+    ],
+    "reopen": "Real DEX in a second process verifies completed SharedPreferences and SQLite row, reuses signed cache and emits one storage-closed receipt.",
+    "remaining": [
+      "Dedicated conversion-cancellation and legacy Unity/Minecraft JIT-less packaged-session regressions.",
+      "Real Android libraries/games, dynamically extracted or downloaded modules, unknown Mono metadata and engines/mods requiring generated code.",
+      "iOS personal signing and device validation; only shared C syntax checked."
     ]
   }
 }

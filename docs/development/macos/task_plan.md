@@ -1,5 +1,16 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-29 JIT-less Runner 接入
+
+- [x] 核对干净 84eaea8、build 22/CI 40615007325 success 与实际进程；空闲 Product/PID 70008 经 CUA 正常退出，无本项目 Runner/VM。
+- [x] origin 无外来提交；upstream a06a74d..ee85db6 共 13 提交/25 路径。普通合并 main=5258ed8、macOS=1b4acff；loader 冲突保留 ELF 地址分类并接入 AOT data_view/waddr。
+- [x] 接入共享 AOT 转换/本地签名、每游戏 opt-in 与独立 Runner 分发、禁止静默回退、缓存验证；保留默认模式/窗口/输入/暂停/关闭。
+- [x] 真 ELF/DEX 与八条 AOT 打包会话、Java 暖缓存/偏好和 SQLite 重开；唯一 build 23 默认 176/176（336.09 秒）、18 Mach-O/406 Java 资源/两语言各 771 条通过；共享 iOS 仅语法证据。
+- [x] CUA 单次启动 Product/PID 74471；AX/截图核对原图标/TabView/11 应用及默认关闭的 JIT-less 选项，返回首页。
+- [ ] 更新最终 lock/parity/progress，正常推送两分支并读回，核对 CI 和续跑提示。
+- [ ] 既有 WebView 顺序交叠/第三方插件、真实游戏/实体设备/Play/VM/P6 继续开放。
+
+
 ## 当前执行：2026-10-28 Play 详情与导航
 
 - [x] 核对干净工作区、实际候选/Runner/VM/构建，退出空闲 build 21；前轮 CI 40434410977 success 已复核。

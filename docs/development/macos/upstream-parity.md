@@ -1,5 +1,21 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-29：JIT-less 接到独立 Runner，build 23
+
+`a06a74d..ee85db6` 共 **13 提交/25 路径**普通合并到 main=`5258ed8`、macOS merge=`1b4acff`；origin 无外来提交。loader 内容冲突保留 fork 的 ELF 地址粒度判断，并复用新 AOT 的 `waddr/data_view` 混合页副本；不以整文件 ours/theirs 代替语义合并。对照 TranslationLayer.swift 的 TLReport.nativeEngine、TLUnityView、project.yml/Xcode 项目、Store/账号、图形构建和 Mac CMake/资料库/Runner，本批没有新增引擎类别或图形 pin。权限、固定画布、AppKit 输入、默认失焦继续、独立 Runner 和存储关闭协议保持。
+
+| 上游增量 | macOS 实际接入 | 验证边界 |
+| --- | --- | --- |
+| 共享 AOT 转换、签名、加载与重定位 | `husk-tl-aot/codesign` 编入 NativeRuntime；每游戏默认关闭的 JIT-less 设置进入生产 NativeRunner，先异步转换 APK/split/Java runtime，Mac 采用共享本地 ad-hoc signer，无个人证书/Keychain 操作 | 受控 ELF 的代码改写、4 KiB/16 KiB 数据副本、Go/Mono 元数据、构造函数、命名空间、系统调用和 gzip tar/Python 模块通过；真实 Android 游戏及 iOS 签名设备仍未验收 |
+| 禁止执行内存和缓存 | 同时禁止 loader arena 与 guest mmap/mprotect 动态代码；缺 dylib 明确失败。缓存绑定来源 SHA-256、fork AOT ABI 65540 与格式版本，私有临时目录完成摘要/签名验证后发布，重开重新验证。系统库使用独立 install name，防止相同字节的跨命名空间映射被二次重定位 | 缓存冷/暖、签名或摘要损坏、锁、符号链接和缺库失败通过；保留既有 Mac Runner entitlements，不等于在无权限的 iOS 上验证 |
+| 生产窗口/输入/生命周期 | 8 条打包 profile：Cocos/Godot/GameMaker/SDL/GTA/UE4/Java/Java NativeActivity，沿用固定窗口与输入、暂停/继续、正常销毁和单次 storage-closed；进程状态确认执行 arena=0 | 后台真实 ELF/DEX 夹具，不是相应商业游戏兼容；实体 IME、手柄、前台游戏仍需单独验收。Geode、已知 Mono JIT/LuaJIT、Web profile 拒绝该选项 |
+| JNI/数学兼容 | 三参数 Class.forName 复用真实 ClassLoader/initialize 语义，去除重复 HLE；Display.Mode 补宽高/60 Hz/ID；nexttoward/nexttowardf 通过 binary128 shim 接 Android q1 ABI | 真 DEX、自定义 ClassLoader、延迟初始化、fake JNI mode 与真 Android ELF 的一 quad ULP 方向验证；不是新版 Unity 游戏或显示器刷新率实测 |
+
+最终默认 **176/176（336.09 秒）**、18 arm64 Mach-O/406 Java 资源与中英文各 771 条文案包检查通过。八条 AOT 打包会话确认零执行 arena，Java 第二进程读到前次偏好和 SQLite 记录并正常关闭。首次完整套件的夹具重复建表失败已修正并保留证据；单项重开复测 1/1（5.56 秒）。CUA 单次启动准确 build 23/PID 74471，AX/截图确认原有 11 应用、原图标/标签和默认关闭的 JIT-less 选项，返回首页；未启动游戏或改设置。首轮针对性 **22/22（22.44 秒）**通过。源码推送与当前 CI 待收尾。9 个共享 C 文件 iOS SDK 语法通过；仅 macOS 完整构建，本轮未做 iOS 完整构建或真机验证。
+
+JIT-less 仍开放转换期间停止的专门回归、旧 Unity/Minecraft 的 JIT-less 打包会话、真实游戏、解包后才出现/下载的动态库、未能确定代码范围的 Mono 文件信息、运行时生成代码的引擎与模组、iOS 个人证书及设备验收。下一轮先补转换取消与旧引擎专门回归，再对合法真实应用做独立存档验证。默认模式中既有 .NET/Java/Geode 支持保持；不能把 JIT-less 的限制写成这些功能整项未实现。WebView 的具体顺序交叠/加载中/跨源/第三方插件、实体输入/电源/文件面板/持久 URI、真实账号/Play、VM/P6 等既有待办保持开放；War Thunder 仍是已记录的更新器完成后黑名单 exit 1，本轮没有相关修复或重跑。
+
+
 ## 2026-10-28：Play 详情与原标志导航，build 22
 
 `9519faf..a06a74d` 共 **7 提交/26 路径**已普通合并为 main=`e3b08b8`、macOS merge=`3e5e8c3`；origin 无外来提交。唯一冲突是 HuskLogo 的修改/删除，按上游恢复原图标的明确意图移除旧 H 组件，并在 Mac 保留原图标与标签导航。3.1 tag 指向 `7cc583c`。

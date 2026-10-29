@@ -96,6 +96,24 @@ raw_syscall_registers:
     ldp q8, q9, [sp], #128
     ret
 .size raw_syscall_registers,.-raw_syscall_registers
+
+.text
+.p2align 2
+.global quad_direction
+.type quad_direction,%function
+quad_direction:
+    stp x29, x30, [sp, #-16]!
+    fmov s0, #1.0
+    mov x0, #1
+    fmov d1, x0
+    mov x1, #0x3fff000000000000
+    ins v1.d[1], x1
+    bl nexttowardf
+    fmov w0, s0
+    ldp x29, x30, [sp], #16
+    ret
+.size quad_direction,.-quad_direction
+
 #ifdef MONO_DATA
 .hidden mono_code_end
 mono_code_end:

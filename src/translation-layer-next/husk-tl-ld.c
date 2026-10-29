@@ -2045,7 +2045,7 @@ static bool aot_mapped(const struct mach_header_64 *mh, uint64_t off, size_t pag
     return true;
 }
 
-static bool aot_import(const char *name, const uint8_t *file, size_t flen, uint64_t base_vaddr, size_t npages, size_t nstub,
+static bool aot_import(const char *name, bool system, const uint8_t *file, size_t flen, uint64_t base_vaddr, size_t npages, size_t nstub,
                        size_t n_mixed, const uint8_t *mixed, uint8_t **rx, uint8_t **rw, uint8_t **dup)
 {
     static bool env_read;
@@ -2059,8 +2059,11 @@ static bool aot_import(const char *name, const uint8_t *file, size_t flen, uint6
     /* g_aot_dir may name several folders, separated by ':' (the app's prebuilt ones, then those made on the device) */
     for (const char *d = g_aot_dir; *d && !found; ) {
         const char *e = strchr(d, ':'); size_t dl = e ? (size_t)(e - d) : strlen(d);
-        snprintf(path, sizeof(path), "%.*s/%s", (int)dl, d, want);
-        found = stat(path, &st) == 0;
+        if (system) {
+            snprintf(path, sizeof(path), "%.*s/system-%s", (int)dl, d, want);
+            found = stat(path, &st) == 0;
+        }
+        if (!found) { snprintf(path, sizeof(path), "%.*s/%s", (int)dl, d, want); found = stat(path, &st) == 0; }
         if (!found) { snprintf(path, sizeof(path), "%.*s/%s.dylib", (int)dl, d, base_name(name)); found = stat(path, &st) == 0; }
         d = e ? e + 1 : d + dl;
     }
@@ -2084,6 +2087,10 @@ static bool aot_import(const char *name, const uint8_t *file, size_t flen, uint6
     for (size_t p = 0; !why && p < npages; p++)
         if (mixed && mixed[p] && !aot_mapped(mh, PAGE + size + p * PAGE, 1)) why = "its segments do not cover the image";
     if (why) { tl_log_line("ld: %s: its dylib is not used: %s", name, why); return false; }   /* (it stays loaded: dyld cannot be asked to forget it safely) */
+    for (int i = 0; i < G.nlibs; i++) if (G.libs[i]->rx == x) {
+        tl_log_line("ld: %s: its dylib is already bound in another namespace; prepare separate system dylibs", name);
+        return false;
+    }
     *rx = x; *rw = x; *dup = n_mixed ? x + size : NULL;
     return true;
 }
@@ -2101,7 +2108,7 @@ static void fill_data_slots(tl_lib *L)
     t[5] = 0xdeadbeefcafebabeull;             /* [tpidr_el0 + 0x28]: the stack cookie */
 }
 
-static tl_lib *map_library(const char *name, uint8_t *file, size_t flen)
+static tl_lib *map_library(const char *name, uint8_t *file, size_t flen, bool system)
 {
     if (G.nlibs >= MAX_LIBS) { tl_log_line("ld: too many libraries"); return NULL; }
     const elf_ehdr *eh = (const elf_ehdr *)file;
@@ -2269,7 +2276,7 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen)
     if (!vx18_init()) tl_log_line("ld: no thread-specific slot for the virtual x18; instructions using x18 will not be rewritten");
 
     uint8_t *rx, *rw, *dup = NULL;
-    bool imported = !g_aot.on && aot_import(name, file, flen, base_vaddr, npages, nstub, n_mixed, mix, &rx, &rw, &dup);
+    bool imported = !g_aot.on && aot_import(name, system, file, flen, base_vaddr, npages, nstub, n_mixed, mix, &rx, &rw, &dup);
     /* the image, its stub pages, a page of run-time values for the stubs, and a page for its thread block */
     if (imported) {
         /* dyld mapped all of it: the image's pages at their own addresses, executable or writable as the segment says, the stub,
@@ -2356,20 +2363,48 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen)
  * unwind info or class references). Its MonoAotFileInfo says where the code is: the JIT-compiled methods, the PLT and the
  * trampoline blocks. Only those are patched. Field indexes (u64 words) are those of MonoAotFileInfo in .NET 8-10.
  */
-static void mono_aot_code_only(tl_lib *L)
+static bool mono_aot_code_only(tl_lib *L)
 {
     const elf_sym *s = lib_find(L, "mono_aot_file_info");
-    if (!s) return;
+    if (!s) return true;
     uint64_t off = s->st_value - L->base_vaddr;
-    if (off + 38 * 8 > L->npages * PAGE) return;
-    const uint64_t *f = (const uint64_t *)(L->rw + off);
+    if (off + 38 * 8 > L->npages * PAGE) return false;
+    uint64_t fields[38];
+    memcpy(fields, waddr(L, off), sizeof(fields));
+    const uint64_t *f = fields;
     uint64_t lo = (uint64_t)(uintptr_t)L->rx, hi = lo + L->npages * PAGE;
+    if (L->build) {
+        /* AOT conversion has not relocated anything. Resolve only this metadata's
+         * local pointers; never call constructors, IFUNCs or external imports. */
+        for (int i = 1; i < 38; i++)
+            if (fields[i] >= L->base_vaddr && fields[i] - L->base_vaddr < L->npages * PAGE && fields[i])
+                fields[i] = lo + fields[i] - L->base_vaddr;
+        const uint64_t tables[] = {L->rela, L->jmprel}, sizes[] = {L->relasz, L->pltrelsz};
+        for (unsigned t = 0; t < 2; t++) {
+            if (!sizes[t]) continue;
+            if (tables[t] < L->base_vaddr || tables[t] - L->base_vaddr > L->npages * PAGE ||
+                sizes[t] > L->npages * PAGE - (tables[t] - L->base_vaddr)) return false;
+            const elf_rela *rel = at(L, tables[t]);
+            for (size_t i = 0; i < sizes[t] / sizeof(*rel); i++) {
+                uint64_t index = rel[i].r_offset - s->st_value;
+                if (index >= sizeof(fields) || index % 8) continue;
+                uint32_t type = (uint32_t)rel[i].r_info, symbol = (uint32_t)(rel[i].r_info >> 32);
+                uint64_t value = (uint64_t)rel[i].r_addend;
+                if (type == R_ABS64 && symbol && symbol < L->ncache) {
+                    const elf_sym *target = sym_at(L, symbol);
+                    if (target->st_shndx == SHN_UNDEF_) return false;
+                    value += target->st_value;
+                } else if (type != R_RELATIVE && !(type == R_ABS64 && !symbol)) return false;
+                fields[index / 8] = lo + value - L->base_vaddr;
+            }
+        }
+    }
     #define VA(p) ((p) - lo + L->base_vaddr)
     #define OK(p) ((p) >= lo && (p) < hi)
     uint64_t js = f[6], je = f[7], plt = f[34], plte = f[35];
     if (!OK(js) || !OK(je) || js >= je || (plt && (!OK(plt) || !OK(plte) || plt > plte))) {
-        tl_log_line("ld: %s: a Mono AOT image whose file info does not look as expected; patched as any library", L->name);
-        return;
+        tl_log_line("ld: %s: a Mono AOT image whose file info does not look as expected", L->name);
+        return false;
     }
     struct { uint64_t start, end; } r[16]; int n = 0;
     r[n].start = VA(js); r[n].end = VA(je); n++;
@@ -2387,6 +2422,7 @@ static void mono_aot_code_only(tl_lib *L)
     for (int i = 0; i < n; i++) { L->code[i].start = r[i].start; L->code[i].end = r[i].end; }
     tl_log_line("ld: %s: Mono AOT image: patching only its code (%d ranges, %.1f of %.1f MiB)", L->name, n,
                 (double)(r[0].end - r[0].start) / 1048576.0, (double)(L->npages * PAGE) / 1048576.0);
+    return true;
 }
 
 /* BoringSSL's FIPS self-check hashes its own .text, which the loader has rewritten (svc, x18, tpidr sites), and aborts on the
@@ -2426,7 +2462,7 @@ static void patch_library(tl_lib *L, size_t *t, size_t *a, size_t *ad, size_t *s
     /* The relocation table is dead now that the image is relocated. Its tail becomes a second pool of stubs, for the
      * sites that are out of branch range of the stub pages after a very large image. */
     if (island(L)) memset(L->isl_rw, 0, L->isl_cap);
-    mono_aot_code_only(L);
+    if (!L->build) mono_aot_code_only(L);
     patch_image(L, t, a, ad, sv);
     skip_boringssl_selfcheck(L);
 }
@@ -2553,7 +2589,7 @@ static tl_lib *load_locked(const char *name, int depth, bool system)
         ptrdiff_t d = tl_xmem_delta();
         if (d > ((ptrdiff_t)3 << 30) || d < -((ptrdiff_t)3 << 30)) { tl_log_line("ld: the writable and executable views are %td MiB apart: too far for adrp", d >> 20); free(file); return NULL; }
     }
-    L = map_library(name, file, flen);
+    L = map_library(name, file, flen, system);
     free(file);
     if (!L) return NULL;
     L->system = system;
@@ -2633,7 +2669,7 @@ bool tl_ld_aot_build(const char *name, const uint8_t *file, size_t flen, tl_ld_a
     memcpy(copy, file, flen);
     pthread_mutex_lock(&g_big);
     g_aot.on = true; g_aot.base = 0; g_aot.size = 0;
-    tl_lib *L = map_library(name, copy, flen);
+    tl_lib *L = map_library(name, copy, flen, false);
     g_aot.on = false;
     free(copy);
     if (!L) {
@@ -2641,6 +2677,12 @@ bool tl_ld_aot_build(const char *name, const uint8_t *file, size_t flen, tl_ld_a
         snprintf(out->err, sizeof(out->err), "%s could not be mapped (see the log)", name);
         if (g_aot.base) vm_deallocate(mach_task_self(), g_aot.base, g_aot.size);
         return false;
+    }
+    if (!mono_aot_code_only(L)) {
+        snprintf(out->err, sizeof(out->err), "Mono AOT code ranges could not be resolved before conversion");
+        free(L->symcache); free(L->pflags); free(L->mixed); free(L->phdr); free(L->fde_start); free(L->fde_end); free(L);
+        vm_deallocate(mach_task_self(), g_aot.base, g_aot.size);
+        pthread_mutex_unlock(&g_big); return false;
     }
     size_t size = (L->npages + L->nstub + 2) * PAGE;
     out->size = size; out->base_vaddr = L->base_vaddr; out->npages = L->npages; out->nstub = L->nstub;

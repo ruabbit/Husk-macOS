@@ -10,11 +10,21 @@ import android.view.WindowManager;
 
 final class Runtime31Checks {
     static volatile int ready;
+    static int initialized;
+    public static final class Deferred { static { initialized++; } }
     private static final StringBuilder text = new StringBuilder();
     private static int down, up, multiple, deleted, entered;
     static void require(boolean value) { if (!value) throw new AssertionError("runtime 3.1 contract"); }
     static void start(Activity activity, View view) {
         try {
+            ClassLoader parent = Runtime31Checks.class.getClassLoader();
+            final int[] calls = {0};
+            ClassLoader loader = new ClassLoader(parent) {
+                public Class<?> loadClass(String name) throws ClassNotFoundException { calls[0]++; return super.loadClass(name); }
+            };
+            Class<?> deferred = Class.forName("org.husk.lifecycle.Runtime31Checks$Deferred", false, loader);
+            require(deferred != null && initialized == 0 && calls[0] > 0);
+            require(Class.forName("org.husk.lifecycle.Runtime31Checks$Deferred", true, loader) == deferred && initialized == 1);
             GLSurfaceView gl = new GLSurfaceView(activity);
             java.lang.reflect.Method take = GLSurfaceView.class.getMethod("huskTakeResize");
             gl.surfaceChanged(gl.getHolder(), 0, 123, 234);

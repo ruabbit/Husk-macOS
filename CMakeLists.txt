@@ -78,6 +78,7 @@ set_tests_properties(macos-apk-icons macos-session-diagnostics PROPERTIES TIMEOU
 
 add_library(GameActivityRuntime STATIC
     ${CLASSIC}/husk-tl-sound.c
+    ${NEXT}/husk-tl-aot.c ${NEXT}/husk-tl-codesign.c
     ${NEXT}/husk-tl-ld.c ${NEXT}/husk-tl-a64.c ${NEXT}/husk-tl-xmem.c ${NEXT}/husk-tl-va.c ${NEXT}/husk-tl-codewrite.c
     ${NEXT}/husk-tl-bionic.c ${NEXT}/husk-tl-bionic-str.c ${NEXT}/husk-tl-bionic-io.c
     ${NEXT}/husk-tl-bionic-net.c ${NEXT}/husk-tl-bionic-pthread.c ${NEXT}/husk-tl-bionic-cxx.c
@@ -176,7 +177,7 @@ add_custom_command(TARGET JavaAppProbe POST_BUILD COMMAND codesign --force --sig
 
 add_executable(NativeRunner MACOSX_BUNDLE ${MAC}/NativeRunner/main.m ${MAC}/NativeRunner/MacGraphics.m
     ${MAC}/NativeRunner/MacDocumentPicker.m
-    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m
+    ${MAC}/NativeRunner/MacAudio.m ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m ${MAC}/NativeRunner/MacAOT.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacRenderView.m "${HUSK_ICON}")
 add_dependencies(NativeRunner MacIcon)
 target_include_directories(NativeRunner PRIVATE ${HUSK_DEPS}/include tests/macos/fixture)
@@ -288,6 +289,10 @@ add_dependencies(MacNativeDriverSessionTests PackageMac NativeDriverFixtures)
 foreach(engine cocos godot gamemaker sdl gta ue4)
     add_test(NAME macos-${engine}-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/${engine}.apk" ${engine} "${CMAKE_BINARY_DIR}/TestResults")
     set_tests_properties(macos-${engine}-session PROPERTIES TIMEOUT 60)
+endforeach()
+foreach(engine cocos godot gamemaker sdl gta ue4)
+    add_test(NAME macos-aot-${engine}-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/${engine}.apk" ${engine} "${CMAKE_BINARY_DIR}/TestResults" jitless)
+    set_tests_properties(macos-aot-${engine}-session PROPERTIES TIMEOUT 240)
 endforeach()
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/gamemaker-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-missing.apk"
@@ -466,12 +471,25 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${C
         ${NEXT}/husk-tl-nativeactivity-abi.h VERBATIM)
 add_custom_target(NativeBootstrapFixture DEPENDS "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks")
 
-# Upstream 3.2 experiment: layout verification only, never shipped as a Runner.
+# Shared AOT conversion tool; NativeRunner uses the same converter and loader.
 add_executable(Elf2MachOProbe tools/elf2macho-test.c)
+target_link_libraries(Elf2MachOProbe PRIVATE NativeRuntime)
 add_dependencies(Elf2MachOProbe NativeBootstrapFixture)
 add_test(NAME macos-elf2macho-layout COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/elf2macho_layout.py
     $<TARGET_FILE:Elf2MachOProbe> "${CMAKE_BINARY_DIR}/NativeBootstrap/libnative_fixture.so" "${CMAKE_BINARY_DIR}/TestResults")
 set_tests_properties(macos-elf2macho-layout PROPERTIES TIMEOUT 60)
+add_test(NAME core-aot-load COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/AOTLoad.py
+    $<TARGET_FILE:Elf2MachOProbe> $<TARGET_FILE:LoaderDataViewTests> $<TARGET_FILE:LoaderNamespaceTests>
+    "${CMAKE_BINARY_DIR}/LoaderTests" "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(core-aot-load PROPERTIES TIMEOUT 150)
+add_executable(MacAOTCacheTests tests/macos/AOTCache.m ${MAC}/NativeRunner/MacAOT.m)
+target_include_directories(MacAOTCacheTests PRIVATE ${MAC}/NativeRunner)
+target_compile_options(MacAOTCacheTests PRIVATE -fobjc-arc)
+target_link_libraries(MacAOTCacheTests PRIVATE NativeRuntime)
+add_dependencies(MacAOTCacheTests LoaderFixtures)
+add_test(NAME core-aot-cache COMMAND MacAOTCacheTests "${CMAKE_BINARY_DIR}/LoaderTests/mixed-data.so" "${CMAKE_BINARY_DIR}/TestResults")
+set_tests_properties(core-aot-cache PROPERTIES TIMEOUT 60)
+
 add_executable(JavaNativeActivityTests tests/macos/JavaNativeActivity.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaNativeActivityTests PRIVATE ${MAC}/NativeRunner)
 target_link_libraries(JavaNativeActivityTests PRIVATE NativeRuntime)
@@ -486,6 +504,9 @@ endforeach()
 target_compile_options(MacJavaSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacJavaSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacJavaSessionTests PackageMac JavaLifecycleFixture NativeBootstrapFixture)
+add_test(NAME macos-aot-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults" jitless)
+add_test(NAME macos-aot-nativeactivity-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity-jitless)
+set_tests_properties(macos-aot-java-session macos-aot-nativeactivity-session PROPERTIES TIMEOUT 240)
 add_test(NAME macos-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults")
 set_tests_properties(macos-java-session PROPERTIES TIMEOUT 95)
 foreach(language en zh-Hans)
@@ -587,7 +608,7 @@ set_tests_properties(macos-render-surface PROPERTIES TIMEOUT 30)
 add_executable(MacNativeMouseTests tests/macos/NativeMouse.m ${MAC}/NativeRunner/MacRenderView.m
     ${MAC}/NativeRunner/MacDocumentPicker.m
     ${MAC}/NativeRunner/MacTextInput.m ${MAC}/NativeRunner/MacGraphics.m ${MAC}/NativeRunner/MacAudio.m
-    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m)
+    ${MAC}/NativeRunner/MacInput.c ${MAC}/NativeRunner/MacDiagnostics.c ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacNativeDrivers.m ${MAC}/NativeRunner/MacGeode.m ${MAC}/NativeRunner/MacAOT.m)
 target_include_directories(MacNativeMouseTests PRIVATE ${MAC}/NativeRunner ${HUSK_DEPS}/include tests/macos/fixture)
 target_compile_options(MacNativeMouseTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(MacNativeMouseTests PRIVATE NativeRuntime "-framework AppKit" "-framework QuartzCore"

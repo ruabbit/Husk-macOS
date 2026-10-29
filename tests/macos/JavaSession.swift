@@ -5,8 +5,9 @@ import SharedLibrary
 @main struct JavaSession {
     @MainActor static func main() async {
         let args = CommandLine.arguments
-        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "en", "zh-Hans"].contains(args[4])) else { exit(64) }
-        let nativeActivity = args.count == 5 && args[4] == "nativeactivity"
+        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "en", "zh-Hans", "jitless", "nativeactivity-jitless"].contains(args[4])) else { exit(64) }
+        let nativeActivity = args.count == 5 && args[4].hasPrefix("nativeactivity")
+        let jitless = args.count == 5 && args[4].hasSuffix("jitless")
         let app = URL(fileURLWithPath: args[1]), fixture = URL(fileURLWithPath: args[2])
         let paths = LibraryPaths(root: URL(fileURLWithPath: args[3]).appendingPathComponent("Java Session-\(UUID().uuidString)"))
         let suite = "org.husk.java.language." + UUID().uuidString
@@ -22,13 +23,18 @@ import SharedLibrary
             let repository = try LibraryRepository(paths: paths, trustedFixtureHash: "")
             let imported = try await repository.importGame(fixture)
             try check(imported.runtime == (nativeActivity ? "nativeactivity" : "java"), "real-dex-import-selects-runtime")
-            try await repository.update(imported.id, muted: true, pauseWhenInactive: false)
+            try await repository.update(imported.id, muted: true, pauseWhenInactive: false, jitless: jitless)
             let (game, files, checkpoint) = try await repository.prepare(imported.id)
             let runner = app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
             try session.start(executable: runner, game: game, apk: files[0], checkpoint: checkpoint,
                               logs: paths.logs, headless: true, automation: true)
-            try await session.wait(until: { session.state == "running" || !session.active }, timeout: 40)
+            try await session.wait(until: { session.state == "running" || !session.active }, timeout: 180)
             try check(session.state == "running", session.error ?? "packaged-java-first-frame")
+            if jitless {
+                try check(game.settings.jitless && session.events.contains{$0["event"] as? String=="aot-ready"}, "AOT Java runtime and APKs prepared")
+                session.send("status")
+                try await session.wait(until:{session.events.contains{$0["jitless"] as? Bool==true && $0["executableRegionBytes"] as? Int==0}},timeout:5)
+            }
             session.send("input", values: ["source":"touch", "phase":0, "x":200, "y":400])
             session.send("input", values: ["source":"touch", "phase":2, "x":200, "y":400])
             session.send("input", values: ["source":"key", "code":0, "down":true])
@@ -71,8 +77,21 @@ import SharedLibrary
                 try check(log.contains("HUSK_MANUAL_INPUT 中") && log.contains("HUSK_MANUAL_INPUT 😀"), "manual AppKit text bridge delivers Unicode keys without an InputConnection")
                 try check(log.contains("HUSK_GUEST_STDOUT_MARKER") && log.contains("HUSK_GUEST_STDERR_MARKER") && log.contains("HUSK_GUEST_DESTROY_STDOUT") && log.contains("guest-print"),
                           "guest stdout/stderr and final destruction output retained in diagnostics")
+                try check(log.contains("HUSK_REOPEN_SQL_ROWS 0"), "first process starts with an empty SQLite table")
                 try check(!session.events.contains { $0["event"] as? String == "guest-print" }, "guest JSON text is never a control event")
                 try check(prefs.contains("i controller_events 255") && prefs.contains("i controller_held 0"), "real-controller-device-axes-disconnect-focus-and-pause-callbacks")
+            }
+            if jitless && !nativeActivity {
+                try session.start(executable: runner, game: game, apk: files[0], checkpoint: checkpoint,
+                                  logs: paths.logs, headless: true, automation: true)
+                try await session.wait(until: { session.state == "running" || !session.active }, timeout: 40)
+                try check(session.state == "running", session.error ?? "second process ready")
+                let reopened = try String(contentsOf: paths.logs.appendingPathComponent(session.sessionID!).appendingPathComponent("stderr.log"), encoding: .utf8)
+                try check(reopened.contains("HUSK_REOPEN_DESTROYED 1"), "real DEX reads the prior process's completed save")
+                try check(reopened.contains("HUSK_REOPEN_SQL_ROWS 1"), "second process reads the prior process's committed SQLite row")
+                try check(!reopened.contains("aot: converting"), "new process validates and reuses the signed AOT cache")
+                session.stop(); try await session.wait(until: { !session.active }, timeout: 35)
+                try check(session.state == "exited" && session.error == nil && session.events.filter{$0["event"] as? String == "storage-closed"}.count == 1, "reopened process closes storage once")
             }
             print("PASS packaged Java session: \(paths.root.path)")
         } catch {

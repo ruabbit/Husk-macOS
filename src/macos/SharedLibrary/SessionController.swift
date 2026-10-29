@@ -71,6 +71,7 @@ final class PipeReader: @unchecked Sendable {
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
+        if game.settings.jitless, let reason = game.jitlessUnavailableReason { throw LibraryFailure(reason) }
         try game.verifyExpansions(in: apk.deletingLastPathComponent())
         let geodeArguments = try Geode.arguments(game: game, apk: apk)
         let nativeArguments = runtime != "orbit" && runtime != "minecraft"
@@ -94,6 +95,7 @@ final class PipeReader: @unchecked Sendable {
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
         child.arguments! += nativeArguments
+        if game.settings.jitless { child.arguments!.append("--jitless") }
         if let javaWebStore { child.arguments! += ["--java-web-store", javaWebStore.id.uuidString] }
         if runtime == "web" { child.arguments! += ["--web-kind", game.engine == "Capacitor" ? "capacitor" : "cordova"] }
         child.arguments! += geodeArguments

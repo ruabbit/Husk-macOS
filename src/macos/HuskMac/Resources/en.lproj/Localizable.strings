@@ -765,3 +765,8 @@
 "高度" = "Height";
 "默认继续运行。可在每个应用的详情里开启失焦暂停。暂停会释放正在按住的输入；恢复后可继续操作。" = "Apps keep running by default. Enable pause on focus loss in app details. Pausing releases held inputs.";
 "鼠标点击和拖动对应屏幕触摸" = "Mouse clicks and drags map to touch";
+"JIT-less（实验性）" = "JIT-less (experimental)";
+"首次启动会在本机转换并签名游戏库，可能需要较长时间。需要动态代码的游戏或模组不受支持；失败时可关闭此选项。" = "The first launch converts and signs game libraries locally and may take some time. Games or mods that generate code are unsupported. Turn this off if a game cannot start.";
+"JIT-less 适用于原生运行组件。" = "JIT-less is available for native runtimes.";
+"Geode 模组需要动态代码，不能使用 JIT-less。" = "Geode mods need dynamic code and cannot use JIT-less.";
+"此应用包含需要动态代码的运行时，暂不支持 JIT-less。" = "This app includes a runtime that requires dynamic code and cannot use JIT-less yet.";

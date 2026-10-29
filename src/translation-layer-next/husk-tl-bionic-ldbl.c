@@ -150,14 +150,15 @@ static int b___isnanl(q128 x) { return isnan(q2d(x)); }
 /* nextafterl on the quad bits: one unit in quad's last place, toward y. */
 static int qcmp(q128 a, q128 b)                                  /* -1, 0, 1 as numbers; 2 when unordered */
 {
-    double da = q2d(a), db = q2d(b);
-    if (isnan(da) || isnan(db)) return 2;
-    if (da != db) return da < db ? -1 : 1;
-    /* equal as doubles: order by the bits (same sign here) */
-    bool neg = a[1] >> 63;
-    unsigned __int128 ua = ((unsigned __int128)(a[1] & ~(1ull << 63)) << 64) | a[0], ub = ((unsigned __int128)(b[1] & ~(1ull << 63)) << 64) | b[0];
-    if (ua == ub) return 0;
-    return (ua < ub) != neg ? -1 : 1;
+    uint64_t ah=a[1]&~(1ull<<63), bh=b[1]&~(1ull<<63);
+    if ((ah>>48==0x7fff && ((ah&0xffffffffffffull)||a[0])) ||
+        (bh>>48==0x7fff && ((bh&0xffffffffffffull)||b[0]))) return 2;
+    unsigned __int128 ua=((unsigned __int128)ah<<64)|a[0], ub=((unsigned __int128)bh<<64)|b[0];
+    if (!ua && !ub) return 0;
+    bool neg=a[1]>>63;
+    if (neg != (bool)(b[1]>>63)) return neg ? -1 : 1;
+    if (ua==ub) return 0;
+    return (ua<ub)!=neg ? -1 : 1;
 }
 static q128 b_nextafterl(q128 x, q128 y)
 {
@@ -173,6 +174,19 @@ static q128 b_nextafterl(q128 x, q128 y)
     if (up != neg) mag++; else mag--;
     q128 r; r[0] = (uint64_t)mag; r[1] = (uint64_t)(mag >> 64) | (neg ? 1ull << 63 : 0);
     return r;
+}
+
+/* Android's second argument is binary128 in q1, not Darwin's double in d1.
+ * Compare all bits so a direction one quad ULP away still moves float/double. */
+static double b_nexttoward(double x,q128 y) {
+    int c=qcmp(d2q(x),y);
+    if(c==2)return x+q2d(y);
+    return c==0 ? q2d(y) : nextafter(x,c<0?INFINITY:-INFINITY);
+}
+static float b_nexttowardf(float x,q128 y) {
+    int c=qcmp(d2q((double)x),y);
+    if(c==2)return x+(float)q2d(y);
+    return c==0 ? (float)q2d(y) : nextafterf(x,c<0?INFINITY:-INFINITY);
 }
 
 /* ---- POSIX odds and ends */
@@ -258,6 +272,7 @@ const tl_bionic_entry tl_tab_ldbl[] = {
     TL_WRAP("__isinfl", b___isinfl), TL_WRAP("__isnanl", b___isnanl), TL_WRAP("nextafterl", b_nextafterl),
     TL_WRAP("__signbit", b___signbit), TL_WRAP("__signbitf", b___signbitf),
     TL_WRAP("nexttowardl", b_nextafterl),
+    TL_WRAP("nexttoward", b_nexttoward), TL_WRAP("nexttowardf", b_nexttowardf),
     TL_DIRECT(copysign), TL_DIRECT(erf), TL_DIRECT(erfc), TL_DIRECT(readv), TL_DIRECT(sync), TL_DIRECT(getsid),
     TL_DIRECT(tcgetpgrp), TL_DIRECT(tcsetpgrp), TL_DIRECT(getitimer), TL_DIRECT(setitimer), TL_DIRECT(wait4),
     TL_DIRECT(deflateCopy), TL_DIRECT(inflateCopy),

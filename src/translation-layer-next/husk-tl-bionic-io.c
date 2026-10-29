@@ -1297,6 +1297,7 @@ static bool shifted_unmap(void *a, size_t len, int *ret)
 }
 static void *b_mmap(void *addr, size_t len, int prot, int flags, int fd, long off)
 {
+    if ((prot & PROT_EXEC) && getenv("TL_NO_XMEM")) { tl_set_guest_errno(13); return MAP_FAILED; }
     /* A hooking library's trampolines (Geode): executable memory is a piece of the JIT region, written through the other view. */
     if ((prot & PROT_EXEC) && (flags & 0x20) && !(flags & 0x10) && tl_codewrite_enabled()) {
         uint8_t *rx, *rw;
@@ -1403,7 +1404,7 @@ static int b_mprotect(void *a, size_t l, int prot)
             }
         }
         static int allow = -1;
-        if (allow < 0) allow = getenv("TL_NO_GUEST_JIT") ? 0 : 1;
+        if (allow < 0) allow = getenv("TL_NO_GUEST_JIT") || getenv("TL_NO_XMEM") ? 0 : 1;
         int r = -1;
         if (allow) {
             TL_ERRNO_BEGIN();

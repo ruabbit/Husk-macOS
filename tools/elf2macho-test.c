@@ -238,11 +238,11 @@ static int check(const char *dylib, const char *so, const char *fn, long arg)
 int main(int argc, char **argv)
 {
     tl_ld_set_verbosity(getenv("TL_VERBOSE") ? atoi(getenv("TL_VERBOSE")) : 0);
-    if (argc >= 4 && !strcmp(argv[1], "--prepare")) {
+    if (argc >= 4 && (!strcmp(argv[1], "--prepare") || !strcmp(argv[1], "--prepare-runtime"))) {
         uint8_t *p12 = NULL; size_t p12len = 0;
         if (getenv("TL_P12") && !(p12 = slurp(getenv("TL_P12"), &p12len))) return 1;
         char err[300] = "";
-        int n = husk_aot_prepare((const char *const *)argv + 3, argc - 3, argv[2], p12, p12len, getenv("TL_P12_PASSWORD") ? getenv("TL_P12_PASSWORD") : "",
+        int n = (!strcmp(argv[1], "--prepare-runtime") ? husk_aot_prepare_runtime : husk_aot_prepare)((const char *const *)argv + 3, argc - 3, argv[2], p12, p12len, getenv("TL_P12_PASSWORD") ? getenv("TL_P12_PASSWORD") : "",
                                  p12 ? "test-p12" : "adhoc", NULL, NULL, err, sizeof(err));
         if (n < 0) { fprintf(stderr, "prepare failed: %s\n", err); return 1; }
         printf("%d libraries ready in %s\n", n, argv[2]);
@@ -271,8 +271,7 @@ int main(int argc, char **argv)
            argv[2], (unsigned long long)A.base_vaddr, A.npages, A.nstub, A.size >> 10, (unsigned long long)E.max_align, ios ? "iOS" : "macOS",
            A.n_x18, A.n_x18_failed, A.n_svc, A.n_svc_far, A.n_tpidr, A.n_adrp, A.n_adr, A.n_adr_failed, A.n_mixed);
     if (!ios) {
-        char cmd[2048]; snprintf(cmd, sizeof(cmd), "codesign -s - -f '%s' 2>/dev/null", argv[2]);
-        if (system(cmd) != 0) { fprintf(stderr, "%s: codesign failed\n", argv[2]); return 1; }
+        if (!husk_codesign_dylib(argv[2], NULL, 0, "", err, sizeof(err))) { fprintf(stderr, "%s: codesign failed\n", argv[2]); return 1; }
     }
     return 0;
 }

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #define assert(c) do {if(!(c)){fprintf(stderr,"check failed at line %d: %s\n",__LINE__,#c);exit(1);}} while(0)
 #include <fenv.h>
+#include <math.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -34,5 +35,15 @@ int main(void)
     fesetround(FE_UPWARD);same(scale(tiny,INT_MIN),tiny);
     fesetround(FE_DOWNWARD);same(scale(one,INT_MAX),(quad){UINT64_MAX,0x7ffeffffffffffff});
     fesetround(FE_TONEAREST);
+    double (*toward)(double,quad)=tl_bionic_find("nexttoward");
+    float (*towardf)(float,quad)=tl_bionic_find("nexttowardf");
+    quad (*after)(quad,quad)=tl_bionic_find("nextafterl");
+    assert(toward&&towardf&&after);
+    assert(toward(1,(quad){1,one[1]})==nextafter(1,2));
+    assert(towardf(1,(quad){1,one[1]})==nextafterf(1,2));
+    assert(signbit(toward(0,minusZero))&&signbit(towardf(0,minusZero)));
+    assert(isnan(toward(1,nan))&&isnan(towardf(1,nan)));
+    same(after((quad){1,0x8000000000000000},tiny),minusZero);
+    same(after(tiny,(quad){1,0x8000000000000000}),(quad){0,0});
     puts("PASS binary128 exponent scaling, subnormals, precision, bounds and rounding");return 0;
 }

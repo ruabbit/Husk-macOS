@@ -1,5 +1,17 @@
 # 审计进度
 
+## 2026-10-29：JIT-less Runner 接入，build 23
+
+从干净 `84eaea8` 起步；origin 无外来提交，上游 `a06a74d..ee85db6` **13 提交/25 路径**普通合并到 main=`5258ed8`，再合回 macOS=`1b4acff`。唯一 loader 内容冲突按 ELF 地址粒度和 AOT 数据副本语义解决。空闲 build 22/PID 70008 经 CUA 正常退出；其他项目 VM 保持。收尾再次 fetch 两远端，未新增提交，祖先关系完整。
+
+共享 AOT 转换/重定位/代码改写与本地 ad-hoc 签名接到 Mac CMake、每游戏默认关闭的 JIT-less 设置和独立 NativeRunner。来源 SHA-256、签名/缓存摘要、私有临时目录及命名空间隔离均验证；缺库不静默回退，loader 与 guest 动态执行内存均禁用。修复 Mono AOT 元数据被当指令改写、相同 ELF 在系统/应用命名空间被重复绑定，以及 Android binary128 nexttoward ABI；Class.forName 三参数和 Display.Mode 路径有对应回归。
+
+首轮针对性 **22/22（22.44 秒）**通过；新增 Java 暖缓存跨进程复测使首轮默认套件 **175/176**。第二进程已读到前轮存档，但夹具重复 CREATE TABLE 失败；改为幂等建表并增加 SQLite 行数读回断言后单项 **1/1（5.56 秒）**通过。首次失败及详细会话日志保留在 current-upstream-aot-reopen-first*。最终唯一 build/macos 的 **3.1.0/build 23** 默认 **176/176（336.09 秒）**；其中八条 AOT 打包会话 **34.64 秒**、两项 AOT 核心 **2.94 秒**、WebView **48 项（194.24 秒）**与 HTTP **5 项（23.38 秒）**通过。包检查 **18 arm64 Mach-O / 406 Java 资源 / 两语言各 771 条文案**，18 个二进制摘要逐项一致。九个共享 C 文件通过 iOS SDK 语法检查，不是 iOS 完整构建或真机验证。
+
+CUA 单次启动准确 Product，PID **74471**；完整可执行路径、AX/截图确认原图标/TabView、原有 **11 个应用**和图标、游戏详情 JIT-less 默认关闭及限制说明，已返回首页。未修改游戏设置、启动用户游戏/VM、碰用户 APK/存档/Android 磁盘或其他项目 VM。所有运行证据均为受控 ELF/DEX；真实游戏兼容、转换取消和旧 Unity/Minecraft 的专门 JIT-less 回归、WebView 交叠/第三方插件、实体输入/Play/VM/P6 继续开放。War Thunder 仍是既有更新器完成后设备黑名单 exit 1，未做相关修复或重跑。
+
+本地验证与候选启动已完成，源码提交、两分支推送读回及当前 CI 尚待收尾。日志复用 build/logs/current-upstream-*，来源锁记录当前实际状态。
+
 ## 2026-10-28：Play 详情与原标志导航，build 22
 
 - 上游 `9519faf..a06a74d` **7 提交/26 路径**，origin 无新增。普通合并 main=`e3b08b8`、macOS merge=`3e5e8c3`；唯一 HuskLogo 修改/删除冲突按上游恢复原标志意图处理。3.1 tag=`7cc583c`，没有整批 ours/theirs。

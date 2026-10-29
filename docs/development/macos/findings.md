@@ -1,5 +1,23 @@
 # 审计发现
 
+## 2026-10-29 工作中：上游 AOT 增量
+
+最终套件新增的 Java 暖缓存重开失败已定位：第二进程成功完成 AOT 缓存验证且打印 `HUSK_REOPEN_DESTROYED 1`，随后测试 APK 重复 `CREATE TABLE lifecycle` 抛出 table already exists。原测试只设计为单次启动；改为 IF NOT EXISTS，并额外验证首轮 SQLite 行数为 0、第二进程读到首轮已提交的 1 行。没有抑制 Runner 失败或弱化关闭回执。首次完整失败日志和隔离会话保留，修正后重新验证。
+
+上游 a06a74d..ee85db6 的 13 提交不再只是布局实验：新增共享流式转换器、代码改写、签名、AOT 导入与重定位、4 KiB 混合页副本、gzip tar/Python 模块、Java runtime .so 准备，另含 Class.forName 三参数/display mode/nexttowardf。本轮起点 Mac CMake 尚未接线；现已接入，独立 Runner 显式 TL_NO_XMEM 且验证缓存后才加载。上游 iOS 个人证书流程不用于 macOS，本地使用共享 ad-hoc signer；默认保持原模式。
+
+当前合并 1b4acff 保留 fork 的 ELF 地址粒度判断，数据通过新 waddr/data_view 访问；AOT build 中 literal 读取必须使用现有字节，不能访问尚未写入 dylib 的虚拟副本。后续用混合页/Go/Mono/重定位与真实受控会话验证。War Thunder 既有黑名单 exit 1 结论保持，本轮无相关修复，不重跑游戏。
+
+
+
+本轮实际回归还发现：AOT 转换前 Mono 文件信息未重定位，导致元数据被误写成指令；现在只解析本地指针范围，未知布局拒绝转换。相同 ELF 字节在应用/系统命名空间中被 dyld 复用会覆盖第一次绑定，新增 system- install name 与准备 API，复用同一映射时拒绝二次重定位。混合页/Go/Mono、四种 namespace 顺序、gzip tar、缺缓存拒绝和无动态代码路径已通过 core-aot-load。
+
+Mac 每游戏 JIT-less 默认关闭；Geode/已知 Mono JIT/LuaJIT 与 Web profile 明确拒绝。独立 Runner 异步准备且继续响应控制，缓存绑定 APK/runtime SHA-256 与 fork AOT ABI 65540，私有临时目录完成签名/摘要检查后发布；重开重新验证，不信任 .signer 标记。TL_NO_XMEM 与 TL_NO_GUEST_JIT 同时启用，guest mmap/mprotect 也不能绕过。八条受控打包会话（Cocos/Godot/GameMaker/SDL/GTA/UE4/Java/Java NativeActivity）已通过输入、暂停/继续、单次 storage-closed 与零可执行 arena 检查；最后新增 Java 再开/存档读取随默认套件验证。真实游戏和 iOS 证书签名未验收。
+
+新增 Display.Mode getter 补齐宽高/60 Hz/ID；移除合并重复的 forName HLE，并用真实 DEX 检查自定义 ClassLoader 与 initialize=false/true。上游 nexttoward/nexttowardf 不能直接映射 Darwin：Android 第二参数是 q1 中 binary128。已改走 quad shim，全位比较保留一 quad ULP 的方向、符号零/NaN/极小数，真实 Android ELF 调用回归通过。
+
+失败证据保留 current-upstream-aot-first.log（Mono 元数据）、aot-repair.log（namespace 共享映射）、build-first.log（鼠标测试漏链接 AOT），修复后首轮针对性 22/22（22.44 秒）；最终默认 176/176（336.09 秒）、包检查与 CUA 单次启动 build 23/PID 74471 均通过。iOS 27 SDK/deployment 15.5 的九个共享 C 文件语法通过，不是完整 iOS 构建或真机证据。
+
 ## 2026-10-28：上游 UI/Play 增量审计
 
 - 7 提交/26 路径没有引擎、Runner 协议或图形依赖 pin 增量；TLReport.nativeEngine、TLUnityView/project.yml 与 Mac CMake/资料库/分发/输入/暂停/关闭按已有链路核对，保留固定画布、鼠标修复、默认失焦继续及存储关闭回执。

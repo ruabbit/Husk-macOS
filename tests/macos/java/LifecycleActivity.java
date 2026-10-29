@@ -27,6 +27,7 @@ public final class LifecycleActivity extends Activity {
     private static void delay() { try { Thread.sleep(100); } catch (InterruptedException e) { throw new RuntimeException(e); } }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); owner = Thread.currentThread(); events |= 1;
+        System.out.println("HUSK_REOPEN_DESTROYED " + getSharedPreferences("lifecycle", 0).getInt("destroyed", 0));
         HostEnvironmentChecks.run(this);
         if ("framework".equals(System.getenv("HUSK_JAVA_CASE"))) FrameworkChecks.run(this);
         if ("documents".equals(System.getenv("HUSK_JAVA_CASE"))) DocumentChecks.start(this);
@@ -63,7 +64,11 @@ public final class LifecycleActivity extends Activity {
         }, new android.os.Handler());
         getSharedPreferences("lifecycle", 0).edit().putInt("created", 1).apply();
         database = SQLiteDatabase.openOrCreateDatabase(new java.io.File(getFilesDir(), "lifecycle.db"), null);
-        database.execSQL("CREATE TABLE lifecycle(value INTEGER)");
+        database.execSQL("CREATE TABLE IF NOT EXISTS lifecycle(value INTEGER)");
+        try (android.database.Cursor rows = database.rawQuery("SELECT COUNT(*) FROM lifecycle", null)) {
+            if (!rows.moveToFirst()) throw new IllegalStateException("missing lifecycle row count");
+            System.out.println("HUSK_REOPEN_SQL_ROWS " + rows.getInt(0));
+        }
         database.execSQL("INSERT INTO lifecycle VALUES(1)");
         if ("sqlite-uncommitted".equals(System.getenv("HUSK_JAVA_CASE"))) {
             database.beginTransaction(); database.execSQL("INSERT INTO lifecycle VALUES(2)");

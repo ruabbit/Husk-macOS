@@ -956,7 +956,6 @@ static void Class_forName(tl_jcall *c)
 #define M(c, n, s, f) { c, n, s, f }
 static const tl_jhle k_hle[] = {
     M("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Class;", Class_forName),
-    M("java/lang/Class", "forName", "(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;", Class_forName),
     M("java/lang/Class", "forName", "(Ljava/lang/String;)Ljava/lang/Object;", Class_forName),
     /* Newer Unity players (2021 and on) look a class up the way Class.forName(String, boolean initialize, ClassLoader)
      * declares it; the initialize flag and the loader change nothing here, so the one-argument answer serves both. */
@@ -1047,6 +1046,10 @@ static const tl_jhle k_hle[] = {
     M("android/view/Display", "getDisplayId", "()I", Display_getDisplayId),
     M("android/view/Display", "getWidth", "()I", Display_getWidth), M("android/view/Display", "getHeight", "()I", Display_getHeight),
     M("android/view/Display", "getName", "()Ljava/lang/String;", Display_getName),
+    M("android/view/Display$Mode", "getPhysicalWidth", "()I", Display_getWidth),
+    M("android/view/Display$Mode", "getPhysicalHeight", "()I", Display_getHeight),
+    M("android/view/Display$Mode", "getRefreshRate", "()F", Display_getRefreshRate),
+    M("android/view/Display$Mode", "getModeId", "()I", Display_getDisplayId),
     M("android/view/Display", "getMode", "()Landroid/view/Display$Mode;", Display_mode),
     M("android/view/Display", "getSupportedModes", "()[Landroid/view/Display$Mode;", Display_getSupportedModes),
     M("android/view/WindowManager", "getDefaultDisplay", "()Landroid/view/Display;", WindowManager_getDefaultDisplay),
