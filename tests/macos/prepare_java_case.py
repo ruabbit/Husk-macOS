@@ -68,7 +68,10 @@ native_libraries = []
 if not web and not keystore:
     from build_macos_fixture import tool
     root = Path(__file__).resolve().parents[2]
-    ndk = sorted((sdk/'ndk').glob('*/toolchains/llvm/prebuilt/darwin-*/bin'), reverse=True)
+    # CI's fixture SDK contains Java platforms/build-tools; its NDK may remain in the standard SDK.
+    ndk = []
+    for native_sdk in dict.fromkeys([sdk, Path.home()/'Library/Android/sdk']):
+        ndk += sorted((native_sdk/'ndk').glob('*/toolchains/llvm/prebuilt/darwin-*/bin'), reverse=True)
     cc = tool('ELF_CC', ['/opt/homebrew/opt/llvm/bin/clang', *[p/'clang' for p in ndk]])
     ld = tool('ELF_LD', ['ld.lld', *[p/'ld.lld' for p in ndk], '/opt/homebrew/opt/llvm/bin/ld.lld'])
     for name, source, flags in [('luajit', 'runtime_plugin.c', ['-DLUAJIT_FIXTURE']), ('husk_runtime31', 'runtime_java.c', [])]:

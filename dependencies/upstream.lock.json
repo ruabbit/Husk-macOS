@@ -5,10 +5,10 @@
   "integratedRevision": "645c22aa92ebcf34c84d9ad0ac6cdd701c667f53",
   "checkedOn": "2026-10-30",
   "commitCount": 13,
-  "integration": "Fetched origin then upstream with no origin additions. Ordinary merges of 13 commits / 23 paths through 645c22a into fork main 7a6bb7f, then macOS ec0ed02. Compatibility, bionic mmap and Unity conflicts were resolved by preserving Mac report controls, no dynamic executable allocations and signature-aware lifecycle initialization. Build 24 local default suite, bundle and single CUA launch passed; source commit, push and CI are pending.",
+  "integration": "Fetched origin then upstream with no origin additions. Ordinary merges of 13 commits / 23 paths through 645c22a into fork main 7a6bb7f, then macOS ec0ed02. Compatibility, bionic mmap and Unity conflicts were resolved by preserving Mac report controls, no dynamic executable allocations and signature-aware lifecycle initialization. Build 24 local default suite, bundle and single CUA launch passed; source 7761a0d and main 7a6bb7f were pushed normally and exact remote SHAs read back. Own-repo CI 40987432500 failed in fixture tool lookup; a standard-SDK NDK fallback reproduced the hosted layout locally with identical fixture bytes and 4/4 relevant tests. CI retry is pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-push-pending",
+  "deliveryStatus": "pushed-ci-repair-verified",
   "release": {
     "tag": "3.1",
     "revision": "7cc583ce3fccd271eea9087483ddc5e49af14d8d"
@@ -30,11 +30,19 @@
         "sha256": "2c5e8282aff3775bd0e6cb69a85aa6157f5ecf48ed70f8760110cdda46959ce2"
       }
     },
-    "sourceRevision": null,
-    "deliveryStatus": "locally-verified-push-pending",
+    "sourceRevision": "7761a0d20fac4d6f4794a54a57a918ed07579285",
+    "deliveryStatus": "pushed-ci-repair-verified",
     "gui": "Exact build 24 Product launched once through CUA as PID 7565; full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, and the selected app JIT-less checkbox off. Returned Home without changing preferences or starting any user game or VM.",
     "pid": 7565,
-    "ci": null,
+    "ci": {
+      "run": 40987432500,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40987432500",
+      "sourceRevision": "7761a0d20fac4d6f4794a54a57a918ed07579285",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "failure",
+      "hardware": "skipped",
+      "failure": "New Java fixture builder searched NDK only under the temporary fixture SDK; native fixtures already fall back to the standard SDK. Added that fallback and reproduced the CI layout locally with identical APK entry bytes and four relevant tests passing."
+    },
     "appSHA256": "aca618cea31ed484c05d6b705af2c01fa7a0a76f24a33877e7e2d36f25ab0eb2",
     "nativeRunnerSHA256": "9c5c2a7122521c5a06799bd22447b05094855822c179d7b8d26c3439ca070b5b",
     "webRunnerSHA256": "cb57b531b0ee69864d037e6512e25e796e70401ea8ff9477d76c0996934fbc84",
@@ -48,7 +56,7 @@
     "mainRevision": "7a6bb7f3d85a9c72e2f63fb0d8e2fc53f77da9b6",
     "macOSBaseRevision": "11586e329b77a09e88cab9e12c1ddd38fb33165f",
     "macOSMergeRevision": "ec0ed02feaeddca61880001c6f9e7fdec0f8e0f5",
-    "macOSRevision": null,
+    "macOSRevision": "7761a0d20fac4d6f4794a54a57a918ed07579285",
     "macOSAdaptation": "Mac maintenance/cache and queued report/account states with no duplicate POSTs; source-hashed static signed code aliases, PT_LOAD translation, RX maximum protection and namespace selection; Java/SDL Lua interpreter capability; packaged old Unity/Minecraft input/pause/normal close and conversion cancellation/recovery. Unity/ES3.1/Java feature/insets/FMOD queries are verified by controlled ELF/DEX. Existing AppKit, permissions, graphics pins and storage contracts retained.",
     "defaultSuiteTests": 182,
     "defaultTestSeconds": 355.67,
@@ -60,8 +68,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 40824326328,
@@ -75,7 +83,15 @@
       "hostedCoreTests": 45,
       "hostedCoreTestSeconds": 51.9
     },
-    "ci": null
+    "ci": {
+      "run": 40987432500,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40987432500",
+      "sourceRevision": "7761a0d20fac4d6f4794a54a57a918ed07579285",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "failure",
+      "hardware": "skipped",
+      "failure": "New Java fixture builder searched NDK only under the temporary fixture SDK; native fixtures already fall back to the standard SDK. Added that fallback and reproduced the CI layout locally with identical APK entry bytes and four relevant tests passing."
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -245,5 +261,16 @@
     "staticCodeAliases": "Only exact source ELF bytes and an unambiguous caller namespace may map pure signed code pages. PT_LOAD translates file offsets; writable/mixed pages, bad alignment/range and unknown copies are rejected. Fixed mapping requires an existing guest anonymous reservation; alias max protection is RX, and anon bookkeeping excludes replaced/released signed pages.",
     "luaInterpreter": "Java, Java NativeActivity and SDL profiles install the shared interpreter hook under TL_NO_XMEM. Real ELF/DEX ABI fixtures verify openlibs/setmode ordering before app code; real third-party LuaJIT/JNA apps remain unverified.",
     "conversionCancellation": "Stop after aot-progress and before aot-ready reaps preparation, retains the prior checkpoint, publishes no partial cache and emits no storage-closed. A later process recovers temporary preparation and completes normal save/warm-cache reopen. Abrupt host/process loss remains open."
-  }
+  },
+  "ciAttempts": [
+    {
+      "run": 40987432500,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40987432500",
+      "sourceRevision": "7761a0d20fac4d6f4794a54a57a918ed07579285",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "failure",
+      "hardware": "skipped",
+      "failure": "New Java fixture builder searched NDK only under the temporary fixture SDK; native fixtures already fall back to the standard SDK. Added that fallback and reproduced the CI layout locally with identical APK entry bytes and four relevant tests passing."
+    }
+  ]
 }

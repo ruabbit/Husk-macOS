@@ -12,7 +12,7 @@ Mac 接入服务维护/缓存提示和排队回执，报告不会把排队说成
 
 CUA 单次启动唯一 **3.1.0/build 24** Product，PID **7565**；完整路径、AX/截图确认原图标/TabView、全部 **11 个资料库条目与图标**及选中应用 JIT-less 关闭，已返回首页。没有修改偏好、启动用户游戏/VM、发报告、登录/上传或碰用户 APK/存档/Android 磁盘。War Thunder 仍为既有更新器完成后的 Vulkan 设备黑名单 exit 1，本轮没有相关修复或重跑。
 
-本地验证与候选交付通过，适配提交、两分支推送/远端读回和本批 CI 待收尾。真实 JNA/Lua/商业应用的独立存档验收、转换中 abrupt host/process loss、动态下载库/未知 Mono、WebView 顺序交叠/第三方插件、实体输入/Play/VM/P6 继续开放；转换取消及旧 Unity/Minecraft 的受控回归已完成。来源锁与 current-upstream-validation.json 保存本次实际状态。
+源码 [7761a0d](https://github.com/ruabbit/Husk-macOS/commit/7761a0d20fac4d6f4794a54a57a918ed07579285) 与 main 7a6bb7f 已正常原子推送，两分支远端 SHA 已读回。首轮 CI 40987432500 在新增 Java 夹具找不到 linker 时失败：临时 ANDROID_SDK_ROOT 只有 Java SDK，脚本遗漏标准 SDK 的 NDK。已补回退；本机模拟临时 SDK/无效显式 linker 生成的四个 APK 条目字节完全一致，相关 4/4（14.59 秒）通过。候选二进制未改变，第二轮 CI 待推送触发。真实 JNA/Lua/商业应用的独立存档验收、转换中 abrupt host/process loss、动态下载库/未知 Mono、WebView 顺序交叠/第三方插件、实体输入/Play/VM/P6 继续开放；转换取消及旧 Unity/Minecraft 的受控回归已完成。来源锁与 current-upstream-validation.json 保存本次实际状态。
 
 ## 2026-10-29：JIT-less Runner 接入，build 23
 
