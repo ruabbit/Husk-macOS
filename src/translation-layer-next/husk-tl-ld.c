@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <CommonCrypto/CommonDigest.h>
 
 #include "husk-tl-internal.h"
 #include "husk-tl-a64.h"
@@ -114,6 +115,8 @@ struct tl_lib {
     size_t n_reloc_code;           /* imported: relocations that name a code page, which a dylib maps read-only, so were not applied */
     bool system;                   /* from the runtime's own folders (an APEX's lib64), not the app: what it needs comes from there too */
     bool aot;                      /* imported from a dylib made ahead of time (tl_ld_aot_build): its code is already rewritten and read-only */
+    uint64_t source_size;
+    uint8_t source_sha256[CC_SHA256_DIGEST_LENGTH]; /* exact ELF, including app-made copies used by libffi */
 };
 static inline bool data_page(const tl_lib *L, size_t page);
 static bool in_code(const tl_lib *L, uint64_t vaddr);
@@ -629,31 +632,74 @@ const char *tl_ld_symbol_at(const void *addr, const char **lib_name, const void 
  * A library's own code pages mapped again, for libffi's static trampolines (JNA's callbacks): libffi finds its trampoline table in
  * /proc/self/maps and maps that page of its library file executable over an anonymous reservation, keeping each trampoline's data
  * on the page after it. A file can not be made executable here, but a library imported from a dylib already has those pages
- * signed and executable at rx + off: they are shared at `at` (not copied), which is what the file mapping gives on Android. NULL
- * when `path` is not such a library or the range is not all code.
+ * signed and executable. Translate file offsets through PT_LOAD rather than assuming p_offset == p_vaddr. Only an exact
+ * source ELF and unambiguously selected namespace may reuse a fully executable, non-mixed page. No writable alias is created.
  */
-void *tl_ld_map_code(const char *path, uint64_t off, size_t len, void *at)
+void *tl_ld_map_code(int fd, uint64_t off, size_t len, void *at, const void *caller)
 {
-    const char *want = base_name(path);
+    if (!len || len > SIZE_MAX - (PAGE - 1) || off % PAGE || (uintptr_t)at % PAGE) return NULL;
+    size_t n = (len + PAGE - 1) & ~(size_t)(PAGE - 1);
+    if (off > UINT64_MAX - n || (at && (uintptr_t)at > UINTPTR_MAX - n)) return NULL;
+    struct stat before, after;
+    if (fstat(fd, &before) || !S_ISREG(before.st_mode) || before.st_size <= 0 || off >= (uint64_t)before.st_size) return NULL;
+    CC_SHA256_CTX ctx; CC_SHA256_Init(&ctx);
+    uint8_t buf[65536], digest[CC_SHA256_DIGEST_LENGTH];
+    for (off_t pos = 0; pos < before.st_size;) {
+        size_t take = (uint64_t)(before.st_size - pos) < sizeof(buf) ? (size_t)(before.st_size - pos) : sizeof(buf);
+        ssize_t count = pread(fd, buf, take, pos);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) return NULL;
+        CC_SHA256_Update(&ctx, buf, (CC_LONG)count); pos += count;
+    }
+    CC_SHA256_Final(digest, &ctx);
+    if (fstat(fd, &after) || before.st_size != after.st_size || before.st_mtimespec.tv_sec != after.st_mtimespec.tv_sec
+        || before.st_mtimespec.tv_nsec != after.st_mtimespec.tv_nsec) return NULL;
     void *r = NULL;
     pthread_mutex_lock(&G.lock);
-    for (int i = 0; i < G.nlibs && !r; i++) {
+    tl_lib *owner = caller ? tl_ld_lib_of(caller) : NULL, *match = NULL;
+    size_t image_off = 0;
+    for (int i = 0; i < G.nlibs; i++) {
         tl_lib *L = G.libs[i];
-        if (!L->aot) continue;
-        /* the file may be a copy the app made, named after the library (JNA's lib_arm64-v8a_libjnidispatch.so) */
-        const char *b = base_name(L->name);
-        size_t wl = strlen(want), bl = strlen(b);
-        if (strcmp(b, want) && strcmp(L->soname, want) && !(wl > bl && !strcmp(want + wl - bl, b) && want[wl - bl - 1] == '_')) continue;
-        size_t n = (len + PAGE - 1) & ~(size_t)(PAGE - 1);
-        if (off % PAGE || off + n > L->npages * PAGE) break;
-        bool code = true;
-        for (size_t p = off / PAGE; p < (off + n) / PAGE; p++) code = code && (L->pflags[p] & TL_PAGE_X);
-        if (!code) break;
-        vm_address_t a = (vm_address_t)at; vm_prot_t cur, max;
-        kern_return_t kr = vm_remap(mach_task_self(), &a, n, 0, at ? VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE : VM_FLAGS_ANYWHERE, mach_task_self(),
-                                    (vm_address_t)(L->rx + off), FALSE, &cur, &max, VM_INHERIT_NONE);
-        if (kr == KERN_SUCCESS) r = (void *)a;
-        else tl_log_line("ld: %s: its code at +%#llx could not be mapped again (%d)", L->name, (unsigned long long)off, kr);
+        if (!L->aot || L->state < 2 || (owner && owner->system != L->system) || L->source_size != (uint64_t)before.st_size
+            || memcmp(L->source_sha256, digest, sizeof(digest))) continue;
+        bool code = false; size_t translated = 0;
+        for (unsigned j = 0; j < L->phnum; j++) {
+            const elf_phdr *p = &L->phdr[j];
+            if (p->p_type != PT_LOAD_ || !(p->p_flags & PF_X_) || !p->p_filesz || p->p_vaddr < L->base_vaddr
+                || p->p_filesz > UINT64_MAX - (PAGE - 1) || p->p_offset > UINT64_MAX - p->p_filesz - (PAGE - 1)) continue;
+            uint64_t first = p->p_offset & ~(uint64_t)(PAGE - 1);
+            uint64_t end = (p->p_offset + p->p_filesz + PAGE - 1) & ~(uint64_t)(PAGE - 1);
+            uint64_t vaddr = p->p_vaddr - L->base_vaddr;
+            if (off < first || off + n > end || p->p_offset % PAGE != vaddr % PAGE) continue;
+            uint64_t base = vaddr & ~(uint64_t)(PAGE - 1);
+            if (base > L->npages * PAGE || off - first > L->npages * PAGE - base) continue;
+            translated = (size_t)(base + off - first);
+            if (n > L->npages * PAGE - translated) continue;
+            code = true;
+            for (size_t k = translated / PAGE; k < (translated + n) / PAGE; k++)
+                if (!(L->pflags[k] & TL_PAGE_X) || (L->pflags[k] & TL_PAGE_W) || (L->mixed && L->mixed[k])) code = false;
+            if (code) break;
+        }
+        if (!code) continue;
+        if (match) { match = NULL; break; } /* identical ELFs in different scopes: never guess */
+        match = L; image_off = translated;
+    }
+    if (match) {
+        vm_address_t a = 0; vm_prot_t cur, max;
+        kern_return_t kr = vm_remap(mach_task_self(), &a, n, 0, VM_FLAGS_ANYWHERE, mach_task_self(),
+                                    (vm_address_t)(match->rx + image_off), FALSE, &cur, &max, VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) {
+            if ((cur & VM_PROT_EXECUTE) && !(cur & VM_PROT_WRITE)
+                && vm_protect(mach_task_self(), a, n, TRUE, VM_PROT_READ | VM_PROT_EXECUTE) == KERN_SUCCESS) {
+                if (!at) r = (void *)a;
+                else {
+                    vm_address_t fixed = (vm_address_t)at;
+                    if (vm_remap(mach_task_self(), &fixed, n, 0, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE, mach_task_self(),
+                                 a, FALSE, &cur, &max, VM_INHERIT_NONE) == KERN_SUCCESS) r = (void *)fixed;
+                }
+            }
+            if (r != (void *)a) vm_deallocate(mach_task_self(), a, n);
+        } else tl_log_line("ld: %s: signed code mapping at file +%#llx failed (%d)", match->name, (unsigned long long)off, kr);
     }
     pthread_mutex_unlock(&G.lock);
     return r;
@@ -2365,6 +2411,15 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen, bool sy
     L->tcb = rw + (npages + nstub + 1) * PAGE;
     fill_data_slots(L);
     L->aot = imported;
+    if (imported) {
+        L->source_size = flen;
+        CC_SHA256_CTX ctx; CC_SHA256_Init(&ctx);
+        for (size_t pos = 0; pos < flen;) {
+            size_t count = flen - pos < 65536 ? flen - pos : 65536;
+            CC_SHA256_Update(&ctx, file + pos, (CC_LONG)count); pos += count;
+        }
+        CC_SHA256_Final(L->source_sha256, &ctx);
+    }
     parse_dynamic(L, dyn_v, dyn_n);
     if (L->strtab) {
         const elf_dyn *d = at(L, dyn_v);

@@ -161,6 +161,7 @@ static void kivy_statics(void)
 
 void tl_sdl_apps_install(const char *package)
 {
+    if (getenv("TL_NO_XMEM")) tl_luajit_interpreter_only();
     if (tl_dexidx_has_class("org/kivy/android/PythonActivity")) kivy_statics();
     if (!strcmp(package, "org.broguece.game")) tl_jni_register_hle(k_brogue);
     if (tl_dexidx_has_class(LOVE)) { tl_jni_register_hle(k_love); tl_ld_interpose("luaL_openlibs", (void *)luajit_openlibs); }

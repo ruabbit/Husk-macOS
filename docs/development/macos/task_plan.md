@@ -1,5 +1,16 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-30 Unity / JIT-less 增量
+
+- [x] 起点 11586e3 干净，origin 无新增；前轮 CI 40824326328 success，空闲 Product/PID 74471 经 CUA 正常退出。无本项目 Runner/VM/构建，其他项目 UTM 保持。
+- [x] upstream ee85db6..645c22a 共 13 提交/23 路径普通合并，再合回 macOS ec0ed02；Compatibility/bionic mmap/Unity 三处语义冲突已处理。
+- [x] 对照上游功能审计，补 Mac 维护/排队回执、静态签名页映射与 LuaJIT 能力判断、Unity/ES3.1/Java framework 回归。
+- [x] 推进 AOT 转换取消及旧 Unity/Minecraft 后台会话专门验证；具体未通过边界保留。
+- [x] 唯一 build/macos build 24，针对性 27/27、默认 182/182（355.67 秒）、18 Mach-O/406 Java 资源/两语言各 776 条通过；CUA 单次启动 PID 7565，核对 11 应用/图标并返回首页。
+- [ ] 提交/推送两分支、远端读回、CI、来源锁与每日续跑记录收尾。
+- [ ] 真实 JNA/Lua/游戏存档、转换中进程丢失、WebView 顺序交叠/第三方插件、实体设备/Play/VM/P6 继续开放。
+
+
 ## 当前执行：2026-10-29 JIT-less Runner 接入
 
 - [x] 核对干净 84eaea8、build 22/CI 40615007325 success 与实际进程；空闲 Product/PID 70008 经 CUA 正常退出，无本项目 Runner/VM。

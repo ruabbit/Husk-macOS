@@ -20,11 +20,17 @@ struct MacCompatibilitySection: View {
     var body: some View {
         GroupBox("社区兼容性") {
             VStack(alignment: .leading, spacing: 10) {
+                if store.maintenance {
+                    Label("社区服务正在维护，新的报告可由服务端排队保存。", systemImage: "wrench.and.screwdriver")
+                        .foregroundStyle(.orange)
+                    Text(store.entry(subject.package) == nil ? "维护期间无法获取此应用的报告。" : "以下为本机缓存，可能不是最新结果。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if let entry = store.entry(subject.package), let status = entry.status {
                     Label(status.macLabel, systemImage: status.symbol).foregroundStyle(status.color)
                     if let official = entry.official, !official.note.isEmpty { Text(official.note).textSelection(.enabled) }
                     Text("\(entry.community.reports) 份玩家报告").font(.caption).foregroundStyle(.secondary)
-                } else {
+                } else if !store.maintenance {
                     Text(store.error == nil ? "暂无社区报告" : "暂时无法更新社区报告").foregroundStyle(.secondary)
                 }
                 Text("来自上游兼容性列表，官方结果在 iPhone 上测试；不代表此 Mac 的运行结果。")
@@ -32,7 +38,7 @@ struct MacCompatibilitySection: View {
                 HStack {
                     Button("报告运行情况…") { reporting = subject }
                     Link("查看原始报告", destination: store.pageURL(subject.package))
-                    if store.error != nil { Button("重试") { Task { await store.refresh(force: true) } } }
+                    if store.error != nil || store.maintenance { Button("重试") { Task { await store.refresh(force: true) } } }
                 }.controlSize(.small)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
         }.task { await store.refresh() }
@@ -48,6 +54,7 @@ struct MacCompatReportSheet: View {
     @State private var notes = ""
     @State private var sending = false
     @State private var error: String?
+    @State private var queued: String?
     @State private var sendTask: Task<Void, Never>?
     @State private var choosingLog = false
     @State private var logName: String?
@@ -55,6 +62,7 @@ struct MacCompatReportSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("报告“\(subject.name)”的运行情况").font(.title2)
+            Group {
             Picker("运行结果", selection: $status) {
                 Text("请选择").tag(Optional<CompatibilityStore.Status>.none)
                 ForEach([CompatibilityStore.Status.works, .opens, .broken], id: \.self) { value in
@@ -81,15 +89,23 @@ struct MacCompatReportSheet: View {
             }
             Text("将公开发布到 itslevii.dev（备用 antiweb.lol）：应用包名、名称、图标、类型、所选结果、称呼和说明，以及 \(CompatibilityStore.device)、\(CompatibilityStore.systemVersion)、Husk build \(CompatibilityStore.build)、运行组件 \(subject.runtime ?? "unknown")。")
                 .font(.caption).foregroundStyle(.secondary)
+            }.disabled(sending || queued != nil)
+            if let queued {
+                Label("报告已由服务端接收并排队，尚未公开发布。", systemImage: "checkmark.circle")
+                    .foregroundStyle(.green)
+                Text(queued).font(.caption).textSelection(.enabled)
+            }
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
-                Button(subject.afterPlaying ? "稍后" : "取消") {
+                Button(queued != nil ? "完成" : subject.afterPlaying ? "稍后" : "取消") {
                     if subject.afterPlaying { CompatibilityStore.shared.markAsked(subject.package) }
                     dismiss()
                 }.keyboardShortcut(.cancelAction).disabled(sending)
                 Spacer()
                 if sending { ProgressView().controlSize(.small) }
-                Button("发送报告") { send() }.keyboardShortcut(.defaultAction).disabled(sending || status == nil)
+                if queued == nil {
+                    Button("发送报告") { send() }.keyboardShortcut(.defaultAction).disabled(sending || status == nil)
+                }
             }
         }.padding(24).frame(width: 530)
         .onAppear { isGame = subject.isGame; if let crash = subject.crash { status = .broken; notes = crash } }
@@ -107,14 +123,14 @@ struct MacCompatReportSheet: View {
         }
     }
     private func send() {
-        guard let status else { return }
+        guard let status, !sending, queued == nil else { return }
         sending = true; error = nil
         sendTask = Task { @MainActor in
             do {
-                try await CompatibilityStore.shared.send(package: subject.package, name: subject.name, isGame: isGame,
+                queued = try await CompatibilityStore.shared.send(package: subject.package, name: subject.name, isGame: isGame,
                     status: status, notes: notes, author: author, iconPath: subject.iconPath, runtime: subject.runtime,
                     attachLog: logText != nil, logText: logText)
-                dismiss()
+                if queued == nil { dismiss() }
             } catch { self.error = error.localizedDescription }
             sending = false
         }

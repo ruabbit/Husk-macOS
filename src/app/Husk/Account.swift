@@ -87,6 +87,7 @@ struct AccountError: LocalizedError {
     @Published private(set) var user: HuskUser?
     @Published private(set) var avatar: AccountImage?
     @Published var busy = false
+    @Published private(set) var updateQueued = false
 
     var signedIn: Bool { token != nil }
 
@@ -171,6 +172,7 @@ struct AccountError: LocalizedError {
     }
 
     private func forget() {
+        updateQueued = false
         syncTask?.cancel(); syncTask = nil
         deleteToken()
         user = nil
@@ -214,6 +216,7 @@ struct AccountError: LocalizedError {
     }
 
     func update(displayName: String? = nil, avatarPNG: Data?? = nil) async throws {
+        updateQueued = false
         var body: [String: Any] = [:]
         if let displayName { body["displayName"] = displayName }
         if let avatarPNG { body["avatarPng"] = avatarPNG.map { $0.base64EncodedString() } ?? NSNull() }
@@ -221,6 +224,7 @@ struct AccountError: LocalizedError {
         let d = try await call("PATCH", "api/me", body: body)
         // the site kept the change for later (its database was down): show the new name until then
         if (try? JSONSerialization.jsonObject(with: d) as? [String: Any])?["queued"] as? Bool == true {
+            updateQueued = true
             if let displayName, var u = user { u.displayName = displayName; take(u) }
             return
         }

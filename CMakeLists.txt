@@ -286,11 +286,11 @@ add_executable(MacNativeDriverSessionTests tests/macos/NativeDriverSession.swift
 target_compile_options(MacNativeDriverSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacNativeDriverSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacNativeDriverSessionTests PackageMac NativeDriverFixtures)
-foreach(engine cocos godot gamemaker sdl gta ue4)
+foreach(engine cocos godot gamemaker sdl gta ue4 unity minecraft)
     add_test(NAME macos-${engine}-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/${engine}.apk" ${engine} "${CMAKE_BINARY_DIR}/TestResults")
     set_tests_properties(macos-${engine}-session PROPERTIES TIMEOUT 60)
 endforeach()
-foreach(engine cocos godot gamemaker sdl gta ue4)
+foreach(engine cocos godot gamemaker sdl gta ue4 unity minecraft sdl-luajit)
     add_test(NAME macos-aot-${engine}-session COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/${engine}.apk" ${engine} "${CMAKE_BINARY_DIR}/TestResults" jitless)
     set_tests_properties(macos-aot-${engine}-session PROPERTIES TIMEOUT 240)
 endforeach()
@@ -300,8 +300,9 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMA
     "${CMAKE_BINARY_DIR}/NativeTests/ue4.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos-v8.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-godot4.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta-missing.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/unity.apk" "${CMAKE_BINARY_DIR}/NativeTests/minecraft.apk" "${CMAKE_BINARY_DIR}/NativeTests/sdl-luajit.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_cases.py "${CMAKE_BINARY_DIR}/NativeTests"
-    DEPENDS tests/macos/prepare_native_cases.py tests/macos/fixture/native_driver.c scripts/build_macos_fixture.py VERBATIM)
+    DEPENDS tests/macos/prepare_native_cases.py tests/macos/fixture/native_driver.c tests/macos/fixture/legacy_driver.c tests/macos/fixture/runtime_plugin.c scripts/build_macos_fixture.py VERBATIM)
 add_custom_target(NativeDriverFixtures DEPENDS "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos.apk")
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/GeodeTests/ready"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_geode_cases.py "${CMAKE_BINARY_DIR}/GeodeTests" "${CMAKE_BINARY_DIR}/NativeTests"
@@ -431,7 +432,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java tests/macos/fixture/runtime_java.c tests/macos/fixture/runtime_plugin.c scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -505,6 +506,8 @@ target_compile_options(MacJavaSessionTests PRIVATE -parse-as-library -I ${MAC}/S
 target_link_libraries(MacJavaSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacJavaSessionTests PackageMac JavaLifecycleFixture NativeBootstrapFixture)
 add_test(NAME macos-aot-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults" jitless)
+add_test(NAME macos-aot-cancel-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults" cancel-jitless)
+set_tests_properties(macos-aot-cancel-session PROPERTIES TIMEOUT 240)
 add_test(NAME macos-aot-nativeactivity-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity-jitless)
 set_tests_properties(macos-aot-java-session macos-aot-nativeactivity-session PROPERTIES TIMEOUT 240)
 add_test(NAME macos-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults")

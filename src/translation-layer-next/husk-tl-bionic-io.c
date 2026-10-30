@@ -1086,6 +1086,21 @@ static struct { uintptr_t addr; size_t len; } g_anon[MAX_ANON];
 static int g_nanon;
 static pthread_mutex_t g_anon_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* Stop treating replaced/released pages as anonymous: madvise must not overwrite a signed alias. */
+static void anon_remove(void *addr, size_t len)
+{
+    pthread_mutex_lock(&g_anon_lock);
+    uintptr_t start = (uintptr_t)addr, end = start + len;
+    for (int i = 0; i < g_nanon; i++) {
+        uintptr_t a = g_anon[i].addr, e = a + g_anon[i].len;
+        if (start >= e || end <= a) continue;
+        g_anon[i] = g_anon[--g_nanon]; i--;
+        if (a < start && g_nanon < MAX_ANON) { g_anon[g_nanon].addr = a; g_anon[g_nanon++].len = start - a; }
+        if (e > end && g_nanon < MAX_ANON) { g_anon[g_nanon].addr = end; g_anon[g_nanon++].len = e - end; }
+    }
+    pthread_mutex_unlock(&g_anon_lock);
+}
+
 static void anon_add(void *addr, size_t len)
 {
     pthread_mutex_lock(&g_anon_lock);
@@ -1295,15 +1310,22 @@ static bool shifted_unmap(void *a, size_t len, int *ret)
     pthread_mutex_unlock(&g_shifted_lock);
     return false;
 }
-void *tl_ld_map_code(const char *path, uint64_t off, size_t len, void *at);
+static bool anon_contains(uintptr_t addr, size_t len);
 static void *b_mmap(void *addr, size_t len, int prot, int flags, int fd, long off)
 {
+    if (!len || len > SIZE_MAX - (TL_XMEM_PAGE - 1) || ((flags & 0x10) && (!addr || (uintptr_t)addr > UINTPTR_MAX - len))) {
+        tl_set_guest_errno(22); return MAP_FAILED;
+    }
     /* A library file mapped executable (libffi's static trampolines): for a library imported from a dylib, its own signed code */
     if ((prot & PROT_EXEC) && !(flags & 0x20) && fd >= 0 && off >= 0) {
-        char path[PATH_MAX];
-        if (fcntl(fd, F_GETPATH, path) != -1) {
-            void *r = tl_ld_map_code(path, (uint64_t)off, len, (flags & 0x10) ? addr : NULL);
-            if (r) { tl_note_once("a library's file mapped executable (libffi trampolines): its signed code is mapped again"); mm_trace("mmap-code", r, len, prot, flags); return r; }
+        size_t rounded = (len + TL_XMEM_PAGE - 1) & ~(size_t)(TL_XMEM_PAGE - 1);
+        if (!(prot & PROT_WRITE) && (flags & 3) == 2 && (!(flags & 0x10) || anon_contains((uintptr_t)addr, rounded))) {
+            void *r = tl_ld_map_code(fd, (uint64_t)off, len, (flags & 0x10) ? addr : NULL, __builtin_return_address(0));
+            if (r) {
+                if (flags & 0x10) anon_remove(r, rounded);
+                tl_note_once("a library's file mapped executable (libffi trampolines): its signed code is mapped again");
+                mm_trace("mmap-code", r, len, prot, flags); return r;
+            }
         }
     }
     /* JIT-less mode (TL_NO_XMEM): no executable memory exists, so a guest's own executable mapping (a regex or script JIT:
@@ -1374,11 +1396,14 @@ static int b_munmap(void *a, size_t l)
     { int sr; TL_ERRNO_BEGIN(); bool found=shifted_unmap(a,l,&sr); TL_ERRNO_END(); if (found) { mm_trace("munmap", a, l, sr, errno); return sr; } }
     size_t real = phantom_clamp((uintptr_t)a, l);
     if (real == 0) return 0;                                 /* the half of a phantom range that was never mapped */
-    TL_ERRNO_BEGIN(); int r = munmap(a, real); TL_ERRNO_END(); mm_trace("munmap", a, real, r, errno); return r;
+    TL_ERRNO_BEGIN(); int r = munmap(a, real); TL_ERRNO_END();
+    if (!r && l <= UINTPTR_MAX - (uintptr_t)a) anon_remove(a, l);
+    mm_trace("munmap", a, real, r, errno); return r;
 }
 /* Whether a range is inside memory the guest mapped for itself (not a library's own pages). */
 static bool anon_contains(uintptr_t addr, size_t len)
 {
+    if (!len || len > UINTPTR_MAX - addr) return false;
     bool in = false;
     pthread_mutex_lock(&g_anon_lock);
     for (int i = 0; i < g_nanon && !in; i++) in = addr >= g_anon[i].addr && addr + len <= g_anon[i].addr + g_anon[i].len;

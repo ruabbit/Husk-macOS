@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-10-30：Unity / 静态签名页 / 服务维护，build 24
+
+从干净 `11586e3` 起步，origin 无外来提交；上游 `ee85db6..645c22a` **13 提交/23 路径**普通合并到 main=`7a6bb7f`，再合回 macOS=`ec0ed02`。Compatibility/bionic mmap/Unity 三处冲突分别保留显式日志与 POST 不重试、签名页复用后继续拒绝动态执行分配、按实际注册签名初始化与缺失生命周期失败。前轮 CI 40824326328 success 已复核；空闲 build 23/PID 74471 经 CUA 正常退出，其他项目 UTM 保持。收尾再次 fetch 两远端，未新增提交，祖先关系完整。
+
+Mac 接入服务维护/缓存提示和排队回执，报告不会把排队说成已发布或重复发送；账号资料排队有独立状态。静态签名代码页使用完整源 ELF 摘要/大小、PT_LOAD 文件偏移转换和调用方命名空间，只复用纯代码页，固定地址须为 guest 匿名预留，最大权限 RX。Java/Java NativeActivity/SDL 按已接入的 Lua 解释器 hook 开放 JIT-less；其他相关限制保留。Unity Looper/init 签名/插件 JNI_OnLoad、ES 3.1 shader binding/资源查询、Java feature/insets 和 FMOD 查询均有对应受控证据。
+
+推进前轮开放项：旧 Unity/Minecraft 默认及 JIT-less 打包会话验证真实输入、暂停/恢复与正常关闭；转换中 stop 保留旧 checkpoint、不发布半成品且不发 storage-closed，后续进程恢复并保存重开。Mac AOT cache revision 为 `mac-aot-2`，ABI 仍为 65540。Lua 测试使用真实 ELF/DEX 的 ABI 夹具，不是真实 LuaJIT 商业应用。
+
+最终针对性 **27/27（32.90 秒）**，默认 **182/182（355.67 秒）**通过；其中 AOT 打包 **12 项（27.85 秒）**、AOT 核心 **2 项（2.29 秒）**、WebView **48 项（208.06 秒）**与 HTTP **5 项（26.09 秒）**。首轮静态映射布局断言、GL 测试缺枚举、Unity DEX 类和 SDL 分发标记问题已修正，失败日志保留在 current-upstream-*。包检查 **18 arm64 Mach-O / 406 Java 资源 / 中英文各 776 条文案**，全部二进制摘要一致。九个共享 C 文件和 Account/Compatibility Swift 仅通过 iOS SDK 语法检查，不代表完整 iOS 构建或设备验收。
+
+CUA 单次启动唯一 **3.1.0/build 24** Product，PID **7565**；完整路径、AX/截图确认原图标/TabView、全部 **11 个资料库条目与图标**及选中应用 JIT-less 关闭，已返回首页。没有修改偏好、启动用户游戏/VM、发报告、登录/上传或碰用户 APK/存档/Android 磁盘。War Thunder 仍为既有更新器完成后的 Vulkan 设备黑名单 exit 1，本轮没有相关修复或重跑。
+
+本地验证与候选交付通过，适配提交、两分支推送/远端读回和本批 CI 待收尾。真实 JNA/Lua/商业应用的独立存档验收、转换中 abrupt host/process loss、动态下载库/未知 Mono、WebView 顺序交叠/第三方插件、实体输入/Play/VM/P6 继续开放；转换取消及旧 Unity/Minecraft 的受控回归已完成。来源锁与 current-upstream-validation.json 保存本次实际状态。
+
 ## 2026-10-29：JIT-less Runner 接入，build 23
 
 从干净 `84eaea8` 起步；origin 无外来提交，上游 `a06a74d..ee85db6` **13 提交/25 路径**普通合并到 main=`5258ed8`，再合回 macOS=`1b4acff`。唯一 loader 内容冲突按 ELF 地址粒度和 AOT 数据副本语义解决。空闲 build 22/PID 70008 经 CUA 正常退出；其他项目 VM 保持。收尾再次 fetch 两远端，未新增提交，祖先关系完整。

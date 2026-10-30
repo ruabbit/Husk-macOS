@@ -19,7 +19,12 @@ ld = fixture.tool('ELF_LD', ['ld.lld', *[p/'ld.lld' for p in ndk], '/opt/homebre
 jdk, d8, _ = toolchain()
 java = out/'java/com/rockstargames/oswrapper/GameNative.java'; java.parent.mkdir(parents=True, exist_ok=True)
 java.write_text('package com.rockstargames.oswrapper; public class GameNative { public static native void implOnActivityDestroyed(); }')
-subprocess.run([jdk/'bin/javac','--release','8','-d',out/'classes',java],check=True)
+unity_sources = []
+for name, method in [('NativeLoader', 'load'), ('UnityPlayer', 'loadLibrary')]:
+    path = out/('java/com/unity3d/player/'+name+'.java'); path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('package com.unity3d.player; public class '+name+' { public static native boolean '+method+'(String name); }')
+    unity_sources.append(path)
+subprocess.run([jdk/'bin/javac','--release','8','-d',out/'classes',java,*unity_sources],check=True)
 jar_classes(out/'classes',out/'classes.jar')
 subprocess.run([jdk/'bin/java','-cp',d8,'com.android.tools.r8.D8','--min-api','26','--output',out,out/'classes.jar'],check=True)
 def manifest():
@@ -63,3 +68,23 @@ for mode in ['normal', 'missing', 'ue4', 'pause-failed', 'godot4', 'v8']:
             if name == 'ue4': apk.writestr('lib/arm64-v8a/libc++_shared.so',lib.read_bytes())
             if name == 'cocos': apk.writestr('lib/arm64-v8a/libfmod.so',lib.read_bytes())
 print('Prepared isolated native driver fixtures')
+
+# Dedicated old Unity, Minecraft and LuaJIT ABI fixtures use the real packaged dispatch.
+for name, define in [('huskplugin', []), ('luajit', ['-DLUAJIT_FIXTURE'])]:
+    obj = out/(name+'.o')
+    subprocess.run([cc, '--target=aarch64-linux-android29', '-O2', '-fPIC', '-ffreestanding', '-fno-stack-protector',
+        *define, '-c', root/'tests/macos/fixture/runtime_plugin.c', '-o', obj], check=True)
+    subprocess.run([ld, '-shared', '--hash-style=gnu', '-z', 'max-page-size=16384', '-soname', 'lib'+name+'.so', obj, '-o', out/('lib'+name+'.so')], check=True)
+for name, define in [('unity', ['-DUNITY_FIXTURE']), ('minecraft', []), ('sdl-luajit', ['-DLUAJIT_FIXTURE'])]:
+    obj = out/(name+'.o'); lib = out/(name+'.so')
+    source = 'native_driver.c' if name == 'sdl-luajit' else 'legacy_driver.c'
+    dependency = out/('libluajit.so' if name == 'sdl-luajit' else 'libhuskplugin.so')
+    subprocess.run([cc, '--target=aarch64-linux-android29', '-O2', '-fPIC', '-ffreestanding', '-fno-stack-protector', '-mno-outline-atomics',
+        *define, '-c', root/'tests/macos/fixture'/source, '-o', obj], check=True)
+    subprocess.run([ld, '-shared', '--no-relax', '--hash-style=gnu', '-z', 'max-page-size=16384', obj,
+        *([] if name == 'minecraft' else [dependency]), '-o', lib], check=True)
+    libraries = ['libmain.so', 'libunity.so'] if name == 'unity' else ['libminecraftpe.so', 'libfmod.so', 'libMediaDecoders_Android.so'] if name == 'minecraft' else ['libSDL3.so','libmain.so','libdxvk.so']
+    with zipfile.ZipFile(out/(name+'.apk'), 'w') as apk:
+        apk.writestr('AndroidManifest.xml', manifest()); apk.write(out/'classes.dex', 'classes.dex')
+        for soname in libraries: apk.writestr('lib/arm64-v8a/'+soname, lib.read_bytes())
+        if name != 'minecraft': apk.write(dependency, 'lib/arm64-v8a/'+dependency.name)

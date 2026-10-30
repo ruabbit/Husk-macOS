@@ -75,7 +75,7 @@ NSString *mac_aot_prepare(NSArray<NSString *> *apks,NSString *runtimeRoot,void (
         for(NSString *path in paths){NSString *hash=digest(path);if(!hash){reason=@"JIT-less 来源文件缺失或损坏。";break;}[inputs addObject:@[path.lastPathComponent,hash]];}
         if(inputs.count!=paths.count)break;
         // Change the revision when the fork's code rewrites or signer changes.
-        NSDictionary *source=@{@"revision":@"mac-aot-1",@"format":@(TL_AOT_VERSION),@"inputs":inputs};
+        NSDictionary *source=@{@"revision":@"mac-aot-2",@"format":@(TL_AOT_VERSION),@"inputs":inputs};
         NSData *identity=[NSJSONSerialization dataWithJSONObject:source options:NSJSONWritingSortedKeys error:NULL];
         uint8_t hash[32];CC_SHA256(identity.bytes,(CC_LONG)identity.length,hash);
         NSString *target=[root stringByAppendingPathComponent:hex(hash,sizeof(hash))];

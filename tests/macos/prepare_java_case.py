@@ -64,9 +64,24 @@ if web:
     body+=begin('activity',[('name',3,len(strings)-1)])+end('activity')
 body+=end('application')+end('manifest')
 manifest=struct.pack('<HHI',3,8,len(body)+8)+body
+native_libraries = []
+if not web and not keystore:
+    from build_macos_fixture import tool
+    root = Path(__file__).resolve().parents[2]
+    ndk = sorted((sdk/'ndk').glob('*/toolchains/llvm/prebuilt/darwin-*/bin'), reverse=True)
+    cc = tool('ELF_CC', ['/opt/homebrew/opt/llvm/bin/clang', *[p/'clang' for p in ndk]])
+    ld = tool('ELF_LD', ['ld.lld', *[p/'ld.lld' for p in ndk], '/opt/homebrew/opt/llvm/bin/ld.lld'])
+    for name, source, flags in [('luajit', 'runtime_plugin.c', ['-DLUAJIT_FIXTURE']), ('husk_runtime31', 'runtime_java.c', [])]:
+        obj = output/(name+'.o'); lib = output/('lib'+name+'.so')
+        subprocess.run([cc, '--target=aarch64-linux-android29', '-O2', '-fPIC', '-ffreestanding', '-fno-stack-protector',
+                        *flags, '-c', root/'tests/macos/fixture'/source, '-o', obj], check=True)
+        subprocess.run([ld, '-shared', '--no-relax', '--hash-style=gnu', '-z', 'max-page-size=16384', '-soname', lib.name,
+                        obj, *([output/'libluajit.so'] if name == 'husk_runtime31' else []), '-o', lib], check=True)
+        native_libraries.append(lib)
 with zipfile.ZipFile(output/('WebStorage.apk' if web else 'KeyStore.apk' if keystore else 'Lifecycle.apk'),'w') as archive:
     archive.writestr('AndroidManifest.xml',manifest)
     archive.write(output/'classes.dex','classes.dex')
+    for lib in native_libraries: archive.write(lib, 'lib/arm64-v8a/'+lib.name)
     if web:
         archive.write(Path(__file__).parent/'java/storage.html', 'assets/storage.html')
 print('Built Java fixture:', output)

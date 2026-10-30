@@ -18,7 +18,11 @@ private final class CompatibilityProtocol: URLProtocol {
 }
 
 @main struct CompatibilityTests {
-    @MainActor static func main() async throws {
+    @MainActor static func main() async {
+        do { try await run() }
+        catch { fputs("FAIL compatibility: \(error)\n", stderr); exit(1) }
+    }
+    @MainActor static func run() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("husk-compat-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -60,6 +64,32 @@ private final class CompatibilityProtocol: URLProtocol {
         CompatibilityProtocol.handler = { _ in (200, Data("invalid JSON".utf8)) }
         await store.refresh(force: true)
         try check(store.error != nil && store.entry("org.husk.fixture") != nil, "malformed response preserves cache")
+        requests = []
+        CompatibilityProtocol.handler = { request in
+            requests.append(request); return (503, Data(#"{"maintenance":true}"#.utf8))
+        }
+        await store.refresh(force: true)
+        try check(requests.count == 1 && store.maintenance && store.error == nil && store.entry("org.husk.fixture") != nil,
+                  "maintenance keeps cached reports and does not try another site")
+        let empty = CompatibilityStore(session: session, sites: sites, cache: root.appendingPathComponent("empty.json"), defaults: defaults)
+        await empty.refresh(force: true)
+        try check(empty.maintenance && empty.entries.isEmpty && empty.error == nil, "maintenance without a cached list is distinct from no reports")
+        requests = []
+        CompatibilityProtocol.handler = { request in requests.append(request); return (202, Data(#"{"queued":true,"message":"Stored until maintenance ends"}"#.utf8)) }
+        let queued = try await store.send(package: "org.husk.queued", name: "Fixture", isGame: true, status: .opens, notes: "", author: "")
+        try check(queued == "Stored until maintenance ends" && store.maintenance && requests.count == 1 && requests[0].httpMethod == "POST",
+                  "queued report returns its receipt without another POST or GET")
+        requests = []
+        CompatibilityProtocol.handler = { request in requests.append(request); return (503, Data(#"{"maintenance":true}"#.utf8)) }
+        do {
+            try await store.send(package: "org.husk.rejected", name: "Fixture", isGame: true, status: .opens, notes: "", author: "")
+            throw NSError(domain: "expected maintenance rejection", code: 2)
+        } catch {
+            try check((error as NSError).domain == "Compatibility" && requests.count == 1, "maintenance POST rejection is not success and is never retried")
+        }
+        CompatibilityProtocol.handler = { _ in (200, list) }
+        await store.refresh(force: true)
+        try check(!store.maintenance && store.error == nil, "successful refresh clears maintenance")
         try check(!store.shouldAsk("org.husk.fixture"), "macOS post-session prompts default off")
         defaults.set(true, forKey: CompatibilityStore.askKey)
         try check(store.shouldAsk("org.husk.fixture"), "opt-in enables prompt")

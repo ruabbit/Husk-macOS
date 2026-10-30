@@ -114,6 +114,16 @@ quad_direction:
     ret
 .size quad_direction,.-quad_direction
 
+/* A full static trampoline page: file and virtual offsets differ in the linked ELF. */
+.p2align 14
+.global static_alias_value
+.type static_alias_value,%function
+static_alias_value:
+    mov w0, #73
+    ret
+.size static_alias_value,.-static_alias_value
+.space 16384 - 8
+
 #ifdef MONO_DATA
 .hidden mono_code_end
 mono_code_end:

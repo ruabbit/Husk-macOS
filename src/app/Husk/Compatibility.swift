@@ -167,7 +167,7 @@ final class CompatibilityStore: ObservableObject {
         struct Response: Decodable { let apps: [Entry] }
         do {
             let (data, response) = try await call("api/apps")
-            if Self.isMaintenance(response, data) { HuskLog.log("compat", "the site's database is under maintenance"); return }
+            if Self.isMaintenance(response, data) { Self.log("the site's database is under maintenance"); return }
             guard response.statusCode == 200 else { throw URLError(.badServerResponse) }
             maintenance = false
             let list = try JSONDecoder().decode(Response.self, from: data).apps

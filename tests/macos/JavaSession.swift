@@ -5,7 +5,7 @@ import SharedLibrary
 @main struct JavaSession {
     @MainActor static func main() async {
         let args = CommandLine.arguments
-        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "en", "zh-Hans", "jitless", "nativeactivity-jitless"].contains(args[4])) else { exit(64) }
+        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "en", "zh-Hans", "jitless", "nativeactivity-jitless", "cancel-jitless"].contains(args[4])) else { exit(64) }
         let nativeActivity = args.count == 5 && args[4].hasPrefix("nativeactivity")
         let jitless = args.count == 5 && args[4].hasSuffix("jitless")
         let app = URL(fileURLWithPath: args[1]), fixture = URL(fileURLWithPath: args[2])
@@ -26,8 +26,22 @@ import SharedLibrary
             try await repository.update(imported.id, muted: true, pauseWhenInactive: false, jitless: jitless)
             let (game, files, checkpoint) = try await repository.prepare(imported.id)
             let runner = app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner")
+            let priorCheckpoint = Data(#"{"priorSaveMustSurvive":true}"#.utf8)
+            if args.last == "cancel-jitless" { try priorCheckpoint.write(to: checkpoint) }
             try session.start(executable: runner, game: game, apk: files[0], checkpoint: checkpoint,
                               logs: paths.logs, headless: true, automation: true)
+            if args.last == "cancel-jitless" {
+                try await session.wait(until: { session.events.contains { $0["event"] as? String == "aot-progress" && $0["library"] != nil } || !session.active }, timeout: 30)
+                try check(session.active && !session.events.contains { $0["event"] as? String == "aot-ready" }, "stop occurs during conversion before guest startup")
+                session.stop(); try await session.wait(until: { !session.active }, timeout: 35)
+                try check(session.state == "failed" && session.error?.contains("取消") == true, "conversion cancellation reaps the Runner with an explicit result")
+                try check(!session.events.contains { $0["event"] as? String == "storage-closed" } && (try Data(contentsOf: checkpoint)) == priorCheckpoint, "cancelled preparation preserves the prior save without a completed storage receipt")
+                let cache = files[0].deletingLastPathComponent().appendingPathComponent("jitless")
+                let names = try FileManager.default.contentsOfDirectory(atPath: cache.path)
+                try check(names.allSatisfy { $0 == ".preparing" || $0 == "prepare.lock" }, "cancelled preparation does not publish a partial cache")
+                try session.start(executable: runner, game: game, apk: files[0], checkpoint: checkpoint,
+                                  logs: paths.logs, headless: true, automation: true)
+            }
             try await session.wait(until: { session.state == "running" || !session.active }, timeout: 180)
             try check(session.state == "running", session.error ?? "packaged-java-first-frame")
             if jitless {
@@ -77,6 +91,7 @@ import SharedLibrary
                 try check(log.contains("HUSK_MANUAL_INPUT 中") && log.contains("HUSK_MANUAL_INPUT 😀"), "manual AppKit text bridge delivers Unicode keys without an InputConnection")
                 try check(log.contains("HUSK_GUEST_STDOUT_MARKER") && log.contains("HUSK_GUEST_STDERR_MARKER") && log.contains("HUSK_GUEST_DESTROY_STDOUT") && log.contains("guest-print"),
                           "guest stdout/stderr and final destruction output retained in diagnostics")
+                try check(log.contains("HUSK_LUA_MODE \(jitless ? 2 : 1)"), "Java native library uses the Lua interpreter switch when JIT-less")
                 try check(log.contains("HUSK_REOPEN_SQL_ROWS 0"), "first process starts with an empty SQLite table")
                 try check(!session.events.contains { $0["event"] as? String == "guest-print" }, "guest JSON text is never a control event")
                 try check(prefs.contains("i controller_events 255") && prefs.contains("i controller_held 0"), "real-controller-device-axes-disconnect-focus-and-pause-callbacks")

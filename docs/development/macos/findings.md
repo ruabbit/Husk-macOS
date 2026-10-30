@@ -1,5 +1,15 @@
 # 审计发现
 
+## 2026-10-30：Unity / 静态签名页增量审计
+
+`ee85db6..645c22a` 的 13 提交/23 路径已对照 TLReport/TLUnityView/project.yml 与 Mac CMake/能力判断/Runner、Store/登录和图形构建。共享 Unity Looper/JNI 插件、ES 3.1 查询、Java features/insets、codesign 和 Lua hook 已编入，Mac 补维护/排队 UI 与 SDL hook；没有新引擎、图形 pin 或权限变化。
+
+上游静态页复用用 basename 和文件 offset 直接找映像，不能证明是相同 ELF，也不适用于 p_offset 与 p_vaddr 不同的布局。本轮改为完整源摘要/大小匹配、PT_LOAD 转换及调用方命名空间，先验证临时 RX alias 再替换 guest 匿名预留，避免错误文件、可写/混合页或跨 scope 绑定。真实受控 ELF 已执行别名并验证保护/独立释放；不是实际 JNA 应用验证。
+
+旧 Unity 夹具通过生产 NativeLoader/JNI 注册检查一/三参数初始化优先级和插件只执行一次，Minecraft 检查 Looper/V8 flag 早于入口；两者默认/AOT 输入、暂停、正常关闭通过。转换中 stop 原生产协议即可正确取消；新增测试证明旧 checkpoint/无半成品/无假 storage-closed，以及后续恢复和存档重开。Lua 仅为真实 ELF/DEX 的 ABI 夹具，不是商业应用。
+
+首次失败为测试假设/准备问题：不能要求所有 ELF 的文件/虚拟偏移都不同；GL 头文件没有 pipeline 枚举；Unity 缺 FindClass/RegisterNatives 所需 DEX 类，SDL Lua 缺 DXVK 分类标记。全部修正且保留日志。最终针对性 27/27、默认 182/182（355.67 秒）、包检查与 CUA 单次启动 build 24/PID 7565 通过；推送/CI 待收尾。没有 War Thunder 黑名单相关修复，不重跑失败游戏。
+
 ## 2026-10-29：上游 AOT 接入与验证
 
 最终套件新增的 Java 暖缓存重开失败已定位：第二进程成功完成 AOT 缓存验证且打印 `HUSK_REOPEN_DESTROYED 1`，随后测试 APK 重复 `CREATE TABLE lifecycle` 抛出 table already exists。原测试只设计为单次启动；改为 IF NOT EXISTS，并额外验证首轮 SQLite 行数为 0、第二进程读到首轮已提交的 1 行。没有抑制 Runner 失败或弱化关闭回执。首次完整失败日志和隔离会话保留，修正后重新验证。

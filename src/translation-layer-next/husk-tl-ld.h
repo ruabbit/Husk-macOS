@@ -78,6 +78,9 @@ tl_lib *tl_ld_lib_of(const void *addr);
 void *tl_ld_lib_base(const tl_lib *lib);
 const char *tl_ld_lib_name(const tl_lib *lib);
 const char *tl_ld_symbol_at(const void *addr, const char **lib_name, const void **sym_addr);
+/* Reuse signed static code from an exact ELF fd. File offset/length must describe whole host code pages.
+ * A fixed destination is only passed by bionic after validating a guest reservation. Caller selects its loader namespace. */
+void *tl_ld_map_code(int fd, uint64_t offset, size_t length, void *at, const void *caller);
 
 /*
  * Walk loaded libraries the way dl_iterate_phdr does. The callback gets the load

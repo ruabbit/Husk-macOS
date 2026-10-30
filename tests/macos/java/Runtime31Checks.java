@@ -9,6 +9,13 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 
 final class Runtime31Checks {
+    static native int nativeLua();
+    static void nativeRuntime() {
+        System.loadLibrary("husk_runtime31");
+        int expected = System.getenv("TL_NO_XMEM") == null ? 1 : 2;
+        require(nativeLua() == expected);
+        System.out.println("HUSK_LUA_MODE " + expected);
+    }
     static volatile int ready;
     static int initialized;
     public static final class Deferred { static { initialized++; } }
@@ -17,6 +24,20 @@ final class Runtime31Checks {
     static void require(boolean value) { if (!value) throw new AssertionError("runtime 3.1 contract"); }
     static void start(Activity activity, View view) {
         try {
+            android.content.pm.PackageManager pm = activity.getPackageManager();
+            android.content.pm.FeatureInfo[] features = pm.getSystemAvailableFeatures();
+            require(features != null && features.length > 1);
+            int glVersions = 0;
+            for (android.content.pm.FeatureInfo feature : features) {
+                if (feature.name == null) {
+                    glVersions++;
+                    require(feature.reqGlEsVersion == ((android.app.ActivityManager)activity.getSystemService("activity")).getDeviceConfigurationInfo().reqGlEsVersion);
+                    require(feature.reqGlEsVersion >= 0x30000);
+                } else require(pm.hasSystemFeature(feature.name));
+            }
+            require(glVersions == 1);
+            WindowInsets unattached = new View(activity).getRootWindowInsets();
+            require(unattached != null && unattached.getSystemWindowInsetBottom() >= 0 && unattached.getSystemWindowInsetTop() >= 0);
             ClassLoader parent = Runtime31Checks.class.getClassLoader();
             final int[] calls = {0};
             ClassLoader loader = new ClassLoader(parent) {

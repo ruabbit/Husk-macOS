@@ -27,7 +27,14 @@ with tempfile.TemporaryDirectory(prefix="AOT-", dir=output) as temporary:
     for name in ("go-data", "mixed-data", "go-mixed-data", "mono-data"):
         source = fixture_root / (name + ".so")
         run(tool, "--prepare", cache, source)
-        run(loader, source, env=env)
+        copy = root / ("lib_arm64-v8a_" + source.name)
+        copy.write_bytes(source.read_bytes())
+        stale = root / source.name
+        changed = bytearray(copy.read_bytes())
+        changed[-1] ^= 1
+        stale.write_bytes(changed)
+        check_env = dict(env, HUSK_REQUIRE_FILE_TRANSLATION="1") if name == "go-data" else env
+        run(loader, source, copy, stale, env=check_env)
     # Both namespaces need distinct hashed dylibs even with the same basename.
     run(tool, "--prepare", cache, fixture_root / "app.apk")
     run(tool, "--prepare-runtime", cache, fixture_root / "system/libcrypto.so", fixture_root / "system/libclient.so")

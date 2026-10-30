@@ -92,6 +92,10 @@ struct MacAccountView: View {
                 }
                 if working || account.busy { ProgressView() }
                 if let message { Text(message).foregroundStyle(.red).textSelection(.enabled) }
+                if account.updateQueued {
+                    Label("资料修改已由服务端排队，维护结束后才会同步。", systemImage: "clock")
+                        .foregroundStyle(.secondary)
+                }
             }.textFieldStyle(.roundedBorder).disabled(working || account.busy).padding(30).frame(maxWidth: 760)
         }
         .onAppear { displayName = account.user?.displayName ?? "" }

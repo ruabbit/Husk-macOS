@@ -3,6 +3,19 @@
 #include "husk-tl-bionic.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+typedef struct { uint32_t type,flags; uint64_t offset,vaddr,paddr,filesz,memsz,align; } PH;
+typedef struct { uintptr_t symbol; uint64_t offset; bool found; } Alias;
+static int alias_offset(uintptr_t bias,const char *name,const void *raw,unsigned count,void *user) {
+    (void)name;Alias *a=user;const PH *ph=raw;
+    for(unsigned i=0;i<count;i++)if(ph[i].type==1&&a->symbol>=bias+ph[i].vaddr&&a->symbol<bias+ph[i].vaddr+ph[i].filesz){
+        a->offset=ph[i].offset+a->symbol-bias-ph[i].vaddr;a->found=true;return 1;
+    }
+    return 0;
+}
 
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL namespace line %d: %s\n",__LINE__,#c); return 1; } } while (0)
 int main(int argc, char **argv)
@@ -38,6 +51,16 @@ int main(int argc, char **argv)
     CHECK(tl_ld_load(system) == runtime && tl_ld_load(app) == game);
     CHECK(tl_ld_load("libcrypto.so") == app_dependency);
     CHECK(tl_ld_unresolved_count() == 0);
+    if(getenv("TL_NO_XMEM")){
+        Alias a={.symbol=(uintptr_t)tl_ld_sym(game,"namespace_alias")};tl_ld_iterate(alias_offset,&a);CHECK(a.found);
+        char path[1200];snprintf(path,sizeof(path),"%s/system-app/libclient.so",argv[1]);int fd=open(path,O_RDONLY);CHECK(fd>=0);
+        CHECK(!tl_ld_map_code(fd,a.offset,16384,NULL,NULL)); /* identical source bytes, distinct dependency bindings */
+        void *ga=tl_ld_map_code(fd,a.offset,16384,NULL,app_result),*rt=tl_ld_map_code(fd,a.offset,16384,NULL,runtime_result);
+        CHECK(ga&&rt&&ga!=rt&&((int (*)(void))ga)()==42&&((int (*)(void))rt)()==42);
+        CHECK(!munmap(ga,16384)&&!munmap(rt,16384));close(fd);
+        CHECK(app_result()==1111&&runtime_result()==2222);
+        puts("PASS signed aliases require the caller's namespace when exact ELF bytes match two imports");
+    }
     printf("PASS %s: independent ELF constructors, relocations, dlsym scopes and repeat loads\n",argv[2]);
     return 0;
 }

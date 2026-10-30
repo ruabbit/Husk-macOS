@@ -52,6 +52,14 @@ static int jitless;
 void set_v8_flags(const char *) __asm__("_ZN2v82V818SetFlagsFromStringEPKc");
 void set_v8_flags(const char *flags) { jitless = !strcmp(flags,"--jitless"); }
 int JNI_OnLoad(void *vm,void *r) {(void)vm;(void)r;return jitless ? 0x10006 : -1;}
+#elif defined(LUAJIT_FIXTURE)
+extern void luaL_openlibs(void *);
+extern int husk_lua_interpreter(void);
+int JNI_OnLoad(void *vm,void *r) {
+    luaL_openlibs(vm);
+    if(!husk_lua_interpreter())return -1;
+    mask|=256;return 0x10006;
+}
 #else
 int JNI_OnLoad(void *vm,void *r) {(void)vm;(void)r;return 0x10006;}
 #endif

@@ -13,7 +13,7 @@ import SharedLibrary
         do {
             let repository=try LibraryRepository(paths:paths,trustedFixtureHash:"")
             let imported=try await repository.importGame(fixture)
-            let profile=engine=="geode" ? "cocos" : engine
+            let profile=engine=="geode" ? "cocos" : engine=="sdl-luajit" ? "sdl" : engine
             try check(imported.runtime==profile,"\(engine) import selects production profile")
             if engine=="geode" {
                 let apk=paths.game(imported.id).appendingPathComponent(imported.apkNames[0])
@@ -56,6 +56,9 @@ import SharedLibrary
             let wrong=data.withUnsafeBytes{$0.loadUnaligned(fromByteOffset:4,as:UInt32.self)}
             try check(mask&127==127 && wrong==0,"real input, pause and stop callbacks on owner thread")
             if engine=="sdl" { try check(mask&512 != 0,"manual SDL keyboard delivered Android key events to the ELF") }
+            if engine=="unity" { try check(mask&768==768,"main Looper before JNI_OnLoad, three-argument init and plugin JNI_OnLoad exactly once") }
+            if engine=="minecraft" { try check(mask&256 != 0,"V8 interpreter flag and main Looper precede GameActivity initialization") }
+            if engine=="sdl-luajit" { try check(mask&256 != 0,"LuaJIT ABI switches to interpreter before SDL application code") }
             if profile != "cocos" { try check(mask&128 != 0,"native destruction acknowledged") }
             if engine=="geode" {
                 let data=checkpoint.deletingLastPathComponent().appendingPathComponent("data")

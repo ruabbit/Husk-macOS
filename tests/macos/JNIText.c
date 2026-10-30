@@ -7,11 +7,18 @@
 void tl_mc_hle_install(const char *,const char *,const char *,int,int);
 void tl_hle_configure(const char *,const char *,const char *,int,int);
 void tl_jni_hle_install(void);
+void tl_fmod_install(void);
 void tl_log_line(const char *format,...){(void)format;}
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"JNI text check failed: %s\n",#x);return 1;}}while(0)
 int main(void) {
     tl_jni_init();tl_hle_configure("com.husk.text-test","","/tmp",1280,720);tl_jni_hle_install();
     tl_mc_hle_install("com.husk.text-test","","/tmp",1280,720);
+    tl_fmod_install();
+    jobj *fmod=tl_jni_class_object("org/fmod/FMOD");
+    jvalue input={.i=3};
+    jobj *devices=tl_jni_call(fmod,"getAudioDevices","(I)[Landroid/media/AudioDeviceInfo;",&input).l;
+    CHECK(devices && devices->kind==TL_K_OBJ_ARRAY && devices->oarr.len==0);
+    CHECK(!tl_jni_call(fmod,"isBluetoothOn","()Z",NULL).z && !tl_jni_pending());
     int64_t elapsed=tl_jni_call(tl_jni_class_object("android/os/SystemClock"),"elapsedRealtimeNanos","()J",NULL).j;
     usleep(2000);
     CHECK(elapsed>0&&tl_jni_call(tl_jni_class_object("android/os/SystemClock"),"elapsedRealtimeNanos","()J",NULL).j>elapsed);

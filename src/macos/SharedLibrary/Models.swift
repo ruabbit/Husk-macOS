@@ -89,7 +89,8 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     public var jitlessUnavailableReason: String? {
         guard let runtime, runtime != "web" else { return "JIT-less 适用于原生运行组件。" }
         if settings.geode { return "Geode 模组需要动态代码，不能使用 JIT-less。" }
-        if (libraryNames ?? []).contains(where: { $0.contains("luajit") || $0.contains("monobdwgc") || $0.contains("monosgen") }) {
+        if (libraryNames ?? []).contains(where: { $0.contains("monobdwgc") || $0.contains("monosgen") ||
+            ($0.contains("luajit") && !["java", "nativeactivity", "sdl"].contains(runtime)) }) {
             return "此应用包含需要动态代码的运行时，暂不支持 JIT-less。"
         }
         return nil

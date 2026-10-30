@@ -81,6 +81,14 @@ import HuskCore
             var excluded = unity; excluded["abis"] = ["arm64-v8a"]; excluded["engine"] = "SDL"; excluded["libraryNames"] = ["libdxvk.so"]
             let dxvk = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: excluded))
             try check(dxvk.runtime == "sdl", "sdl-dxvk-selects-native-driver")
+            for engine in ["Java", "NativeActivity", "SDL", "Unity", "Godot"] {
+                var record = excluded; record["engine"] = engine; record["libraryNames"] = ["libdxvk.so", "libluajit.so"]
+                let game = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: record))
+                try check((game.jitlessUnavailableReason == nil) == ["Java", "NativeActivity", "SDL"].contains(engine), "LuaJIT only enables profiles with the interpreter hook: \(engine)")
+                record["libraryNames"] = ["libmonosgen.so"]
+                let mono = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: record))
+                try check(mono.jitlessUnavailableReason != nil, "Mono JIT remains excluded")
+            }
 
             // Old saved engine labels must not strand Unity 6 on the JNI driver.
             let migrationPaths = LibraryPaths(root: paths.root.appendingPathComponent("LegacyUnity"))

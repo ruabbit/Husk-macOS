@@ -7,6 +7,8 @@ private final class AccountHTTP: URLProtocol, @unchecked Sendable {
     static let lock = NSLock()
     static var requests: [URLRequest] = []
     static var expired = false
+    static var maintenance = false
+    static var queued = false
     static var library: [String: Any]?
     static let user: [String: Any] = ["id":"fixture", "username":"fixture", "displayName":"Fixture", "createdAt":"2026-10-27",
         "stats":["games":1,"apps":0,"playtimeSeconds":180], "recent":[], "achievements":[]]
@@ -17,9 +19,11 @@ private final class AccountHTTP: URLProtocol, @unchecked Sendable {
         Self.requests.append(request)
         var status = 200
         var body: [String: Any] = Self.user
-        if request.url!.host == "unavailable.invalid" { status = 503; body = ["error":"unavailable"] }
+        if Self.maintenance { status = 503; body = ["maintenance":true] }
+        else if request.url!.host == "unavailable.invalid" { status = 503; body = ["error":"unavailable"] }
         else if Self.expired { status = 401; body = ["error":"expired"] }
         else if request.url!.path.contains("/auth/login") || request.url!.path.contains("/auth/signup") { body = ["token":"fixture-only", "user":Self.user] }
+        else if Self.queued && request.httpMethod == "PATCH" { status = 202; body = ["queued":true] }
         if request.httpMethod == "PUT" && status == 200 {
             var data = request.httpBody ?? Data()
             if let stream = request.httpBodyStream {
@@ -64,6 +68,17 @@ private final class AccountHTTP: URLProtocol, @unchecked Sendable {
         try check(items?.first?["package"] as? String == game.packageName && items?.first?["playtimeSeconds"] as? Int == 183 && items?.first?["type"] as? String == "game", "Mac library uploads package identity, rounded playtime and kind")
         try check(AccountHTTP.requests.filter{$0.httpMethod == "PUT"}.allSatisfy{$0.value(forHTTPHeaderField:"Authorization") == "Bearer fixture-only"}, "authenticated library protocol")
         try await account.update(displayName:"New name")
+        let before = AccountHTTP.requests.count
+        AccountHTTP.maintenance = true
+        await account.refresh()
+        try check(AccountHTTP.requests.count == before + 1 && account.signedIn && account.error == CompatibilityStore.maintenanceMessage,
+                  "account maintenance preserves the session and never falls back")
+        AccountHTTP.maintenance = false; AccountHTTP.queued = true
+        try await account.update(displayName:"Queued name")
+        try check(account.updateQueued && account.user?.displayName == "Queued name", "profile changes retain a visible queued state")
+        AccountHTTP.queued = false
+        try await account.update(displayName:"New name")
+        try check(!account.updateQueued, "ordinary profile update clears the queued state")
         let restored = Account(session:session,sites:sites,defaults:defaults,avatarFile:root.appendingPathComponent("avatar.png"),readToken:{token},writeToken:{token=$0},deleteToken:{token=nil})
         try check(restored.user == account.user, "cached profile reopens only with an existing session")
         let picture = NSImage(size:NSSize(width:800,height:400),flipped:false) { bounds in NSColor.red.setFill(); bounds.fill(); return true }

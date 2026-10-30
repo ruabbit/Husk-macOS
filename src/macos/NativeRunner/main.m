@@ -650,7 +650,8 @@ static int androidKey(unsigned code)
         NSDictionary *scan=[NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
         if(jitless)for(NSDictionary *library in scan[@"libraries"]){
             NSString *name=library[@"name"];
-            if([name containsString:@"luajit"]||[name containsString:@"monobdwgc"]||[name containsString:@"monosgen"])return NO;
+            if([name containsString:@"monobdwgc"]||[name containsString:@"monosgen"]||
+                ([name containsString:@"luajit"] && !javaapp && ![runtimeName() isEqual:@"sdl"]))return NO;
         }
         if(javaapp)return mac_java_accepts_scan(scan) && (!javaNativeActivity || [scan[@"engine"] isEqual:@"NativeActivity"]);
         if(nativeDriver)return mac_driver_accepts_scan(scan);

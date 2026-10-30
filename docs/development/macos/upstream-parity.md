@@ -1,5 +1,21 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-30：Unity / 静态签名页 / 服务维护，build 24
+
+`ee85db6..645c22a` 共 **13 提交/23 路径**普通合并到 main=`7a6bb7f`，再合回 macOS=`ec0ed02`，origin 无外来提交。三处冲突按行为处理：兼容性服务保留 Mac 的显式日志与 POST 不重试；bionic 接入静态签名页复用后仍拒绝其他动态执行分配；Unity 按实际注册签名调用初始化并保留生命周期缺失失败。逐项对照 `TLReport.nativeEngine`、`TLUnityView`、`project.yml`、Mac CMake/能力判断/Runner 分发与输入/暂停/关闭、共享 Store/账号和图形构建，本批没有新引擎类型、图形 pin 或权限变化。
+
+| 增量 | macOS 实际接入与证据 | 仍须区分的边界 |
+| --- | --- | --- |
+| 服务维护与报告排队 | 共享 503 maintenance 回答不切换备用站，保留本机缓存；Mac 展示维护/缓存提示与重试。202 queued 报告保留服务端回执、明确尚未发布并禁止该表单再次发送。账号资料修改保留排队状态。隔离 HTTP 测试覆盖缓存/无缓存、恢复、排队、失败和 POST 不重试 | 没有实际发报告、登录、上传或修改个人资料；线上维护及认证服务不是这些测试的验收对象 |
+| libffi/JNA 静态代码页 | 复用上游 `vm_remap` 路径，补完整源 ELF SHA-256 与大小、PT_LOAD 文件偏移转换、调用方命名空间选择、纯代码页/范围校验与 RX 最大保护。固定地址仅覆盖 guest 自己的匿名预留；映射/释放后不会被匿名 madvise 当作数据页覆盖。默认/无执行 arena 两种路径保持 | 真实 ELF 验文件/虚拟偏移不同、同名不同字节拒绝、重命名副本、同字节跨命名空间歧义拒绝、固定预留、只读执行和原映像释放独立性。没有真实 JNA 第三方应用证据；混合代码/可写数据页及不满足 host 页对齐的重映射明确拒绝 |
+| Java/SDL LuaJIT 解释器 | 上游 Java hook 已编入，SDL 在 TL_NO_XMEM 下也安装同一 hook；资料库与 NativeRunner 只对具备该 hook 的 Java/Java NativeActivity/SDL profile 放行。真实 DEX 经依赖 ELF 的 PLT 打开 Lua 标准库后关闭 JIT，再进入应用代码；SDL 打包会话同样验证 | 这里是 LuaJIT ABI 夹具，不是真实 LuaJIT 商业应用。Geode、已知 Mono JIT、其他 profile 的 LuaJIT 和 Web JIT-less 限制保持；默认模式既有能力保留 |
+| Unity / ES 3.1 / Java framework | 旧 Unity 打包 ELF 验证 libmain JNI_OnLoad 前已有 Looper、同时注册一/三参数时选三参数 initJni、UnityPlayer.loadLibrary 执行插件 JNI_OnLoad 且重复加载只执行一次。ANGLE 真编译/链接验证 Unity sampler 与 block binding、资源查询和空 label。真 DEX 验 FeatureInfo 与 GLES 一致、未附加 View 的 insets；FMOD 列表查询不启音频 | 旧/新 Unity 真游戏、真实输入法/手柄和音频设备仍待独立验收；没有把 ES 3.1 shim 当成完整原生 ES 3.1 驱动 |
+| AOT 原开放项 | 旧 Unity/Minecraft 的默认与 JIT-less 打包输入/暂停/正常关闭通过；Minecraft 验 V8 flag 与 Looper 先于 GameActivity。转换中 stop 保留旧 checkpoint、不发 storage-closed、不发布半成品缓存；下一进程清理临时阶段后转换并完成保存重开。Mac 缓存 revision 升为 mac-aot-2，ABI 保持 65540 | 只覆盖受控后台会话。转换中 abrupt host/process loss、真实大库/下载后才出现的库、未知 Mono 元数据和商业游戏仍开放 |
+
+首轮 27 项针对性测试在修正 Unity 缺 DEX 类、SDL 缺 DXVK 分发标记后已 **27/27（32.90 秒）**。更早的静态映射夹具误把全部 ELF 布局当作文件/虚拟偏移不同，以及 GL label 测试头文件枚举缺失，已修正并保留失败日志。最终默认 **182/182（355.67 秒）**，其中 AOT 打包 12 项（27.85 秒）、WebView 48 项（208.06 秒）与 HTTP 5 项（26.09 秒）；包检查 18 arm64 Mach-O/406 Java 资源/中英文各 776 条通过，18 个二进制摘要一致。CUA 单次启动准确 build 24/PID 7565，AX/截图确认原图标/TabView、11 应用与图标、选中应用 JIT-less 关闭，已返回首页。推送和本批 CI 尚待完成。九个共享 C 文件和共享 Account/Compatibility Swift 的 iOS SDK 语法检查通过，不代表 iOS 完整构建、签名或实体设备验收。
+
+下一步仍为合法真实应用的独立存档与 JNA/Lua 验证、WebView 历史恢复/host-stop 与导航/destroy 等顺序交叠、加载中/跨来源与真实第三方插件、实体输入和 Play/VM/P6。转换取消及旧 Unity/Minecraft 的受控打包回归已完成，不能再整项列为未实现。War Thunder 保持更新器完成后的 Vulkan 设备黑名单 exit 1 结论；本轮没有相关修复或重跑该游戏。
+
 ## 2026-10-29：JIT-less 接到独立 Runner，build 23
 
 `a06a74d..ee85db6` 共 **13 提交/25 路径**普通合并到 main=`5258ed8`、macOS merge=`1b4acff`；origin 无外来提交。loader 内容冲突保留 fork 的 ELF 地址粒度判断，并复用新 AOT 的 `waddr/data_view` 混合页副本；不以整文件 ours/theirs 代替语义合并。对照 TranslationLayer.swift 的 TLReport.nativeEngine、TLUnityView、project.yml/Xcode 项目、Store/账号、图形构建和 Mac CMake/资料库/Runner，本批没有新增引擎类别或图形 pin。权限、固定画布、AppKit 输入、默认失焦继续、独立 Runner 和存储关闭协议保持。
