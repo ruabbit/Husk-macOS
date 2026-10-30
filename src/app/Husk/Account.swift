@@ -136,6 +136,8 @@ struct AccountError: LocalizedError {
             do {
                 let (data, resp) = try await session.data(for: r)
                 guard let http = resp as? HTTPURLResponse else { continue }
+                // the site's database is down: its answer, not an outage to try the old address for
+                if CompatibilityStore.isMaintenance(http, data) { throw AccountError(message: CompatibilityStore.maintenanceMessage) }
                 if http.statusCode >= 500 { last = AccountError(message: "The Husk website had a problem (\(http.statusCode))."); continue }
                 if http.statusCode == 401, auth { forget() }
                 if http.statusCode >= 400 {
@@ -217,6 +219,11 @@ struct AccountError: LocalizedError {
         if let avatarPNG { body["avatarPng"] = avatarPNG.map { $0.base64EncodedString() } ?? NSNull() }
         busy = true; defer { busy = false }
         let d = try await call("PATCH", "api/me", body: body)
+        // the site kept the change for later (its database was down): show the new name until then
+        if (try? JSONSerialization.jsonObject(with: d) as? [String: Any])?["queued"] as? Bool == true {
+            if let displayName, var u = user { u.displayName = displayName; take(u) }
+            return
+        }
         take(try JSONDecoder().decode(HuskUser.self, from: d))
     }
 
