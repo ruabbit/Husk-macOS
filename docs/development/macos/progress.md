@@ -12,7 +12,7 @@ Mac 接入服务维护/缓存提示和排队回执，报告不会把排队说成
 
 CUA 单次启动唯一 **3.1.0/build 24** Product，PID **7565**；完整路径、AX/截图确认原图标/TabView、全部 **11 个资料库条目与图标**及选中应用 JIT-less 关闭，已返回首页。没有修改偏好、启动用户游戏/VM、发报告、登录/上传或碰用户 APK/存档/Android 磁盘。War Thunder 仍为既有更新器完成后的 Vulkan 设备黑名单 exit 1，本轮没有相关修复或重跑。
 
-源码 [7761a0d](https://github.com/ruabbit/Husk-macOS/commit/7761a0d20fac4d6f4794a54a57a918ed07579285) 与 main 7a6bb7f 已正常原子推送，两分支远端 SHA 已读回。首轮 CI 40987432500 在新增 Java 夹具找不到 linker 时失败：临时 ANDROID_SDK_ROOT 只有 Java SDK，脚本遗漏标准 SDK 的 NDK。已补回退；本机模拟临时 SDK/无效显式 linker 生成的四个 APK 条目字节完全一致，相关 4/4（14.59 秒）通过。候选二进制未改变，第二轮 CI 待推送触发。真实 JNA/Lua/商业应用的独立存档验收、转换中 abrupt host/process loss、动态下载库/未知 Mono、WebView 顺序交叠/第三方插件、实体输入/Play/VM/P6 继续开放；转换取消及旧 Unity/Minecraft 的受控回归已完成。来源锁与 current-upstream-validation.json 保存本次实际状态。
+源码 [7761a0d](https://github.com/ruabbit/Husk-macOS/commit/7761a0d20fac4d6f4794a54a57a918ed07579285) 与 main 7a6bb7f 已正常原子推送，两分支远端 SHA 已读回。首轮 CI 40987432500 在新增 Java 夹具找不到 linker 时失败：临时 ANDROID_SDK_ROOT 只有 Java SDK，脚本遗漏标准 SDK 的 NDK。已补回退；本机模拟临时 SDK/无效显式 linker 生成的四个 APK 条目字节完全一致，相关 4/4（14.59 秒）通过。候选二进制未改变，工具链修复 [99d3386](https://github.com/ruabbit/Husk-macOS/commit/99d33861466e97a9c000a74667e764929e0359b4) 已推送并读回；第二轮 [CI 40988087109](https://github.com/ruabbit/Husk-macOS/actions/runs/40988087109)（head=99d3386）已 completed/success：构建/包检查、**47 项 hosted 核心回归（45.02 秒）**及 P0 memory/core 通过，build-and-core 用时 4 分 32 秒，hardware skipped。真实 JNA/Lua/商业应用的独立存档验收、转换中 abrupt host/process loss、动态下载库/未知 Mono、WebView 顺序交叠/第三方插件、实体输入/Play/VM/P6 继续开放；转换取消及旧 Unity/Minecraft 的受控回归已完成。来源锁与 current-upstream-validation.json 保存本次实际状态；收尾再次确认 18 个候选二进制摘要一致，唯一主程序仍为完整 Product 路径/PID 7565，没有本项目 Runner/VM。每日续跑提示经工具更新并精确读回，原每日 09:00、线程、贡献范围与会话保护约束保持。最终交付文档用 [skip ci] 提交并推送。
 
 ## 2026-10-29：JIT-less Runner 接入，build 23
 

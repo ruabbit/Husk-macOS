@@ -8,7 +8,7 @@
 
 旧 Unity 夹具通过生产 NativeLoader/JNI 注册检查一/三参数初始化优先级和插件只执行一次，Minecraft 检查 Looper/V8 flag 早于入口；两者默认/AOT 输入、暂停、正常关闭通过。转换中 stop 原生产协议即可正确取消；新增测试证明旧 checkpoint/无半成品/无假 storage-closed，以及后续恢复和存档重开。Lua 仅为真实 ELF/DEX 的 ABI 夹具，不是商业应用。
 
-首次失败为测试假设/准备问题：不能要求所有 ELF 的文件/虚拟偏移都不同；GL 头文件没有 pipeline 枚举；Unity 缺 FindClass/RegisterNatives 所需 DEX 类，SDL Lua 缺 DXVK 分类标记。全部修正且保留日志。最终针对性 27/27、默认 182/182（355.67 秒）、包检查与 CUA 单次启动 build 24/PID 7565 通过；源码 7761a0d 与 main 7a6bb7f 已推送并读回，首轮 CI 40987432500 在新增 Java 夹具找不到 linker 时失败：临时 ANDROID_SDK_ROOT 只有 Java SDK，脚本遗漏标准 SDK 的 NDK。已补回退；本机模拟临时 SDK/无效显式 linker 生成的四个 APK 条目字节完全一致，相关 4/4（14.59 秒）通过。候选二进制未改变，第二轮 CI 待推送触发。没有 War Thunder 黑名单相关修复，不重跑失败游戏。
+首次失败为测试假设/准备问题：不能要求所有 ELF 的文件/虚拟偏移都不同；GL 头文件没有 pipeline 枚举；Unity 缺 FindClass/RegisterNatives 所需 DEX 类，SDL Lua 缺 DXVK 分类标记。全部修正且保留日志。最终针对性 27/27、默认 182/182（355.67 秒）、包检查与 CUA 单次启动 build 24/PID 7565 通过；源码 7761a0d 与 main 7a6bb7f 已推送并读回，首轮 CI 40987432500 在新增 Java 夹具找不到 linker 时失败：临时 ANDROID_SDK_ROOT 只有 Java SDK，脚本遗漏标准 SDK 的 NDK。已补回退；本机模拟临时 SDK/无效显式 linker 生成的四个 APK 条目字节完全一致，相关 4/4（14.59 秒）通过。候选二进制未改变，工具链修复 [99d3386](https://github.com/ruabbit/Husk-macOS/commit/99d33861466e97a9c000a74667e764929e0359b4) 已推送并读回；第二轮 [CI 40988087109](https://github.com/ruabbit/Husk-macOS/actions/runs/40988087109)（head=99d3386）已 completed/success：构建/包检查、**47 项 hosted 核心回归（45.02 秒）**及 P0 memory/core 通过，build-and-core 用时 4 分 32 秒，hardware skipped。没有 War Thunder 黑名单相关修复，不重跑失败游戏。
 
 ## 2026-10-29：上游 AOT 接入与验证
 
