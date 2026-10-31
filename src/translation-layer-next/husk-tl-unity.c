@@ -31,6 +31,7 @@ static struct {
     atomic_ulong frames;
     atomic_bool stop;
     atomic_bool paused;
+    atomic_bool uncaught_exception;
     atomic_int state;
     atomic_ullong perf_ns, perf_max_ns;     /* time inside nativeRender since the last snapshot, and the worst call */
     atomic_ulong perf_frames;
@@ -41,6 +42,106 @@ static struct {
 static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
 
 typedef int32_t (*onload_fn)(void *vm, void *reserved);
+
+static void il2cpp_log_cb(const char *s) { tl_log_line("I/IL2CPP: %s", s ? s : ""); }
+
+static void (*il2_fmt_ex)(void *, char *, int);
+static void (*il2_fmt_st)(void *, char *, int);
+static void *(*il2_cxa_cur)(void);
+static void (*il2_raise)(void *);
+static void (*il2_unhandled)(void *);
+static void *(*il2_begin_catch)(void *);
+static void (*il2_end_catch)(void);
+
+/* Keep diagnostic phase information without resuming an engine after std::terminate. */
+static _Thread_local int g_unity_phase;   /* 1: initialization, 2: frame, 3: shutdown; 0: other thread */
+
+static void il2cpp_dump_ex(void *ex, const char *why)
+{
+    char msg[1024] = {0}, st[4096] = {0};
+    if (il2_fmt_ex && ex) il2_fmt_ex(ex, msg, (int)sizeof msg);
+    if (il2_fmt_st && ex) il2_fmt_st(ex, st, (int)sizeof st);
+    tl_log_line("unity: %s: %s", why, msg[0] ? msg : "(no IL2CPP message)");
+    if (st[0]) tl_log_line("unity: IL2CPP stack:\n%s", st);
+}
+
+/* Il2CppExceptionWrapper is `struct { Il2CppException *ex; }` thrown as a C++ object. */
+static void *il2cpp_from_wrapper(void *obj)
+{
+    if (!obj) return NULL;
+    void *ex = *(void **)obj;
+    return ex;
+}
+
+static void il2cpp_terminate(void)
+{
+    static _Thread_local int in_term;
+    if (in_term) pthread_exit(NULL);
+    in_term = 1;
+    void *obj = il2_cxa_cur ? il2_cxa_cur() : NULL;
+    void *ex = il2cpp_from_wrapper(obj);
+    if (ex) il2cpp_dump_ex(ex, "uncaught Il2CppExceptionWrapper");
+    else il2cpp_dump_ex(obj, "uncaught thrown object");
+    atomic_store(&U.uncaught_exception, true);
+    atomic_store(&U.stop, true);
+    atomic_store(&U.state, TL_UNITY_FAILED);
+    tl_log_line("unity: uncaught IL2CPP exception on %s; that thread exits", g_unity_phase == 2 ? "UnityMain (a frame)" : "a worker");
+    pthread_exit(NULL);
+}
+
+static void il2cpp_raise_wrap(void *ex)
+{
+    il2cpp_dump_ex(ex, "il2cpp_raise_exception");
+    if (il2_raise) il2_raise(ex);
+    abort();
+}
+
+static void *il2_sym(tl_lib *il2, const char *name)
+{
+    void *p = tl_ld_sym(il2, name);
+    if (!p) p = tl_ld_sym_deep(il2, name, NULL);
+    return p;
+}
+
+static int g_il2_hooks;
+
+static void il2cpp_host_hooks(void)
+{
+    /* Uncaught C# otherwise aborts as Il2CppExceptionWrapper with no message. */
+    if (g_il2_hooks) return;
+    tl_lib *il2 = tl_ld_find_lib("libil2cpp.so");
+    if (!il2) il2 = tl_ld_find_lib("/data/app/lib/arm64/libil2cpp.so");
+    if (!il2) return;
+    g_il2_hooks = 1;
+    void (*reg)(void (*)(const char *)) = (void (*)(void (*)(const char *)))il2_sym(il2, "il2cpp_register_log_callback");
+    if (reg) { reg(il2cpp_log_cb); tl_log_line("unity: IL2CPP log callback installed"); }
+    void (*pol)(int) = (void (*)(int))il2_sym(il2, "il2cpp_runtime_unhandled_exception_policy_set");
+    if (pol) { pol(0); tl_log_line("unity: IL2CPP unhandled-exception policy is legacy"); }
+    il2_fmt_ex = (void (*)(void *, char *, int))il2_sym(il2, "il2cpp_format_exception");
+    il2_fmt_st = (void (*)(void *, char *, int))il2_sym(il2, "il2cpp_format_stack_trace");
+    il2_cxa_cur = (void *(*)(void))il2_sym(il2, "__cxa_current_primary_exception");
+    if (!il2_cxa_cur) il2_cxa_cur = (void *(*)(void))il2_sym(il2, "_ZSt17current_exceptionv");
+    void (*set_term)(void (*)(void)) = (void (*)(void (*)(void)))il2_sym(il2, "_ZSt13set_terminatePFvvE");
+    if (!set_term) set_term = (void (*)(void (*)(void)))il2_sym(il2, "set_terminate");
+    if (set_term) { set_term(il2cpp_terminate); tl_log_line("unity: IL2CPP terminate handler installed"); }
+    il2_raise = (void (*)(void *))il2_sym(il2, "il2cpp_raise_exception");
+    if (il2_raise) tl_ld_interpose("il2cpp_raise_exception", (void *)il2cpp_raise_wrap);
+    il2_unhandled = (void (*)(void *))il2_sym(il2, "il2cpp_unhandled_exception");
+    il2_begin_catch = (void *(*)(void *))il2_sym(il2, "__cxa_begin_catch");
+    il2_end_catch = (void (*)(void))il2_sym(il2, "__cxa_end_catch");
+    tl_log_line("unity: IL2CPP dump fmt=%d stack=%d cxa=%d term=%d raise=%d unhandled=%d catch=%d",
+                il2_fmt_ex != NULL, il2_fmt_st != NULL, il2_cxa_cur != NULL, set_term != NULL, il2_raise != NULL,
+                il2_unhandled != NULL, il2_begin_catch != NULL && il2_end_catch != NULL);
+}
+
+static void il2cpp_on_lib_init(tl_lib *L)
+{
+    const char *n = tl_ld_lib_name(L);
+    if (!n) return;
+    const char *b = strrchr(n, '/');
+    b = b ? b + 1 : n;
+    if (!strcmp(b, "libil2cpp.so")) il2cpp_host_hooks();
+}
 
 static void keyboard_install(void);
 static void keyboard_deliver(void);
@@ -77,6 +178,7 @@ bool tl_unity_start(const tl_unity_config *cfg)
     tl_hle_configure(cfg->package_name, cfg->apk_path, cfg->data_dir, cfg->width, cfg->height);
     tl_jni_hle_install();
     keyboard_install();
+    tl_ld_on_init(il2cpp_on_lib_init);
 
     /* new UnityPlayer(activity): the Java side's own constructor calls loadNative(dir),
      * which is System.load(dir + "/libmain.so") followed by NativeLoader.load(dir). */
@@ -106,6 +208,7 @@ bool tl_unity_start(const tl_unity_config *cfg)
         tl_jni_unref(U.player);
         U.player = tl_jni_new_object(tl_jni_class("com/unity3d/player/UnityPlayerForActivityOrService"));
     }
+    if (ok) il2cpp_host_hooks();
     return ok != 0;
 }
 
@@ -150,17 +253,24 @@ static void *unity_main(void *arg)
     pthread_cleanup_push(unity_thread_ended, NULL);
     tl_log_line("unity: UnityMain thread started");
 
+    int phase = 0;
+    g_unity_phase = 1;
+
     /* The jobs UnityPlayer queues for this thread, in the order it queues them. */
-    jobj *surface = tl_jni_new_object(tl_jni_class("android/view/Surface"));
-    NATIVE_VOID("nativeRecreateGfxState", "(ILandroid/view/Surface;)V", 0, surface);
-    tl_log_line("unity: nativeRecreateGfxState done");
-    NATIVE_VOID("nativeSendSurfaceChangedEvent", "()V", 0, 0);
-    NATIVE_VOID("nativeResume", "()V", 0, 0);
-    tl_log_line("unity: nativeResume done");
-    NATIVE_VOID("nativeFocusChanged", "(Z)V", 1, 0);
+    if (phase < 1) {
+        phase = 1;
+        jobj *surface = tl_jni_new_object(tl_jni_class("android/view/Surface"));
+        NATIVE_VOID("nativeRecreateGfxState", "(ILandroid/view/Surface;)V", 0, surface);
+        tl_log_line("unity: nativeRecreateGfxState done");
+        NATIVE_VOID("nativeSendSurfaceChangedEvent", "()V", 0, 0);
+        NATIVE_VOID("nativeResume", "()V", 0, 0);
+        tl_log_line("unity: nativeResume done");
+        NATIVE_VOID("nativeFocusChanged", "(Z)V", 1, 0);
+    }
     /* What Unity's Java side tells the engine as it starts on a phone: the media volume (AudioVolumeHandler reports it, and
      * an engine that never hears it takes the device as muted) and that its sound is not muted. */
-    {
+    if (phase < 2) {
+        phase = 2;
         jobj *volume = tl_jni_new_object(tl_jni_class("com/unity3d/player/AudioVolumeHandler"));
         call_native_on("com/unity3d/player/AudioVolumeHandler", volume, "onAudioVolumeChanged", "(I)V", 7, 0);
         NATIVE_VOID("nativeMuteMasterAudio", "(Z)V", 0, 0);
@@ -170,6 +280,7 @@ static void *unity_main(void *arg)
     void *render = native_of("com/unity3d/player/UnityPlayer", "nativeRender", "()Z");
     bool was_paused = false;
     atomic_store(&U.state, TL_UNITY_RUNNING);
+    g_unity_phase = 2;
     while (render && !atomic_load(&U.stop)) {
         if (atomic_load(&U.paused)) {
             if (!was_paused) {
@@ -207,7 +318,8 @@ static void *unity_main(void *arg)
      * hold the input mutex across a potentially slow native shutdown. */
     pthread_mutex_lock(&input_lock);
     pthread_mutex_unlock(&input_lock);
-    bool ok = !tl_jni_pending();
+    g_unity_phase = 3;
+    bool ok = !tl_jni_pending() && !atomic_load(&U.uncaught_exception);
     if (!was_paused) pause_native();
     /* UnityPlayer destroys the engine on UnityMain, after pausing. Returning
      * from this call, not merely leaving the render loop, is the save boundary. */
@@ -219,9 +331,10 @@ static void *unity_main(void *arg)
         if (!done) done = tl_jni_native("com/unity3d/player/UnityPlayerForActivityOrService", "nativeDone", "()Z");
         if (done) ((uint8_t (*)(void *, void *))done)(tl_jni_env(), U.player);
     }
-    ok = ok && done && !tl_jni_pending();
+    ok = ok && done && !tl_jni_pending() && !atomic_load(&U.uncaught_exception);
     atomic_store(&U.state, ok ? TL_UNITY_DESTROYED : TL_UNITY_FAILED);
     tl_log_line("unity: native shutdown %s", ok ? "completed" : "failed");
+    g_unity_phase = 0;
     pthread_cleanup_pop(1);
     return NULL;
 }

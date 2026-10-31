@@ -65,6 +65,9 @@ void tl_ld_add_search_dir(const char *dir);
 
 /* Run constructors for a library and anything it needs that has not run. */
 bool tl_ld_init(tl_lib *lib);
+/* After that library's constructors: Unity installs IL2CPP's terminate handler here, because
+ * NativeLoader.load often returns before libil2cpp.so exists. */
+void tl_ld_on_init(void (*fn)(tl_lib *lib));
 
 /* A library already loaded, by file name or soname. */
 tl_lib *tl_ld_find_lib(const char *name);
@@ -81,6 +84,20 @@ const char *tl_ld_symbol_at(const void *addr, const char **lib_name, const void 
 /* Reuse signed static code from an exact ELF fd. File offset/length must describe whole host code pages.
  * A fixed destination is only passed by bionic after validating a guest reservation. Caller selects its loader namespace. */
 void *tl_ld_map_code(int fd, uint64_t offset, size_t length, void *at, const void *caller);
+
+/* An imported AOT dylib maps the ELF image r-x (AMFI execSeg). Stores that land there belong on the writable copy of that
+ * page, if the loader made one. NULL if `addr` is not in such a page. Safe to call from a fault handler after libraries
+ * have loaded. */
+void *tl_ld_aot_writable(const void *addr, size_t bytes);
+/* True when `addr` is inside an imported AOT image (including its stub pages). mprotect there cannot change permissions. */
+bool tl_ld_aot_contains(const void *addr);
+/* True when any byte of [addr, addr+bytes) is a loaded library (AOT dylib or JIT image, either view).
+ * mmap(MAP_FIXED)/munmap/madvise must not treat that as anonymous heap. */
+bool tl_ld_covers(const void *addr, size_t bytes);
+/* If `addr` is a fetch from the writable copy of a function (relative C++ vtables
+ * add a slot offset to a vtable that lives in the copy, which lands in the copy of
+ * .text, which is not executable), the executable view of the same offset; otherwise NULL. */
+void *tl_ld_aot_exec(const void *addr);
 
 /*
  * Walk loaded libraries the way dl_iterate_phdr does. The callback gets the load
@@ -142,7 +159,7 @@ bool tl_ld_aot_build(const char *name, const uint8_t *file, size_t flen, tl_ld_a
 /* What a dylib made from a library records about it (section __TEXT,__husk_manifest), so the loader only imports a dylib that was
  * made from this exact file by a compatible loader. */
 #define TL_AOT_MAGIC   "HUSKAOT1"
-#define TL_AOT_VERSION 65540u     /* fork rewrite ABI + upstream layout 4; never reuse upstream-only code rewrites */
+#define TL_AOT_VERSION 65545u     /* fork rewrite ABI + upstream layout 9; never reuse incompatible signed images */
 typedef struct tl_aot_manifest {
     char magic[8];
     uint32_t version, page;            /* TL_AOT_VERSION; 16384 */

@@ -75,7 +75,7 @@ NSString *mac_aot_prepare(NSArray<NSString *> *apks,NSString *runtimeRoot,void (
         for(NSString *path in paths){NSString *hash=digest(path);if(!hash){reason=@"JIT-less 来源文件缺失或损坏。";break;}[inputs addObject:@[path.lastPathComponent,hash]];}
         if(inputs.count!=paths.count)break;
         // Change the revision when the fork's code rewrites or signer changes.
-        NSDictionary *source=@{@"revision":@"mac-aot-2",@"format":@(TL_AOT_VERSION),@"inputs":inputs};
+        NSDictionary *source=@{@"revision":@"mac-aot-3",@"format":@(TL_AOT_VERSION),@"inputs":inputs};
         NSData *identity=[NSJSONSerialization dataWithJSONObject:source options:NSJSONWritingSortedKeys error:NULL];
         uint8_t hash[32];CC_SHA256(identity.bytes,(CC_LONG)identity.length,hash);
         NSString *target=[root stringByAppendingPathComponent:hex(hash,sizeof(hash))];
@@ -97,9 +97,9 @@ NSString *mac_aot_prepare(NSArray<NSString *> *apks,NSString *runtimeRoot,void (
         if(!names)break;
         for(NSUInteger i=0;i<paths.count;i++)names[i]=paths[i].fileSystemRepresentation;
         char why[512]={0};
-        int n=husk_aot_prepare(names,(int)apks.count,stage.fileSystemRepresentation,NULL,0,"","mac-adhoc-1",report,(__bridge void *)progress,why,sizeof(why));
+        int n=husk_aot_prepare(names,(int)apks.count,stage.fileSystemRepresentation,NULL,0,"","mac-adhoc-1",NULL,report,(__bridge void *)progress,why,sizeof(why));
         if(n>=0 && paths.count>apks.count)
-            n=husk_aot_prepare_runtime(names+apks.count,(int)(paths.count-apks.count),stage.fileSystemRepresentation,NULL,0,"","mac-adhoc-1",report,(__bridge void *)progress,why,sizeof(why));
+            n=husk_aot_prepare_runtime(names+apks.count,(int)(paths.count-apks.count),stage.fileSystemRepresentation,NULL,0,"","mac-adhoc-1",NULL,report,(__bridge void *)progress,why,sizeof(why));
         free(names);
         if(n<0){reason=[NSString stringWithFormat:@"JIT-less 准备失败：%s",why];break;}
         NSDictionary *actual=files(stage);if(!actual)break;
