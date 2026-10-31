@@ -10,6 +10,8 @@
 #define _DARWIN_C_SOURCE
 #include "husk-tl-bionic.h"
 const char *tl_ld_main_apk(void);
+bool tl_ld_aot_contains(const void *addr);
+bool tl_ld_covers(const void *addr, size_t bytes);
 #include "husk-tl-internal.h"
 #include "husk-tl-codewrite.h"
 #include "husk-tl-xmem.h"
@@ -649,6 +651,15 @@ static long b___read_chk(int fd, void *p, size_t n, size_t bufsz)
 static long b_write(int fd, const void *p, size_t n)
 {
     if (evfd_peer(fd) >= 0) fd = evfd_peer(fd);
+    if ((fd == 1 || fd == 2) && p && n > 0 && n < 2000) {
+        static int said;
+        if (said < 24) {
+            char buf[2004];
+            memcpy(buf, p, n); buf[n] = 0;
+            for (size_t i = 0; i < n; i++) if ((unsigned char)buf[i] < 9) { buf[0] = 0; break; }
+            if (buf[0]) { said++; tl_log_line("guest %s: %s", fd == 2 ? "stderr" : "stdout", buf); }
+        }
+    }
     TL_ERRNO_BEGIN(); long r = write(fd, p, n); int e = errno; TL_ERRNO_END();
     if (net_trace_fd(fd)) tl_log_line("net: write(fd %d, %zu) -> %ld errno %d", fd, n, r, r < 0 ? e : 0);
     return r;
@@ -1051,6 +1062,28 @@ static void anon_add(void *addr, size_t len)
     pthread_mutex_unlock(&g_anon_lock);
 }
 
+/* Mimalloc reserves a large anonymous range and munmaps the unused ends to align. Keep the list matching that. */
+static void anon_remove(uintptr_t addr, size_t len)
+{
+    uintptr_t end = addr + len;
+    pthread_mutex_lock(&g_anon_lock);
+    for (int i = 0; i < g_nanon; i++) {
+        uintptr_t a = g_anon[i].addr, e = a + g_anon[i].len;
+        if (end <= a || addr >= e) continue;
+        uintptr_t left = addr > a ? addr - a : 0;
+        uintptr_t right_a = end < e ? end : e, right = e > right_a ? e - right_a : 0;
+        if (left) {
+            g_anon[i].len = left;
+            if (right && g_nanon < MAX_ANON) { g_anon[g_nanon].addr = right_a; g_anon[g_nanon].len = right; g_nanon++; }
+        } else if (right) {
+            g_anon[i].addr = right_a; g_anon[i].len = right;
+        } else {
+            g_anon[i] = g_anon[--g_nanon]; i--;
+        }
+    }
+    pthread_mutex_unlock(&g_anon_lock);
+}
+
 static void anon_zap(uintptr_t addr, size_t len)
 {
     uintptr_t end = addr + len;
@@ -1065,6 +1098,9 @@ static void anon_zap(uintptr_t addr, size_t len)
             if (vm_region_64(mach_task_self(), &ra, &rs, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &cnt, &obj) != KERN_SUCCESS) break;
             if (ra > p) { p = ra; continue; }
             uintptr_t re = ra + rs < e ? ra + rs : e;
+            if (tl_ld_covers((const void *)(uintptr_t)p, re - p) || tl_xmem_contains((const void *)(uintptr_t)p)) {
+                p = re; continue;
+            }
             int prot = (info.protection & VM_PROT_READ ? PROT_READ : 0) | (info.protection & VM_PROT_WRITE ? PROT_WRITE : 0);
             mmap((void *)p, re - p, prot, MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0);
             p = re;
@@ -1290,6 +1326,11 @@ static void *b_mmap(void *addr, size_t len, int prot, int flags, int fd, long of
     bool refuse = len > max_map && (flags & 0x20) && !(flags & 0x10);
     if (refuse) { tl_log_line("mm: refusing %#zx bytes (TL_MM_MAX_GIB)", len); errno = ENOMEM; }
     bool shifted = !(flags & 0x20) && fd >= 0 && (off & (getpagesize() - 1)) != 0 && (off & 4095) == 0;
+    if ((flags & 0x10) && addr && tl_ld_covers(addr, len)) {
+        tl_note_once("mmap(MAP_FIXED) over a loaded library: refused");
+        errno = ENOMEM;
+        refuse = true;
+    }
     void *r = refuse || (force_phantom && compressed_heap_request(len) && prot == 0 && (flags & 0x20) && !(flags & 0x10)) ? MAP_FAILED
             : shifted ? shifted_file_map(addr, len, prot_filter(prot, "mmap"), df, fd, off)
             : mmap(addr, len, prot_filter(prot, "mmap"), df, (flags & 0x20) ? -1 : fd, off);
@@ -1311,9 +1352,17 @@ static void *b_mmap(void *addr, size_t len, int prot, int flags, int fd, long of
 static int b_munmap(void *a, size_t l)
 {
     if (tl_xmem_contains(a)) return 0;                       /* JIT memory handed out above: kept, as the region only grows */
+    if (tl_ld_covers(a, l)) {
+        /* Mimalloc trims a large reservation to an aligned arena. Under AOT that reservation can
+         * sit next to a dylib; unmapping the overlap would drop signed code. Leave the library. */
+        tl_note_once("munmap of a loaded library: ignored");
+        mm_trace("munmap", a, l, 0, 0);
+        return 0;
+    }
     { int sr; if (shifted_unmap(a, &sr)) { mm_trace("munmap", a, l, sr, errno); return sr; } }
     size_t real = phantom_clamp((uintptr_t)a, l);
     if (real == 0) return 0;                                 /* the half of a phantom range that was never mapped */
+    anon_remove((uintptr_t)a, real);
     TL_ERRNO_BEGIN(); int r = munmap(a, real); TL_ERRNO_END(); mm_trace("munmap", a, real, r, errno); return r;
 }
 /* Whether a range is inside memory the guest mapped for itself (not a library's own pages). */
@@ -1334,10 +1383,13 @@ static int b_mprotect(void *a, size_t l, int prot)
     /* Code a hooking library is about to patch: its permissions stay as they are, and its stores are carried out through
      * the writable view as they fault (husk-tl-codewrite.c). */
     if (tl_codewrite_enabled() && tl_xmem_contains(a)) { mm_trace("mprotect", a, l, prot, 0); return 0; }
+    /* An imported AOT dylib is signed r-x; the guest asking to write its RELRO or patch a constructor is told yes, and
+     * stores go to the writable copies (husk-tl-codewrite). */
+    if (tl_ld_aot_contains(a)) { mm_trace("mprotect", a, l, prot, 0); return 0; }
     if (prot & PROT_EXEC) {
         /* the host's own code (a guest that patches "the linker", which here is Apple's): never touched */
         Dl_info di;
-        if (dladdr(a, &di) && di.dli_fname && !tl_xmem_contains(a)) {
+        if (dladdr(a, &di) && di.dli_fname && !tl_xmem_contains(a) && !tl_ld_aot_contains(a)) {
             { const char *lib = NULL; const void *sa = NULL; const char *sym = tl_ld_symbol_at(__builtin_return_address(0), &lib, &sa);
               static int said; if (said++ < 4) tl_log_line("bionic: mprotect(%p, %#zx, %d) on the host's code (%s %s) asked by %s %s: refused", a, l, prot,
                   di.dli_fname ? strrchr(di.dli_fname, '/') + 1 : "?", di.dli_sname ? di.dli_sname : "?", lib ? lib : "?", sym ? sym : "?"); }
