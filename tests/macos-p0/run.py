@@ -90,7 +90,7 @@ def build():
     sdk = command(["xcrun", "--sdk", "macosx", "--show-sdk-path"])
     common = [host, "-isysroot", sdk, "-O2", "-g", "-Wall", "-Wextra", "-I", NEXT, "-I", CLASSIC]
     command([*common, HERE / "xmem-test.c", HERE / "host-adapter.c", NEXT / "husk-tl-xmem.c", "-o", OUT / "xmem-dev"])
-    modern = [NEXT / "husk-tl-ld.c", NEXT / "husk-tl-a64.c", NEXT / "husk-tl-xmem.c",
+    modern = [NEXT / "husk-tl-ld.c", NEXT / "husk-tl-a64.c", NEXT / "husk-tl-xmem.c", NEXT / "husk-tl-codewrite.c",
               CLASSIC / "husk-tl-elf.c", CLASSIC / "husk-tl-zip.c", HERE / "host-adapter.c"]
     command([*common, HERE / "loader-test.c", *modern, "-lz", "-o", OUT / "loader-test"])
     sign(OUT / "loader-test", OUT / "unsigned.plist")
