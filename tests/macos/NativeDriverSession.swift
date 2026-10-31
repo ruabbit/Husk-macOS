@@ -4,8 +4,9 @@ import SharedLibrary
 @main struct NativeDriverSession {
     @MainActor static func main() async {
         let args=CommandLine.arguments
-        guard args.count==5 || (args.count==6 && args[5]=="jitless") else { exit(64) }
-        let jitless=args.count==6
+        guard args.count==5 || (args.count==6 && ["jitless", "prefs-failure"].contains(args[5])) else { exit(64) }
+        let jitless=args.count==6 && args[5]=="jitless"
+        let prefsFailure=args.count==6 && args[5]=="prefs-failure"
         let app=URL(fileURLWithPath:args[1]), fixture=URL(fileURLWithPath:args[2]), engine=args[3]
         let paths=LibraryPaths(root:URL(fileURLWithPath:args[4]).appendingPathComponent("Native-\(UUID().uuidString)"))
         let session=SessionController()
@@ -21,6 +22,7 @@ import SharedLibrary
                 try await repository.update(imported.id,geode:true)
             }
             if jitless { try await repository.update(imported.id, jitless: true) }
+            for attempt in 0..<(engine=="unity" && !prefsFailure ? 2 : 1) {
             let (game,files,checkpoint)=try await repository.prepare(imported.id)
             try session.start(executable:app.appendingPathComponent("Contents/Helpers/NativeRunner.app/Contents/MacOS/NativeRunner"),
                 game:game,apk:files[0],checkpoint:checkpoint,logs:paths.logs,headless:true,automation:true)
@@ -47,7 +49,17 @@ import SharedLibrary
             try check(session.state=="running",session.error ?? "resume acknowledged")
             session.send("input",values:["source":"touch","phase":0,"x":100,"y":100])
             try await Task.sleep(for:.milliseconds(100))
+            if prefsFailure {
+                let folder=checkpoint.deletingLastPathComponent().appendingPathComponent("data/shared_prefs")
+                try FileManager.default.moveItem(at:folder,to:folder.appendingPathExtension("preserved"))
+                try Data("blocked fixture directory".utf8).write(to:folder)
+            }
             session.stop();try await session.wait(until:{!session.active},timeout:35)
+            if prefsFailure {
+                try check(session.state=="failed" && !session.events.contains{$0["event"] as? String=="storage-closed"},"preference write failure blocks storage receipt")
+                try check(!FileManager.default.fileExists(atPath:checkpoint.path),"failed preferences do not publish checkpoint")
+                continue
+            }
             try check(session.state=="exited" && session.error==nil,session.error ?? "normal close and reap")
             try check(session.events.filter{$0["event"] as? String=="storage-closed"}.count==1,"one storage receipt")
             let data=try Data(contentsOf:checkpoint.deletingLastPathComponent().appendingPathComponent("data/callbacks.bin"))
@@ -57,6 +69,11 @@ import SharedLibrary
             try check(mask&127==127 && wrong==0,"real input, pause and stop callbacks on owner thread")
             if engine=="sdl" { try check(mask&512 != 0,"manual SDL keyboard delivered Android key events to the ELF") }
             if engine=="unity" { try check(mask&768==768,"main Looper before JNI_OnLoad, three-argument init and plugin JNI_OnLoad exactly once") }
+            if engine=="unity" {
+                try check(mask&1024 != 0,"late IL2CPP log/policy/terminate hooks follow constructors and precede JNI_OnLoad")
+                let observed=try Data(contentsOf:checkpoint.deletingLastPathComponent().appendingPathComponent("data/prefs-observed.bin"))
+                try check(observed.count==8 && observed.withUnsafeBytes{$0.loadUnaligned(as:Int32.self)}==Int32(attempt) && observed.withUnsafeBytes{$0.loadUnaligned(fromByteOffset:4,as:Int32.self)}==1,"Unity JNI preferences survive normal destruction and a new Runner")
+            }
             if engine=="minecraft" { try check(mask&256 != 0,"V8 interpreter flag and main Looper precede GameActivity initialization") }
             if engine=="sdl-luajit" { try check(mask&256 != 0,"LuaJIT ABI switches to interpreter before SDL application code") }
             if profile != "cocos" { try check(mask&128 != 0,"native destruction acknowledged") }
@@ -64,6 +81,7 @@ import SharedLibrary
                 let data=checkpoint.deletingLastPathComponent().appendingPathComponent("data")
                 try check(try String(contentsOf:data.appendingPathComponent("files/game_version.txt"),encoding:.utf8)=="39","Geode receives game version")
                 try check(try String(contentsOf:data.appendingPathComponent("geode/game/geode/resources/geode.loader/loader.txt"),encoding:.utf8)=="new!","Geode resources extracted in isolated save")
+            }
             }
         } catch {
             if session.active {session.stop();try? await session.wait(until:{!session.active},timeout:35)}

@@ -436,6 +436,7 @@ struct SettingsView: View {
     @AppStorage(Holiday.key) private var holiday = true
     @AppStorage("macos.appearance") private var appearance = "system"
     @AppStorage(AppLanguage.key) private var language = "system"
+    @State private var showJITLess = false
     var body: some View {
         Form {
             Button { openWindow(id: "account") } label: {
@@ -447,6 +448,9 @@ struct SettingsView: View {
                     }
                     Spacer(); Image(systemName: "chevron.right")
                 }
+            }.buttonStyle(.plain)
+            Button { showJITLess = true } label: {
+                HStack { Label("Play without JIT", systemImage: "bolt.slash.fill"); Spacer(); Image(systemName: "chevron.right") }
             }.buttonStyle(.plain)
             Picker("Language", selection: $language) {
                 Text("System default").tag("system"); Text("English").tag("en"); Text("简体中文").tag("zh-Hans")
@@ -460,6 +464,30 @@ struct SettingsView: View {
             Toggle("游戏结束后询问运行情况", isOn: $askCompatibility)
             Link("上游社区兼容性列表", destination: CompatibilityStore.site)
         }.padding(24).frame(width: 520)
+        .sheet(isPresented: $showJITLess) { MacJITLessSettings() }
+    }
+}
+
+struct MacJITLessSettings: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("Play without JIT", systemImage: "bolt.slash.fill").font(.title2.bold())
+            Text("An experimental option for individual games. It is off by default.")
+                .fixedSize(horizontal: false, vertical: true)
+            GroupBox("Enable for a game") {
+                Text("Open a game in the Library, then turn on JIT-less in its game settings. The first launch prepares its libraries and may take longer.")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+            }
+            Text("On this Mac, Husk signs the converted libraries locally. You do not need to import a developer certificate.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode.")
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(.secondary)
+            HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
+        }.lineLimit(nil).padding(24).frame(width: 490)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

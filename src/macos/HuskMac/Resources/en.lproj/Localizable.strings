@@ -775,3 +775,15 @@
 "以下为本机缓存，可能不是最新结果。" = "These cached results may be out of date.";
 "报告已由服务端接收并排队，尚未公开发布。" = "The server has received and queued your report. It has not been published yet.";
 "资料修改已由服务端排队，维护结束后才会同步。" = "The server has queued your profile changes. They will sync after maintenance ends.";
+
+"An experimental option for individual games. It is off by default." = "An experimental option for individual games. It is off by default.";
+
+"Enable for a game" = "Enable for a game";
+
+"Open a game in the Library, then turn on JIT-less in its game settings. The first launch prepares its libraries and may take longer." = "Open a game in the Library, then turn on JIT-less in its game settings. The first launch prepares its libraries and may take longer.";
+
+"On this Mac, Husk signs the converted libraries locally. You do not need to import a developer certificate." = "On this Mac, Husk signs the converted libraries locally. You do not need to import a developer certificate.";
+
+"Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode." = "Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode.";
+
+"Play without JIT" = "Play without JIT";

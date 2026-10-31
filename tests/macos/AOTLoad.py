@@ -6,6 +6,7 @@ import io
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tarfile
 import tempfile
@@ -35,6 +36,22 @@ with tempfile.TemporaryDirectory(prefix="AOT-", dir=output) as temporary:
         stale.write_bytes(changed)
         check_env = dict(env, HUSK_REQUIRE_FILE_TRANSLATION="1") if name == "go-data" else env
         run(loader, source, copy, stale, env=check_env)
+    # An unsupported unwind header is refused, without executing a constructor.
+    malformed = bytearray((fixture_root / "mixed-data.so").read_bytes())
+    phoff = struct.unpack_from("<Q", malformed, 32)[0]
+    phsize, phcount = struct.unpack_from("<HH", malformed, 54)
+    for i in range(phcount):
+        pos = phoff + i * phsize
+        if struct.unpack_from("<I", malformed, pos)[0] == 0x6474e550:
+            offset = struct.unpack_from("<Q", malformed, pos + 8)[0]
+            malformed[offset] = 2
+            break
+    else:
+        raise RuntimeError("missing unwind header fixture")
+    bad = root / "invalid-unwind.so"
+    bad.write_bytes(malformed)
+    run(tool, "--prepare", cache, bad)
+    run(loader, bad, "reject-unwind", env=env)
     # Both namespaces need distinct hashed dylibs even with the same basename.
     run(tool, "--prepare", cache, fixture_root / "app.apk")
     run(tool, "--prepare-runtime", cache, fixture_root / "system/libcrypto.so", fixture_root / "system/libclient.so")

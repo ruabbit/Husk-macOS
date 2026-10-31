@@ -1,5 +1,22 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-10-31：3.2 AOT v9 / Unity 偏好，build 25
+
+上游 `645c22a..d30e12e` **7 提交/28 路径**已普通合并到 fork main=`3903b7d`，再合回 macOS=`2b67957`；origin 无外来提交。七文件语义冲突保留 Mac 地址分类、系统/应用签名命名空间、guest 执行分配限制、正常销毁/存储关闭判定。逐项重新核对 `TLReport.nativeEngine`、`TLUnityView.swift`、`src/app/project.yml` 与 Mac CMake、资料库能力、各 Runner 分发/输入/暂停/关闭、PlayAPI/登录策略及图形构建；本批无新增引擎、图形 pin 或权限。
+
+| 增量 | 本轮 macOS 接入及对应验证 | 仍需单独验收 |
+| --- | --- | --- |
+| AOT v9 / RX 与可写副本 | 共享 converter/signing/loader 编入 NativeRunner，`mac-aot-3` / ABI 65545 区分缓存；修正 literal stub 返回 PC 与 Mono 裁剪遗漏 ELF PLT；真 Android ELF 验证 32/64 位 literal、Go/Mono/4/16 KiB、来源/namespace/RX 静态别名与缺库拒绝 | 真实游戏、真实 JNA/Lua 应用、未知 Mono 元数据、动态出现的库与生成代码的模组 |
+| 展开表/映像边界 | 完整跨页/溢出检查；C++ 展开表先验证全部修改再发布，异常格式拒绝而不部分修改；ELF 中 header/FDE 指向执行视图、损坏 header 拒绝通过 | 真实 C++/IL2CPP 抛出和 catch 匹配，iOS 签名及设备 |
+| JNI 命名 SharedPreferences | 复用共享 tl_prefs 的类型序列化；同名实例、长名称哈希/游戏隔离、编辑暂存、clear/remove/getAll 快照、0600 临时文件同步/原子替换；失败阻止存储成功回执，损坏库不覆盖 | 完整 Android StringSet/listener 行为及真实 Unity 存档；不能将本项等同商业游戏兼容 |
+| Unity 诊断和关闭 | 日志/策略/terminate hook 在稍后加载的 IL2CPP 构造函数后、JNI_OnLoad 前接入，保留未捕获异常 FAILED；普通和 JIT-less 打包 ELF 各两进程验证输入/暂停/正常关闭与 JNI 偏好重开；故障路径无 storage-closed/checkpoint | 未主动触发崩溃；商业游戏真实异常、正常退出与存档仍须独立证据 |
+| JIT-less 设置 | Mac 设置新增独立说明页，保留游戏详情内默认关闭的每游戏开关，使用本地 ad-hoc 签名；新中英文文案打包 | iOS 证书导入不是 Mac 必需步骤；本轮没有导入证书、改用户设置或启动用户游戏 |
+
+最终默认 **184/184（299.05 秒）**、针对性 **25/25（41.28 秒）**及包检查 **18 arm64 Mach-O / 406 Java 资源 / 中英文各 782 条**通过。11 个共享 C 和 3 个共享 Swift 通过 iOS SDK 语法检查；不代表完整 iOS 构建或设备。初次 GUI/PID 3231 发现说明页段落截断，正常退出后修复多行高度并重新构建/全套验证；最终候选单次重开 PID **21399**，AX/截图确认 11 应用、图标/TabView 和完整可见的说明页，已返回首页。两次候选启动原因如实记录，未启动用户游戏或改设置。源码提交/推送、远端 SHA 与本批 CI 待收尾。
+
+继续开放：转换中 abrupt host/process loss（本轮未通过主动崩溃模拟）、真实 JNA/Lua/Unity/Geode/.NET 独立存档、WebView 历史恢复/host-stop、导航/destroy、Activity replacement/recreate 顺序及加载中/跨源/第三方 HTTP 插件、实体 IME/手柄/电源、文件面板/持久 URI、个人账号/认证 Play、VM/P6。下一轮优先在可合法取得的真实应用及隔离存档上验证；真实样本不可用时继续 WebView 的确定性顺序回归，不重复启动无相关修复的商业失败样本。既有转换取消与旧 Unity/Minecraft 打包路径、全部此前接入的引擎保持已实现状态。
+
+
 ## 2026-10-30：Unity / 静态签名页 / 服务维护，build 24
 
 `ee85db6..645c22a` 共 **13 提交/23 路径**普通合并到 main=`7a6bb7f`，再合回 macOS=`ec0ed02`，origin 无外来提交。三处冲突按行为处理：兼容性服务保留 Mac 的显式日志与 POST 不重试；bionic 接入静态签名页复用后仍拒绝其他动态执行分配；Unity 按实际注册签名调用初始化并保留生命周期缺失失败。逐项对照 `TLReport.nativeEngine`、`TLUnityView`、`project.yml`、Mac CMake/能力判断/Runner 分发与输入/暂停/关闭、共享 Store/账号和图形构建，本批没有新引擎类型、图形 pin 或权限变化。

@@ -1,5 +1,16 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-10-31 AOT v9 / Unity 偏好，待交付
+
+- [x] 干净 2a4ddbd 起步；origin 无新增，前轮 CI 40988087109 success 已复核。空闲 Product/PID 7565 经 CUA 正常退出，无本项目 Runner/VM/构建。
+- [x] upstream 645c22a..d30e12e 共 7 提交/28 路径普通合并到 main=3903b7d，再合回 macOS=2b67957；七文件语义冲突保留 Mac 命名空间、地址粒度、权限与失败关闭判定。
+- [x] 首轮唯一 build/macos 增量构建通过；AOT cache mac-aot-3 / ABI 65545 已接线，修正 literal stub 返回偏移。
+- [x] AOT v9 数据/字面量/范围/展开表及 Unity JNI 命名偏好持久化、独立进程重开和失败回执回归已完成；3.2 Mac 设置接线。
+- [x] build 25 最终构建、针对性 25/25、默认 184/184（299.05 秒）、包检查通过。CUA 初检截断已修复并重验；最终单次重开 PID 21399，完整说明页与 11 应用/图标确认并回到首页。
+- [ ] 来源锁/parity/交付记录、正常推送/远端 SHA、CI 与每日续跑提示收尾。
+- [ ] 真实游戏/第三方应用、转换中进程丢失、WebView 顺序/加载中/跨源、实体设备/Play/VM/P6 保持开放。
+
+
 ## 当前执行：2026-10-30 Unity / JIT-less 增量
 
 - [x] 起点 11586e3 干净，origin 无新增；前轮 CI 40824326328 success，空闲 Product/PID 74471 经 CUA 正常退出。无本项目 Runner/VM/构建，其他项目 UTM 保持。

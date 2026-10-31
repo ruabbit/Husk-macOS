@@ -1,94 +1,70 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "ee85db63ff9ff038103f7e1b5d77ac3f77eddf80",
-  "integratedRevision": "645c22aa92ebcf34c84d9ad0ac6cdd701c667f53",
-  "checkedOn": "2026-10-30",
-  "commitCount": 13,
-  "integration": "Fetched origin then upstream with no origin additions. Ordinary merges of 13 commits / 23 paths through 645c22a into fork main 7a6bb7f, then macOS ec0ed02. Compatibility, bionic mmap and Unity conflicts were resolved by preserving Mac report controls, no dynamic executable allocations and signature-aware lifecycle initialization. Build 24 local default suite, bundle and single CUA launch passed; source 7761a0d and main 7a6bb7f were pushed normally and exact remote SHAs read back. Own-repo CI 40987432500 failed in fixture tool lookup; a standard-SDK NDK fallback reproduced the hosted layout locally with identical fixture bytes and 4/4 relevant tests. Toolchain repair 99d3386 was pushed and read back; CI 40988087109 completed successfully: build/package checks, 47 hosted core tests (45.02 seconds) and P0 memory/core; hardware skipped. The existing daily heartbeat was updated and its full prompt/schedule/thread read back unchanged except for delivery evidence and next work.",
+  "previousRevision": "645c22aa92ebcf34c84d9ad0ac6cdd701c667f53",
+  "integratedRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
+  "checkedOn": "2026-10-31",
+  "commitCount": 7,
+  "integration": "Origin then upstream fetched without origin additions. Normal merges of 7 commits / 28 paths into fork main 3903b7d and macOS 2b67957. Seven file conflicts resolved semantically, retaining Mac namespace/address/permission and failed-close behavior. Final local build 25, related/default tests, bundle and final CUA inspection passed after the initial inspection exposed and led to correction of truncated Settings text. Source commit/push and own-repository CI are pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-pending-push",
   "release": {
-    "tag": "3.1",
-    "revision": "7cc583ce3fccd271eea9087483ddc5e49af14d8d"
+    "tag": "3.2",
+    "revision": "d30e12ec8184182ef2adccd5ee86290dcfe47312"
   },
   "candidate": {
-    "version": "3.1.0",
-    "build": "24",
-    "defaultTests": 182,
-    "defaultTestSeconds": 355.67,
+    "version": "3.2.0",
+    "build": "25",
+    "defaultTests": 184,
+    "defaultTestSeconds": 299.05,
     "bundleMachO": 18,
     "javaResources": 406,
     "localizations": {
       "en": {
-        "entries": 776,
-        "sha256": "4a7945e0e41046145fc961d5d172081e6f4f12b5086846363424a573a932c30e"
+        "entries": 782,
+        "sha256": "4cb40316634d081b4c834af93011286699eca10c88819c87b171298285e6d322"
       },
       "zh-Hans": {
-        "entries": 776,
-        "sha256": "2c5e8282aff3775bd0e6cb69a85aa6157f5ecf48ed70f8760110cdda46959ce2"
+        "entries": 782,
+        "sha256": "51103d3296172e9c52f6090d0a4c23b9d789f5d4fce083ddc2a6fe3b8dd99136"
       }
     },
-    "sourceRevision": "99d33861466e97a9c000a74667e764929e0359b4",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Exact build 24 Product launched once through CUA as PID 7565; full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, and the selected app JIT-less checkbox off. Returned Home without changing preferences or starting any user game or VM.",
-    "pid": 7565,
-    "ci": {
-      "run": 40988087109,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40988087109",
-      "sourceRevision": "99d33861466e97a9c000a74667e764929e0359b4",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 47,
-      "hostedCoreTestSeconds": 45.02,
-      "buildAndCoreSeconds": 272
-    },
-    "appSHA256": "aca618cea31ed484c05d6b705af2c01fa7a0a76f24a33877e7e2d36f25ab0eb2",
-    "nativeRunnerSHA256": "9c5c2a7122521c5a06799bd22447b05094855822c179d7b8d26c3439ca070b5b",
+    "sourceRevision": null,
+    "productSourceRevision": null,
+    "deliveryStatus": "locally-verified-pending-push",
+    "gui": "Initial CUA inspection (PID 3231) found truncated Settings instructions; that idle app was quit normally, wrapping was fixed and revalidated. Final build 25 Product launched once through CUA as PID 21399. Full executable path, AX and screenshots confirmed the original icon/TabView, all original 11 library entries and icons, and the separate Play without JIT Settings sheet. Its default-off per-game guidance and local signing explanation are visible. Closed Settings and returned Home without changing preferences, logging in or starting user games or VMs.",
+    "pid": 21399,
+    "ci": null,
+    "appSHA256": "143ac8edf195157541b156eb1e280f5b3012272eda542f400725f95f2704f206",
+    "nativeRunnerSHA256": "0fffeb23700d6dab1339b41848b56ee403776249246b6c460d4b6cdafdd881d5",
     "webRunnerSHA256": "cb57b531b0ee69864d037e6512e25e796e70401ea8ff9477d76c0996934fbc84",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "frameworkSHA256": "26bdf1b0fd09781ca15935955c1cc2a373627695091f072f64103f36a59030b1",
-    "productSourceRevision": "7761a0d20fac4d6f4794a54a57a918ed07579285"
+    "frameworkSHA256": "26bdf1b0fd09781ca15935955c1cc2a373627695091f072f64103f36a59030b1"
   },
   "lastCheck": {
-    "upstreamNewCommits": 13,
-    "upstreamChangedPaths": 23,
+    "upstreamNewCommits": 7,
+    "upstreamChangedPaths": 28,
     "originNewCommits": 0,
-    "mainRevision": "7a6bb7f3d85a9c72e2f63fb0d8e2fc53f77da9b6",
-    "macOSBaseRevision": "11586e329b77a09e88cab9e12c1ddd38fb33165f",
-    "macOSMergeRevision": "ec0ed02feaeddca61880001c6f9e7fdec0f8e0f5",
-    "macOSRevision": "99d33861466e97a9c000a74667e764929e0359b4",
-    "macOSAdaptation": "Mac maintenance/cache and queued report/account states with no duplicate POSTs; source-hashed static signed code aliases, PT_LOAD translation, RX maximum protection and namespace selection; Java/SDL Lua interpreter capability; packaged old Unity/Minecraft input/pause/normal close and conversion cancellation/recovery. Unity/ES3.1/Java feature/insets/FMOD queries are verified by controlled ELF/DEX. Existing AppKit, permissions, graphics pins and storage contracts retained.",
-    "defaultSuiteTests": 182,
-    "defaultTestSeconds": 355.67,
-    "targetedTests": 27,
-    "targetedTestSeconds": 32.9,
+    "mainRevision": "3903b7dd9a211366ebb7eb731d8d5990d01b5db1",
+    "macOSBaseRevision": "2a4ddbd89b255743e157078610ae12e5ee3298da",
+    "macOSMergeRevision": "2b67957e316bacca2c55f275e7e7a17dafc4fb9d",
+    "macOSRevision": null,
+    "macOSAdaptation": "AOT v9 mac-aot-3/ABI 65545; corrected literal stub return PC and retained ELF PLT outside narrowed Mono text; complete copied-page/overflow checks and validate-then-publish unwind retargeting. Persistent named JNI HLE preferences with staged edits, 0600 fsync/atomic files, strict corrupt-file rejection, independent process reopen and failed-write storage-close rejection. Late IL2CPP hooks preserve FAILED state. Separate Mac JIT-less Settings guidance retains default-off per-game controls and local signing.",
+    "defaultSuiteTests": 184,
+    "defaultTestSeconds": 299.05,
+    "targetedTests": 25,
+    "targetedTestSeconds": 41.28,
     "javaWebTests": 48,
-    "javaWebTestSeconds": 208.06,
+    "javaWebTestSeconds": 165.47,
     "candidateDependentTestsPending": 0,
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
+    "pushed": false,
+    "remoteSHAsVerified": false,
     "blocker": null,
     "previousCI": {
-      "run": 40824326328,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40824326328",
-      "sourceRevision": "33987448da6c4979da2b37cc73d4540a6e87ac29",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 45,
-      "hostedCoreTestSeconds": 51.9
-    },
-    "ci": {
       "run": 40988087109,
       "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/40988087109",
       "sourceRevision": "99d33861466e97a9c000a74667e764929e0359b4",
@@ -101,9 +77,8 @@
       "hostedCoreTestSeconds": 45.02,
       "buildAndCoreSeconds": 272
     },
-    "ciToolchainRecheckTests": 4,
-    "ciToolchainRecheckSeconds": 14.59,
-    "automationUpdatedAndReadBack": true
+    "ci": null,
+    "automationUpdatedAndReadBack": false
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -145,7 +120,7 @@
     "navigation": "App-initiated loadUrl and allowed main-frame navigation wait for the prior document save. WebViewClient policy runs before irreversible saving; vetoes, custom URLs and same-document fragments preserve the live document. Save timeouts/callbacks belong to a document generation; caught Java plugin errors cancel navigation and fail final storage acknowledgement. Confirmed sealed GET history documents reload in their original list position without duplicate lifecycle; ordinary history loads are not repeated. Saved non-GET history is rejected before leaving the current page, without automatic POST resubmission. Unsupported file subframe remaps are rejected instead of replacing the main page. Nine packaged DEX navigation tests and the full suite pass. Host stop during navigation preparation joins the existing save, cancels the pending decision immediately and preserves its six-second deadline; success, rejection and a late-stop timeout are covered by real loopback HTTP DEX tests.",
     "httpValidation": "Five packaged real-DEX tests use a disposable loopback HTTP server: async save POST, redirect/history request counts, localStorage/IndexedDB/Java plugin process reopen, persisted outgoing cookie, HttpOnly visibility and stop/save overlap. This is controlled-fixture evidence, not third-party HTTP application compatibility."
   },
-  "sourceVersion": "3.1.0",
+  "sourceVersion": "3.2.0",
   "legacyUnityTextInput": {
     "status": "packaged-driver-fixture-verified",
     "remaining": [
@@ -181,11 +156,11 @@
     ]
   },
   "lastUpstreamMerge": {
-    "date": "2026-10-30",
-    "previousRevision": "ee85db63ff9ff038103f7e1b5d77ac3f77eddf80",
-    "integratedRevision": "645c22aa92ebcf34c84d9ad0ac6cdd701c667f53",
-    "commitCount": 13,
-    "mainRevision": "7a6bb7f3d85a9c72e2f63fb0d8e2fc53f77da9b6"
+    "date": "2026-10-31",
+    "previousRevision": "645c22aa92ebcf34c84d9ad0ac6cdd701c667f53",
+    "integratedRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
+    "commitCount": 7,
+    "mainRevision": "3903b7dd9a211366ebb7eb731d8d5990d01b5db1"
   },
   "runtime31Integration": {
     "status": "macos-packaged-and-fixture-verified",
@@ -220,11 +195,12 @@
     ]
   },
   "elf2machoExperiment": {
-    "upstreamRevision": "645c22aa92ebcf34c84d9ad0ac6cdd701c667f53",
+    "upstreamRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
     "status": "macos-opt-in-runner-fixture-verified",
-    "validation": "Shared AOT conversion/signing/import stays connected to NativeRunner. Controlled static code aliases execute with exact ELF digest/size and namespace identity, PT_LOAD offset translation, fixed guest reservation and RX maximum protection. Twelve AOT packaged tests cover ten profiles, SDL Lua ABI and cancellation/recovery; normal sessions check input/pause/single storage-closed, while cancellation preserves the old checkpoint and emits no storage-closed. Java warm-cache reopen reads saved preferences and SQLite. These are fixtures, not commercial games.",
+    "validation": "AOT v9 mac-aot-3/ABI 65545; corrected literal stub return PC and retained ELF PLT outside narrowed Mono text; complete copied-page/overflow checks and validate-then-publish unwind retargeting. Persistent named JNI HLE preferences with staged edits, 0600 fsync/atomic files, strict corrupt-file rejection, independent process reopen and failed-write storage-close rejection. Late IL2CPP hooks preserve FAILED state. Separate Mac JIT-less Settings guidance retains default-off per-game controls and local signing. Twelve AOT packaged tests retain ten profiles, Lua ABI and cancellation recovery. Controlled fixtures are not commercial game compatibility.",
     "remaining": [
       "Real Android JNA/LuaJIT applications and games with independent save/reopen evidence; current Lua checks are ABI fixtures.",
+      "Real C++/IL2CPP throw/catch matching; current ELF evidence checks retargeted unwind header/FDE addresses and malformed-header rejection only.",
       "Abrupt host/process loss during conversion, dynamically extracted or downloaded modules, unknown Mono metadata and engines/mods requiring generated code.",
       "iOS personal signing and device validation; only shared C/Swift syntax checked."
     ]
@@ -234,17 +210,18 @@
     "description": "Upstream removes H logo/splash/sidebar; Mac restores original bundled icon and native tabs. Home avatar menu and Settings open the independent account window. Original 11 apps and icons retained; Mac system appearance remains selected.",
     "website": "https://itslevii.dev",
     "fallback": "https://antiweb.lol",
-    "localizations": 776,
+    "localizations": 782,
     "remaining": [
       "Real account/Keychain service sign-in and uploads.",
       "Visible Chinese UI acceptance and remaining Mac help/dynamic diagnostic translation."
-    ]
+    ],
+    "jitlessSettings": "Separate Play without JIT Settings sheet explains the existing per-game default-off option, preparation, limitations and local ad-hoc signing; no certificate import or global switch on macOS."
   },
   "jitlessIntegration": {
     "status": "macos-opt-in-fixture-and-visible-option-verified",
     "default": false,
-    "aotABI": 65540,
-    "cache": "Source SHA-256 plus mac-aot-2 and fork ABI 65540; private locked staging directory, signature/hash verification before publication and on reuse. App/system namespaces have distinct install names.",
+    "aotABI": 65545,
+    "cache": "Source SHA-256 plus mac-aot-3 and fork ABI 65545; private locked staging, signature/hash validation before publication and reuse; separate application/system install names.",
     "enforcement": "TL_NO_XMEM and TL_NO_GUEST_JIT; missing converted libraries fail without fallback. Existing Runner entitlements retained.",
     "packagedProfiles": [
       "cocos",
@@ -264,15 +241,17 @@
       "known Mono JIT runtimes",
       "LuaJIT on profiles without the interpreter hook"
     ],
-    "reopen": "Real DEX in a second process verifies completed SharedPreferences and SQLite row, reuses signed cache and emits one storage-closed receipt.",
+    "reopen": "Real Java DEX retains preference/SQLite warm-cache reopen. Ordinary and JIT-less Unity ELF fixtures each run in two independent NativeRunners, verify nativeDone preference writes and reopen, input/pause and one storage-closed. Failed preference storage emits neither a success receipt nor checkpoint.",
     "remaining": [
       "Real Android JNA/LuaJIT applications and games with independent save/reopen evidence; current Lua checks are ABI fixtures.",
+      "Real C++/IL2CPP throw/catch matching; current ELF evidence checks retargeted unwind header/FDE addresses and malformed-header rejection only.",
       "Abrupt host/process loss during conversion, dynamically extracted or downloaded modules, unknown Mono metadata and engines/mods requiring generated code.",
       "iOS personal signing and device validation; only shared C/Swift syntax checked."
     ],
     "staticCodeAliases": "Only exact source ELF bytes and an unambiguous caller namespace may map pure signed code pages. PT_LOAD translates file offsets; writable/mixed pages, bad alignment/range and unknown copies are rejected. Fixed mapping requires an existing guest anonymous reservation; alias max protection is RX, and anon bookkeeping excludes replaced/released signed pages.",
     "luaInterpreter": "Java, Java NativeActivity and SDL profiles install the shared interpreter hook under TL_NO_XMEM. Real ELF/DEX ABI fixtures verify openlibs/setmode ordering before app code; real third-party LuaJIT/JNA apps remain unverified.",
-    "conversionCancellation": "Stop after aot-progress and before aot-ready reaps preparation, retains the prior checkpoint, publishes no partial cache and emits no storage-closed. A later process recovers temporary preparation and completes normal save/warm-cache reopen. Abrupt host/process loss remains open."
+    "conversionCancellation": "Stop after aot-progress and before aot-ready reaps preparation, retains the prior checkpoint, publishes no partial cache and emits no storage-closed. A later process recovers temporary preparation and completes normal save/warm-cache reopen. Abrupt host/process loss remains open.",
+    "unwind": "Validate copied pages, overflow and complete header/FDE/CIE patch plan before publishing changes. Literal loads return to the correct PC, and Mono narrowing retains ELF PLT. Unsupported or malformed unwind tables reject loading."
   },
   "ciAttempts": [
     {
@@ -297,5 +276,15 @@
       "hostedCoreTestSeconds": 45.02,
       "buildAndCoreSeconds": 272
     }
-  ]
+  ],
+  "jniPreferencesIntegration": {
+    "status": "jni-hle-and-packaged-unity-fixture-verified",
+    "implementation": "Reuse tl_prefs with per-game, full-name SHA-256 store keys, shared object identity, staged scalar/string edits, clear/remove and independent getAll snapshots. apply is synchronous in this HLE. 0600 temporary file, fsync and atomic rename. Read failure/corruption disables overwrite; unpersisted writes block storage-closed.",
+    "validation": "JNI independent process reopen, long names/game isolation, all supported types, discarded edits, blocked directories and seven corrupt-file forms. Ordinary and AOT Unity each verify save/reopen; packaged write failure rejects checkpoint and storage receipt.",
+    "remaining": [
+      "Real Unity game saves and normal destruction.",
+      "Full Android StringSet and listener behavior.",
+      "Abrupt power or host/process-loss durability; no such test was intentionally triggered."
+    ]
+  }
 }

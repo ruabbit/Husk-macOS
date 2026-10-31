@@ -1,5 +1,17 @@
 # 审计发现
 
+## 2026-10-31：3.2 AOT 数据副本与 Unity JNI 偏好
+
+- 上游 645c22a..d30e12e 七提交/28路径，普通合并 main=3903b7d、macOS=2b67957。逐项读 TLReport.nativeEngine、TLUnityView、project.yml，与 Mac CMake/Models/NativeRunner、PlayAPI/登录策略和图形 pin 比对：无新增引擎或图形 pin；现有全部分发及输入/暂停/存储回执仍须由本轮默认套件验证。Mac 不采用 iOS 证书导入或全局开关，新增设置说明页引导既有每游戏默认关闭选项。
+- 新 AOT v9 同时复制只读数据；保留 fork 精确 ELF 地址分类、系统/应用 install name、私有缓存及完整性验证。cache=mac-aot-3、ABI=65545。literal stub 返回指令位于 rx+8，原上游从 rx+12 算返回偏移会跳回原指令；补 32/64 位 literal-load ELF 回归。
+- 首轮 AOT 回归意外失败在 Mono 的 nexttowardf PLT：Mono 缩小自身 .text 后丢掉独立 ELF .plt，而新布局的 GOT 已到可写副本。保留与 Mono 代码区不重叠的 ELF 可执行区后，四种布局/Mono/namespace/Python tar/静态签名别名通过；未重跑任何商业失败样本。
+- AOT writable 检查覆盖完整跨页区间与溢出；展开表改为全部验证/排序检查后一次发布，异常格式拒绝加载，不再留下部分调整。受控 ELF 验证 PT_GNU_EH_FRAME 和 FDE 都指向执行视图；拒绝异常 header。尚未实测真实 C++/IL2CPP 抛出与 catch 匹配。
+- 上游新 JNI SharedPreferences 的 commit 原本恒真且仅内存。复用既有 tl_prefs，命名文件按完整名称哈希且分属 guest data，编辑器暂存至 commit/apply、clear 先于本批 put、支持各标量/字符串及 getAll 快照。共享序列化增加 0600 临时文件/同步/原子替换与读取错误；损坏库不覆盖。apply 同步写入，关闭前重试尚未写入值，失败阻止 storage-closed。此项不取代真实 Java framework 的 prefs，也不声称实现所有 StringSet/listener 行为。
+- Context7 Android ContextWrapper 文档复核同名共享实例、线程安全和提交后创建文件；JNI 多进程测试验证 staged edits、长名称/游戏隔离、全类型读回、快照、clear/remove、磁盘/损坏文件失败。打包 Unity 普通和 AOT 各两进程验证正常销毁后读回 closes；路径故障不得发布存储回执或 checkpoint。
+- IL2CPP hook 的准确阶段是库构造函数完成后、JNI_OnLoad 之前；首个夹具错误假设早于构造函数已修正，受控 ELF 验证真实上游阶段。未捕获异常仍置 FAILED/停止线程，未接受 longjmp 后继续游戏的成功状态。未主动制造异常崩溃来验收。
+- 最终针对性 25/25（41.28 秒），默认 184/184（299.05 秒），18 Mach-O/406 Java 资源与每语言 782 条通过；11 个共享 C 与 3 个 Swift 仅 iOS 语法检查。GUI 初检揭示说明页单行截断；按 SwiftUI 文档保留受约束宽度并采用理想多行高度，修复后重新全套验证，最终 CUA/PID 21399 的 AX/截图确认完整文案。提交/推送与 CI 待收尾，真实游戏/设备边界保持。
+
+
 ## 2026-10-30：Unity / 静态签名页增量审计
 
 `ee85db6..645c22a` 的 13 提交/23 路径已对照 TLReport/TLUnityView/project.yml 与 Mac CMake/能力判断/Runner、Store/登录和图形构建。共享 Unity Looper/JNI 插件、ES 3.1 查询、Java features/insets、codesign 和 Lua hook 已编入，Mac 补维护/排队 UI 与 SDL hook；没有新引擎、图形 pin 或权限变化。

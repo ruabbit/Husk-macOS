@@ -70,7 +70,7 @@ for mode in ['normal', 'missing', 'ue4', 'pause-failed', 'godot4', 'v8']:
 print('Prepared isolated native driver fixtures')
 
 # Dedicated old Unity, Minecraft and LuaJIT ABI fixtures use the real packaged dispatch.
-for name, define in [('huskplugin', []), ('luajit', ['-DLUAJIT_FIXTURE'])]:
+for name, define in [('huskplugin', []), ('luajit', ['-DLUAJIT_FIXTURE']), ('il2cpp', ['-DIL2CPP_FIXTURE'])]:
     obj = out/(name+'.o')
     subprocess.run([cc, '--target=aarch64-linux-android29', '-O2', '-fPIC', '-ffreestanding', '-fno-stack-protector',
         *define, '-c', root/'tests/macos/fixture/runtime_plugin.c', '-o', obj], check=True)
@@ -88,3 +88,4 @@ for name, define in [('unity', ['-DUNITY_FIXTURE']), ('minecraft', []), ('sdl-lu
         apk.writestr('AndroidManifest.xml', manifest()); apk.write(out/'classes.dex', 'classes.dex')
         for soname in libraries: apk.writestr('lib/arm64-v8a/'+soname, lib.read_bytes())
         if name != 'minecraft': apk.write(dependency, 'lib/arm64-v8a/'+dependency.name)
+        if name == 'unity': apk.write(out/'libil2cpp.so', 'lib/arm64-v8a/libil2cpp.so')

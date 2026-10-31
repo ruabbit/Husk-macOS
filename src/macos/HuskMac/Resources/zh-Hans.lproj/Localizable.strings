@@ -775,3 +775,15 @@
 "以下为本机缓存，可能不是最新结果。" = "以下为本机缓存，可能不是最新结果。";
 "报告已由服务端接收并排队，尚未公开发布。" = "报告已由服务端接收并排队，尚未公开发布。";
 "资料修改已由服务端排队，维护结束后才会同步。" = "资料修改已由服务端排队，维护结束后才会同步。";
+
+"An experimental option for individual games. It is off by default." = "按游戏单独启用的实验性选项，默认关闭。";
+
+"Enable for a game" = "为游戏启用";
+
+"Open a game in the Library, then turn on JIT-less in its game settings. The first launch prepares its libraries and may take longer." = "在资料库打开游戏，然后在游戏设置中启用 JIT-less。首次启动需要准备游戏库，可能耗时较长。";
+
+"On this Mac, Husk signs the converted libraries locally. You do not need to import a developer certificate." = "Husk 会在这台 Mac 上为转换后的库本地签名，无需导入开发者证书。";
+
+"Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode." = "运行时生成代码的游戏或模组可能无法使用。如果准备或启动失败，请关闭该游戏的 JIT-less，恢复通常的运行方式。";
+
+"Play without JIT" = "无需 JIT 游玩";

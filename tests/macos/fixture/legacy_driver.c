@@ -9,12 +9,36 @@ extern void *ALooper_forThread(void);
 
 #ifdef UNITY_FIXTURE
 extern int husk_plugin_count(void);
-static int init_kind;
+static int init_kind, previous_closes;
+static void *preferences;
+static void *jni_string(void *e,const char *s) {
+    const void **j=*(const void ***)e;return ((void *(*)(void *,const char *))j[167])(e,s);
+}
+static void *jni_method(void *e,void *o,const char *name,const char *sig) {
+    const void **j=*(const void ***)e;void *c=((void *(*)(void *,void *))j[31])(e,o);
+    return ((void *(*)(void *,void *,const char *,const char *))j[33])(e,c,name,sig);
+}
+static void *jni_object(void *e,void *o,const char *name,const char *sig,Value *v) {
+    const void **j=*(const void ***)e;return ((void *(*)(void *,void *,void *,Value *))j[36])(e,o,jni_method(e,o,name,sig),v);
+}
+static void save_preferences(void *e) {
+    const void **j=*(const void ***)e;
+    void *ed=jni_object(e,preferences,"edit","()Landroid/content/SharedPreferences$Editor;",0);
+    Value put[]={{.l=jni_string(e,"closes")},{.i=previous_closes+1}};
+    jni_object(e,ed,"putInt","(Ljava/lang/String;I)Landroid/content/SharedPreferences$Editor;",put);
+    int ok=((unsigned char (*)(void *,void *,void *,Value *))j[39])(e,ed,jni_method(e,ed,"commit","()Z"),0);
+    void *f=fopen("/data/user/0/org.husk.driver/prefs-observed.bin","wb");
+    if(f){int v[]={previous_closes,ok};fwrite(v,sizeof v,1,f);fclose(f);}
+}
 static void unity_init(void *e,void *s,void *c,int mode,void *line) {
     const void **jni=*(const void ***)e;
     const char *text=((const char *(*)(void *,void *,void *))jni[169])(e,line,0);
     init_kind=mode==0&&text&&!text[0]?3:-1;
     if(text)((void (*)(void *,void *,const char *))jni[170])(e,line,text);
+    Value args[]={{.l=jni_string(e,"unity.fixture")},{.i=0}};
+    preferences=jni_object(e,c,"getSharedPreferences","(Ljava/lang/String;I)Landroid/content/SharedPreferences;",args);
+    args[0].l=jni_string(e,"closes");
+    previous_closes=((int (*)(void *,void *,void *,Value *))jni[51])(e,preferences,jni_method(e,preferences,"getInt","(Ljava/lang/String;I)I"),args);
 }
 static void wrong_init(void *e,void *s,void *c) { init_kind=-1; }
 static void unity_surface(void *e,void *s,int id,void *surface) {
@@ -26,7 +50,7 @@ static void unity_focus(void *e,void *s,unsigned char f) {}
 static void unity_resume(void *e,void *s) {record(16);}
 static unsigned char unity_pause(void *e,void *s) {record(8);return 0;}
 static unsigned char unity_render(void *e,void *s) {draw();eglSwapBuffers(display,surface);return 1;}
-static void unity_done(void *e,void *s) {record(128);close_gl();}
+static void unity_done(void *e,void *s) {save_preferences(e);record(128);close_gl();}
 static unsigned char unity_input(void *e,void *s,void *event) {
     const void **jni=*(const void ***)e;
     void *key=((void *(*)(void *,const char *))jni[6])(e,"android/view/KeyEvent");
@@ -46,7 +70,14 @@ static unsigned char unity_load(void *e,void *cls,void *directory) {
     Value a={.l=((void *(*)(void *,const char *))jni[167])(e,"huskplugin")};
     for(int i=0;i<2;i++)if(!((unsigned char (*)(void *,void *,void *,const Value *))jni[119])(e,player,mid,&a))return 0;
     if(husk_plugin_count()!=1)return 0;
-    mask|=512;return 1;
+    mask|=512;
+    a.l=jni_string(e,"il2cpp");
+    if(!((unsigned char (*)(void *,void *,void *,const Value *))jni[119])(e,player,mid,&a))return 0;
+    extern void *dlopen(const char *,int);extern void *dlsym(void *,const char *);
+    void *lib=dlopen("libil2cpp.so",2);
+    int (*ready)(void)=lib?dlsym(lib,"husk_il2_ready"):0;
+    if(!ready || !ready())return 0;
+    mask|=1024;return 1;
 }
 int JNI_OnLoad(void *vm,void *unused) {
     void *e=0;const void **v=*(const void ***)vm;

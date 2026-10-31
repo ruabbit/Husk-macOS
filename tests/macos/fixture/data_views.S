@@ -22,16 +22,20 @@ code_pointer: .xword view_address
 .hidden view_address
 .type view_address,%function
 view_address:
+    .cfi_startproc
     adrp x0, view_value
     add x0, x0, :lo12:view_value
     ret
+    .cfi_endproc
 .size view_address,.-view_address
 .global view_relocation
 .type view_relocation,%function
 view_relocation:
+    .cfi_startproc
     adrp x1, view_pointer
     ldr x0, [x1, :lo12:view_pointer]
     ret
+    .cfi_endproc
 .size view_relocation,.-view_relocation
 .global code_relocation
 .type code_relocation,%function
@@ -45,6 +49,20 @@ code_relocation:
 view_export:
     b view_address
 .size view_export,.-view_export
+/* Literal loads must read the relocated data copy and return past the load. */
+.global literal_pointer
+.type literal_pointer,%function
+literal_pointer:
+    ldr x0, view_pointer
+    ret
+.size literal_pointer,.-literal_pointer
+.global literal_word
+.type literal_word,%function
+literal_word:
+    ldr w0, view_value
+    add w0, w0, #1
+    ret
+.size literal_word,.-literal_word
 .global raw_syscall_registers
 .type raw_syscall_registers,%function
 raw_syscall_registers:

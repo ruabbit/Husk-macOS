@@ -68,6 +68,8 @@ typedef struct tl_jhle {
 /* ----------------------------------------------------------------- setup */
 
 void tl_jni_init(void);
+/* Persist outstanding HLE preferences; false blocks a successful close receipt. */
+bool tl_hle_flush_prefs(void);
 void tl_jni_set_trace(int level);       /* 1: lookups; 2: every call */
 
 /* Declare a class with its superclass (JNI names). Safe to repeat. */

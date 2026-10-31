@@ -58,6 +58,9 @@ void tl_prefs_remove(tl_prefs *p, const char *key);
 void tl_prefs_clear(tl_prefs *p);
 
 int tl_prefs_count(const tl_prefs *p);
+/* Snapshot iteration requires the caller to exclude concurrent modifications. */
+const char *tl_prefs_key(const tl_prefs *p, int index);
+char tl_prefs_type(const tl_prefs *p, const char *key); /* I/J/F/Z/S, or 0 */
 
 #ifdef __cplusplus
 }

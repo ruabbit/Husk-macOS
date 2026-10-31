@@ -6,6 +6,8 @@
  */
 #define _DARWIN_C_SOURCE
 #include "husk-tl-jni.h"
+#include "../translation-layer/husk-tl-prefs.h"
+#include <CommonCrypto/CommonDigest.h>
 
 #include <dirent.h>
 #include <errno.h>
@@ -141,54 +143,85 @@ extern jobj *tl_loop_main_looper(void);
 static void Context_getMainLooper(tl_jcall *c) { c->ret = vl(tl_loop_main_looper()); }
 static void Context_getContentResolver(tl_jcall *c) { c->ret = vl(make("android/content/ContentResolver")); }
 static void Context_getClassLoader(tl_jcall *c) { c->ret = vl(make("dalvik/system/PathClassLoader")); }
+/* Each named store is scoped to the current guest data directory. Editors keep
+ * private changes until commit/apply; apply is synchronous in this HLE so no
+ * background write can outlive the Runner's storage-close acknowledgement. */
 typedef struct sp_kv {
-    char *k;
-    int kind; /* 0 int, 1 string, 2 bool, 3 float, 4 long */
-    int i, z;
-    float f;
-    int64_t j;
-    char *s;
+    char *k, *s;
+    int kind; /* -1 remove, 0 int, 1 string, 2 bool, 3 float, 4 long */
+    jvalue v;
     struct sp_kv *next;
 } sp_kv;
-typedef struct sp_store { char name[128]; sp_kv *head; struct sp_store *next; } sp_store;
+typedef struct sp_store {
+    char *name, *root;
+    tl_prefs *values;
+    jobj *object;
+    bool readable, dirty;
+    struct sp_store *next;
+} sp_store;
+typedef struct { sp_store *store; sp_kv *head; bool clear; } sp_editor;
 static sp_store *g_prefs;
+static pthread_mutex_t sp_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static sp_store *sp_named(const char *name)
 {
-    if (!name) name = "";
-    for (sp_store *s = g_prefs; s; s = s->next) if (!strcmp(s->name, name)) return s;
+    for (sp_store *s = g_prefs; s; s = s->next)
+        if (!strcmp(s->name, name) && !strcmp(s->root, H.data)) return s;
     sp_store *s = calloc(1, sizeof *s);
-    snprintf(s->name, sizeof s->name, "%s", name);
-    s->next = g_prefs;
-    g_prefs = s;
+    if (!s) return NULL;
+    s->name = strdup(name); s->root = strdup(H.data); s->values = tl_prefs_create();
+    if (!s->name || !s->root || !s->values) {
+        free(s->name); free(s->root); tl_prefs_destroy(s->values); free(s); return NULL;
+    }
+    unsigned char hash[CC_SHA256_DIGEST_LENGTH]; char hex[65], path[800], dir[600];
+    CC_SHA256(name, (CC_LONG)strlen(name), hash);
+    for (int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", hash[i]);
+    snprintf(dir, sizeof dir, "%s/shared_prefs", H.data); mkdirs(dir);
+    snprintf(path, sizeof path, "%s/hle-%s.prefs", dir, hex);
+    s->readable = H.data[0] && tl_prefs_attach(s->values, path);
+    if (!s->readable) tl_log_line("prefs: existing store could not be read; writes disabled");
+    s->next = g_prefs; g_prefs = s;
     return s;
 }
-static sp_store *sp_of(jobj *o) { return o && o->native ? o->native : NULL; }
-static sp_kv *sp_find(sp_store *st, const char *k)
+static sp_store *sp_of(jobj *o) { return o ? o->native : NULL; }
+static tl_prefs *sp_values(jobj *o) { sp_store *s = sp_of(o); return s ? s->values : NULL; }
+static sp_kv *sp_put(sp_editor *ed, const char *key)
 {
-    if (!st || !k) return NULL;
-    for (sp_kv *e = st->head; e; e = e->next) if (!strcmp(e->k, k)) return e;
-    return NULL;
+    if (!ed) return NULL;
+    for (sp_kv *e = ed->head; e; e = e->next) if (!strcmp(e->k, key)) return e;
+    sp_kv *e = calloc(1, sizeof *e);
+    if (!e) return NULL;
+    e->k = strdup(key);
+    if (!e->k) { free(e); return NULL; }
+    e->next = ed->head; ed->head = e; return e;
 }
-static sp_kv *sp_put(sp_store *st, const char *k)
+/* Called after guest destruction and before the host publishes storage-closed. */
+bool tl_hle_flush_prefs(void)
 {
-    if (!st || !k) return NULL;
-    sp_kv *e = sp_find(st, k);
-    if (e) return e;
-    e = calloc(1, sizeof *e);
-    e->k = strdup(k);
-    e->next = st->head;
-    st->head = e;
-    return e;
+    bool ok = true;
+    pthread_mutex_lock(&sp_lock);
+    for (sp_store *s = g_prefs; s; s = s->next) {
+        if (!s->readable) { ok = false; continue; }
+        if (s->dirty && tl_prefs_save(s->values)) s->dirty = false;
+        if (s->dirty) ok = false;
+    }
+    pthread_mutex_unlock(&sp_lock);
+    return ok;
 }
 
 static void Context_getSharedPreferences(tl_jcall *c)
 {
-    jobj *p = make("android/content/SharedPreferences");
     const char *name = S(c->args[0].l);
-    set_str(p, "name", name);
-    p->native = sp_named(name);
-    c->ret = vl(p);
+    pthread_mutex_lock(&sp_lock);
+    sp_store *store = sp_named(name);
+    if (store && !store->object) {
+        store->object = make("android/content/SharedPreferences");
+        store->object->native = store;
+        set_str(store->object, "name", name);
+    }
+    c->ret = vl(store ? tl_jni_ref(store->object) : NULL);
+    pthread_mutex_unlock(&sp_lock);
+    if (!store) tl_jni_throw("java/lang/OutOfMemoryError", "preferences");
 }
 static void Context_checkCallingOrSelfPermission(tl_jcall *c) { c->ret = vi(0); }   /* PERMISSION_GRANTED */
 static void Context_checkSelfPermission(tl_jcall *c) { c->ret = vi(0); }
@@ -279,10 +312,9 @@ static void UnityPlayer_getLaunchURL(tl_jcall *c) { c->ret = vl(STR("")); }
 static void Nop(tl_jcall *c) { (void)c; }
 static void SP_contains(tl_jcall *c)
 {
-    const char *k = S(c->args[0].l);
-    int hit = sp_find(sp_of(c->self), k) != NULL;
-    tl_log_line("prefs: contains %s -> %d", k, hit);
-    c->ret = vz(hit);
+    pthread_mutex_lock(&sp_lock);
+    c->ret = vz(tl_prefs_contains(sp_values(c->self), S(c->args[0].l)));
+    pthread_mutex_unlock(&sp_lock);
 }
 
 /* ----------------------------------------------------- package information */
@@ -704,86 +736,84 @@ static void Builder_show(tl_jcall *c)
 static void Object_getClass(tl_jcall *c) { c->ret = vl(c->self && c->self->cls ? tl_jni_class_object(tl_jni_class_name(c->self)) : NULL); }
 static void Class_getClassLoader(tl_jcall *c) { c->ret = vl(make("dalvik/system/PathClassLoader")); }
 static void ClassLoader_findLibrary(tl_jcall *c) { char p[300]; snprintf(p, sizeof(p), "%s/lib%s.so", H.native_lib, S(c->args[0].l)); c->ret = vl(STR(p)); }
-static void SP_getInt(tl_jcall *c)
-{
-    sp_kv *e = sp_find(sp_of(c->self), S(c->args[0].l));
-    c->ret = vi(e && e->kind == 0 ? e->i : c->args[1].i);
-}
+#define SP_GETTER(Name, field, getter) \
+static void Name(tl_jcall *c) { \
+    pthread_mutex_lock(&sp_lock); c->ret.field = getter(sp_values(c->self), S(c->args[0].l), c->args[1].field); \
+    pthread_mutex_unlock(&sp_lock); }
+SP_GETTER(SP_getInt, i, tl_prefs_get_int)
+SP_GETTER(SP_getLong, j, tl_prefs_get_long)
+SP_GETTER(SP_getFloat, f, tl_prefs_get_float)
+SP_GETTER(SP_getBoolean, z, tl_prefs_get_bool)
+#undef SP_GETTER
 static void SP_getString(tl_jcall *c)
 {
-    sp_kv *e = sp_find(sp_of(c->self), S(c->args[0].l));
-    if (e && e->kind == 1) { c->ret = vl(STR(e->s ? e->s : "")); return; }
-    c->ret = vl(c->args[1].l ? tl_jni_ref(c->args[1].l) : NULL);
-}
-static void SP_getBoolean(tl_jcall *c)
-{
-    sp_kv *e = sp_find(sp_of(c->self), S(c->args[0].l));
-    c->ret = vz(e && e->kind == 2 ? e->z : c->args[1].z);
-}
-static void SP_getFloat(tl_jcall *c)
-{
-    sp_kv *e = sp_find(sp_of(c->self), S(c->args[0].l));
-    jvalue v; v.j = 0; v.f = e && e->kind == 3 ? e->f : c->args[1].f; c->ret = v;
-}
-static void SP_getLong(tl_jcall *c)
-{
-    sp_kv *e = sp_find(sp_of(c->self), S(c->args[0].l));
-    jvalue v; v.j = e && e->kind == 4 ? e->j : c->args[1].j; c->ret = v;
+    pthread_mutex_lock(&sp_lock);
+    const char *value = tl_prefs_get_string(sp_values(c->self), S(c->args[0].l), NULL);
+    c->ret = vl(value ? STR(value) : tl_jni_ref(c->args[1].l));
+    pthread_mutex_unlock(&sp_lock);
 }
 static void SP_edit(tl_jcall *c)
 {
-    jobj *ed = make("android/content/SharedPreferences$Editor");
-    ed->native = sp_of(c->self);
-    c->ret = vl(ed);
+    jobj *obj = make("android/content/SharedPreferences$Editor");
+    sp_editor *ed = calloc(1, sizeof *ed);
+    if (ed) ed->store = sp_of(c->self);
+    else tl_jni_throw("java/lang/OutOfMemoryError", "preferences editor");
+    obj->native = ed; c->ret = vl(obj);
 }
-static void Editor_self(tl_jcall *c) { c->ret = vl(tl_jni_ref(c->self)); }
-static void Editor_noop(tl_jcall *c) { (void)c; }
-static void Editor_commit(tl_jcall *c) { c->ret = vz(1); }
-static void Editor_putInt(tl_jcall *c)
+static bool sp_commit(jobj *obj)
 {
-    sp_kv *e = sp_put(sp_of(c->self), S(c->args[0].l));
-    if (e) { e->kind = 0; e->i = c->args[1].i; }
-    c->ret = vl(tl_jni_ref(c->self));
-}
-static void Editor_putString(tl_jcall *c)
-{
-    sp_kv *e = sp_put(sp_of(c->self), S(c->args[0].l));
-    if (e) { e->kind = 1; free(e->s); e->s = strdup(S(c->args[1].l)); }
-    c->ret = vl(tl_jni_ref(c->self));
-}
-static void Editor_putBoolean(tl_jcall *c)
-{
-    sp_kv *e = sp_put(sp_of(c->self), S(c->args[0].l));
-    if (e) { e->kind = 2; e->z = c->args[1].z; }
-    c->ret = vl(tl_jni_ref(c->self));
-}
-static void Editor_putFloat(tl_jcall *c)
-{
-    sp_kv *e = sp_put(sp_of(c->self), S(c->args[0].l));
-    if (e) { e->kind = 3; e->f = c->args[1].f; }
-    c->ret = vl(tl_jni_ref(c->self));
-}
-static void Editor_putLong(tl_jcall *c)
-{
-    sp_kv *e = sp_put(sp_of(c->self), S(c->args[0].l));
-    if (e) { e->kind = 4; e->j = c->args[1].j; }
-    c->ret = vl(tl_jni_ref(c->self));
-}
-static void Editor_remove(tl_jcall *c)
-{
-    sp_store *st = sp_of(c->self);
-    const char *k = S(c->args[0].l);
-    sp_kv **pp = st ? &st->head : NULL;
-    while (pp && *pp) {
-        if (!strcmp((*pp)->k, k)) { sp_kv *d = *pp; *pp = d->next; free(d->k); free(d->s); free(d); break; }
-        pp = &(*pp)->next;
+    sp_editor *ed = obj ? obj->native : NULL;
+    if (!ed || !ed->store) return false;
+    pthread_mutex_lock(&sp_lock);
+    sp_store *st = ed->store;
+    if (ed->clear) tl_prefs_clear(st->values);
+    while (ed->head) {
+        sp_kv *e = ed->head; ed->head = e->next;
+        switch (e->kind) {
+            case -1: tl_prefs_remove(st->values, e->k); break;
+            case 0: tl_prefs_put_int(st->values, e->k, e->v.i); break;
+            case 1: tl_prefs_put_string(st->values, e->k, e->s); break;
+            case 2: tl_prefs_put_bool(st->values, e->k, e->v.z); break;
+            case 3: tl_prefs_put_float(st->values, e->k, e->v.f); break;
+            case 4: tl_prefs_put_long(st->values, e->k, e->v.j); break;
+        }
+        free(e->k); free(e->s); free(e);
     }
+    ed->clear = false;
+    bool ok = st->readable && tl_prefs_save(st->values);
+    st->dirty = !ok;
+    pthread_mutex_unlock(&sp_lock);
+    if (!ok) tl_log_line("prefs: commit could not persist the store");
+    return ok;
+}
+static void Editor_commit(tl_jcall *c) { c->ret = vz(sp_commit(c->self)); }
+static void Editor_apply(tl_jcall *c) { (void)sp_commit(c->self); }
+static void sp_stage(tl_jcall *c, int kind)
+{
+    pthread_mutex_lock(&sp_lock);
+    sp_kv *e = sp_put(c->self ? c->self->native : NULL, S(c->args[0].l));
+    char *str = kind == 1 && c->args[1].l ? strdup(S(c->args[1].l)) : NULL;
+    if (!e || (kind == 1 && c->args[1].l && !str)) {
+        free(str); tl_jni_throw("java/lang/OutOfMemoryError", "preferences value");
+    } else {
+        free(e->s); e->s = str;
+        e->kind = kind; if (kind >= 0) e->v = c->args[1];
+    }
+    pthread_mutex_unlock(&sp_lock);
     c->ret = vl(tl_jni_ref(c->self));
 }
+static void Editor_putInt(tl_jcall *c) { sp_stage(c, 0); }
+static void Editor_putString(tl_jcall *c) { sp_stage(c, 1); }
+static void Editor_putBoolean(tl_jcall *c) { sp_stage(c, 2); }
+static void Editor_putFloat(tl_jcall *c) { sp_stage(c, 3); }
+static void Editor_putLong(tl_jcall *c) { sp_stage(c, 4); }
+static void Editor_remove(tl_jcall *c) { sp_stage(c, -1); }
 static void Editor_clear(tl_jcall *c)
 {
-    sp_store *st = sp_of(c->self);
-    while (st && st->head) { sp_kv *d = st->head; st->head = d->next; free(d->k); free(d->s); free(d); }
+    pthread_mutex_lock(&sp_lock);
+    sp_editor *ed = c->self ? c->self->native : NULL;
+    if (ed) ed->clear = true;
+    pthread_mutex_unlock(&sp_lock);
     c->ret = vl(tl_jni_ref(c->self));
 }
 /* java.io.FileOutputStream over a host file (Unity's Java side writes its files with it): the descriptor + 1 in native */
@@ -975,7 +1005,30 @@ static void Map_entrySet(tl_jcall *c) { c->ret = vl(make("java/util/HashSet")); 
 static void Set_iterator(tl_jcall *c) { c->ret = vl(make("java/util/Iterator")); }
 static void Coll_size(tl_jcall *c) { c->ret = vi(0); }
 static void Coll_isEmpty(tl_jcall *c) { c->ret = vz(1); }
-static void SP_getAll(tl_jcall *c) { c->ret = vl(make("java/util/HashMap")); }
+static void SP_getAll(tl_jcall *c)
+{
+    jobj *map = make("java/util/HashMap");
+    pthread_mutex_lock(&sp_lock);
+    tl_prefs *p = sp_values(c->self);
+    for (int i = 0; i < tl_prefs_count(p); i++) {
+        const char *key = tl_prefs_key(p, i);
+        char type = tl_prefs_type(p, key); jvalue v = {0}; jobj *value = NULL;
+        const char *cls = NULL;
+        switch (type) {
+            case 'I': cls = "java/lang/Integer"; v.i = tl_prefs_get_int(p,key,0); break;
+            case 'J': cls = "java/lang/Long"; v.j = tl_prefs_get_long(p,key,0); break;
+            case 'F': cls = "java/lang/Float"; v.f = tl_prefs_get_float(p,key,0); break;
+            case 'Z': cls = "java/lang/Boolean"; v.z = tl_prefs_get_bool(p,key,false); break;
+            case 'S': value = STR(tl_prefs_get_string(p,key,"")); break;
+        }
+        if (cls) { char sig[] = {type,0}; value = make(cls); tl_jni_set_field(value,"value",sig,v); }
+        jvalue args[2] = {{.l=STR(key)},{.l=value}};
+        jobj *old = tl_jni_call(map,"put","(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",args).l;
+        tl_jni_unref(old); tl_jni_unref(args[0].l); tl_jni_unref(value);
+    }
+    pthread_mutex_unlock(&sp_lock);
+    c->ret = vl(map);
+}
 static void Intent_getExtras(tl_jcall *c) { c->ret = vl(NULL); }
 static void Intent_init_action(tl_jcall *c) { tl_jni_set_field(c->self, "action", "Ljava/lang/String;", vl(c->args[0].l)); }
 static void Intent_self(tl_jcall *c) { c->ret = vl(c->self); }
@@ -1351,7 +1404,7 @@ static const tl_jhle k_hle[] = {
     M("android/content/SharedPreferences$Editor", "putInt", "(Ljava/lang/String;I)Landroid/content/SharedPreferences$Editor;", Editor_putInt),
     M("android/content/SharedPreferences$Editor", "putString", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;", Editor_putString),
     M("android/content/SharedPreferences$Editor", "putBoolean", "(Ljava/lang/String;Z)Landroid/content/SharedPreferences$Editor;", Editor_putBoolean),
-    M("android/content/SharedPreferences$Editor", "apply", "()V", Editor_noop),
+    M("android/content/SharedPreferences$Editor", "apply", "()V", Editor_apply),
     M("java/util/Iterator", "hasNext", "()Z", Iterator_hasNext), M("java/util/Iterator", "next", "()Ljava/lang/Object;", Iterator_next),
     M("java/lang/String", "<init>", "()V", String_init_empty), M("java/lang/String", "<init>", "([B)V", String_init_bytes),
     M("java/lang/String", "<init>", "([BLjava/lang/String;)V", String_init_bytes), M("java/lang/String", "<init>", "([BII)V", String_init_bytes_range),

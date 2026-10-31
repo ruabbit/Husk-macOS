@@ -21,24 +21,52 @@ static int locate(uintptr_t bias,const char *name,const void *raw,unsigned count
     }
     return 0;
 }
+typedef struct { const void *pc; int found; } Unwind;
+static int unwind_header(uintptr_t bias,const char *name,const void *raw,unsigned count,void *user) {
+    (void)name;Unwind *u=user;const PH *ph=raw;
+    for(unsigned i=0;i<count;i++)if(ph[i].type==0x6474e550u){
+        const unsigned char *h=(const void *)(bias+ph[i].vaddr);
+        if(h[0]!=1||h[1]!=0x1b||h[2]!=3||h[3]!=0x3b||ph[i].memsz<20)return 1;
+        uint32_t n;memcpy(&n,h+8,4);
+        for(unsigned j=0;j<n;j++) {
+            int32_t pc,fde;memcpy(&pc,h+12+j*8,4);memcpy(&fde,h+16+j*8,4);
+            const unsigned char *f=h+fde;int32_t start;memcpy(&start,f+8,4);
+            if(h+pc==u->pc && f+8+start==u->pc)u->found=1;
+        }
+        return 1;
+    }
+    return 0;
+}
 int main(int argc,char **argv) {
-    if(argc!=2 && argc!=4)return 64;
+    if(argc!=2 && argc!=3 && argc!=4)return 64;
     mac_runtime_diagnostics_install();
-    tl_lib *lib=tl_ld_load(argv[1]);CHECK(lib&&tl_ld_init(lib));
+    tl_lib *lib=tl_ld_load(argv[1]);
+    if(argc==3 && !strcmp(argv[2],"reject-unwind")){CHECK(!lib);puts("PASS malformed AOT unwind rejected before execution");return 0;}
+    CHECK(lib&&tl_ld_init(lib));
     const uint64_t *(*address)(void)=tl_ld_sym(lib,"view_export");
     const uint64_t *(*relocation)(void)=tl_ld_sym(lib,"view_relocation");
     const void *(*code)(void)=tl_ld_sym(lib,"code_relocation");
     int (*syscall_registers)(long)=tl_ld_sym(lib,"raw_syscall_registers");
     CHECK(address&&relocation&&code&&syscall_registers);
+    Unwind unwind={.pc=code()};tl_ld_iterate(unwind_header,&unwind);CHECK(unwind.found);
     CHECK(address()==relocation());CHECK(address()==tl_ld_sym(lib,"view_value"));
     CHECK(*address()==UINT64_C(0x123456789abcdef));
     const uint64_t *(*indirect)(void)=(void *)code();CHECK(indirect&&indirect()==address());
+    const uint64_t *(*literal)(void)=tl_ld_sym(lib,"literal_pointer");
+    uint32_t (*word)(void)=tl_ld_sym(lib,"literal_word");
+    CHECK(literal && word && literal()==address() && word()==0x89abcdf0);
     CHECK(syscall_registers(getpid()));
     uint32_t (*quad_direction)(void)=tl_ld_sym(lib,"quad_direction");
     CHECK(quad_direction && quad_direction()==0x3f800001);
     const uint32_t *metadata=tl_ld_sym(lib,"mono_data_word");
     if(metadata)CHECK(*metadata==0xd4000001); // only the Mono code range may be rewritten
     if(getenv("TL_NO_XMEM")) {
+        CHECK(tl_ld_aot_writable(address(),sizeof(uint64_t))==address());
+        CHECK(!tl_ld_aot_writable(address(),SIZE_MAX));
+        CHECK(!tl_ld_aot_writable((void *)(UINTPTR_MAX-3),8));
+        CHECK(tl_ld_covers(address(),sizeof(uint64_t)));
+        CHECK(tl_ld_covers((void *)(UINTPTR_MAX-3),8));
+        CHECK(!tl_ld_covers(address(),0));
         CHECK(tl_xmem_size()==0 && tl_xmem_used()==0);
         void *(*map)(void *,size_t,int,int,int,long)=tl_bionic_find("mmap");
         int (*protect)(void *,size_t,int)=tl_bionic_find("mprotect");
@@ -47,6 +75,9 @@ int main(int argc,char **argv) {
         void *data=map(NULL,16384,PROT_READ|PROT_WRITE,0x22,-1,0);CHECK(data!=MAP_FAILED);
         CHECK(protect(data,16384,PROT_READ|PROT_EXEC)==-1);CHECK(unmap(data,16384)==0);
         int (*value)(void)=tl_ld_sym(lib,"static_alias_value");CHECK(value && value()==73);
+        CHECK(!tl_ld_aot_writable((void *)value,16384));
+        CHECK(!tl_ld_aot_writable((const char *)value-1,2));
+        CHECK(unmap((void *)value,16384)==0 && value()==73);
         Range range={.symbol=(uintptr_t)value};tl_ld_iterate(locate,&range);CHECK(range.found && range.file%16384==0);
         if(getenv("HUSK_REQUIRE_FILE_TRANSLATION"))CHECK(range.file!=(uintptr_t)value-(uintptr_t)tl_ld_lib_base(lib));
         int fd=open(argv[1],O_RDONLY);CHECK(fd>=0);
@@ -75,5 +106,6 @@ int main(int argc,char **argv) {
         }
         puts("PASS signed static code alias: translated file offset, exact copied ELF, RX only, fixed reservation, release and rejection bounds");
     }
+    puts("PASS unwind header and FDE point to executable functions after copying");
     puts("PASS ELF PC-relative and relocated data/code pointers; raw syscall NZCV and full q8-q15 preserved");return 0;
 }

@@ -2,6 +2,12 @@
 #include "husk-tl-prefs.h"
 
 #include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <ctype.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -17,6 +23,7 @@ struct tl_prefs {
     entry_t *items;
     int count, cap;
     char *path;
+    bool allocation_failed;
 };
 
 /* ------------------------------------------------------------------ store */
@@ -47,14 +54,14 @@ static entry_t *slot(tl_prefs *p, const char *key, kind_t kind)
         if (p->count == p->cap) {
             int cap = p->cap ? p->cap * 2 : 32;
             entry_t *grown = realloc(p->items, (size_t)cap * sizeof(*grown));
-            if (!grown) return NULL;
+            if (!grown) { p->allocation_failed = true; return NULL; }
             p->items = grown;
             p->cap = cap;
         }
         e = &p->items[p->count];
         memset(e, 0, sizeof(*e));
         e->key = strdup(key);
-        if (!e->key) return NULL;
+        if (!e->key) { p->allocation_failed = true; return NULL; }
         p->count++;
     }
     e->kind = kind;
@@ -83,6 +90,11 @@ void tl_prefs_clear(tl_prefs *p)
 }
 
 int tl_prefs_count(const tl_prefs *p) { return p ? p->count : 0; }
+
+const char *tl_prefs_key(const tl_prefs *p, int index)
+{ return p && index >= 0 && index < p->count ? p->items[index].key : NULL; }
+char tl_prefs_type(const tl_prefs *p, const char *key)
+{ const entry_t *e = find(p, key); return e ? "IJFZS"[e->kind] : 0; }
 
 void tl_prefs_remove(tl_prefs *p, const char *key)
 {
@@ -124,7 +136,7 @@ void tl_prefs_put_string(tl_prefs *p, const char *key, const char *v)
 {
     if (!v) { tl_prefs_remove(p, key); return; }
     char *copy = strdup(v);
-    if (!copy) return;
+    if (!copy) { if (p) p->allocation_failed = true; return; }
     entry_t *e = slot(p, key, K_STRING);
     if (e) e->v.s = copy; else free(copy);
 }
@@ -151,8 +163,9 @@ static char *unescape(const char *s)
     char *out = malloc(strlen(s) + 1), *w = out;
     if (!out) return NULL;
     for (; *s; s++) {
-        if (*s == '\\' && s[1]) {
+        if (*s == '\\') {
             s++;
+            if (!*s || !strchr("tnr\\", *s)) { free(out); return NULL; }
             *w++ = (*s == 't') ? '\t' : (*s == 'n') ? '\n' : (*s == 'r') ? '\r' : *s;
         } else {
             *w++ = *s;
@@ -164,16 +177,19 @@ static char *unescape(const char *s)
 
 bool tl_prefs_save(const tl_prefs *p)
 {
+    if (p && p->allocation_failed) return false;
     if (!p || !p->path) return true;
 
     /* Written beside the real file and renamed over it, so a crash or a power
      * cut mid-write leaves the previous settings, not a half-file. */
-    size_t n = strlen(p->path) + 5;
+    size_t n = strlen(p->path) + 12;
     char *tmp = malloc(n);
     if (!tmp) return false;
-    snprintf(tmp, n, "%s.tmp", p->path);
-    FILE *f = fopen(tmp, "w");
-    if (!f) { free(tmp); return false; }
+    snprintf(tmp, n, "%s.XXXXXX", p->path);
+    int fd = mkstemp(tmp);
+    if (fd < 0) { free(tmp); return false; }
+    FILE *f = fdopen(fd, "w");
+    if (!f) { close(fd); unlink(tmp); free(tmp); return false; }
 
     fputs("husk-prefs 1\n", f);
     for (int i = 0; i < p->count; i++) {
@@ -192,7 +208,7 @@ bool tl_prefs_save(const tl_prefs *p)
         }
         fputc('\n', f);
     }
-    bool ok = fflush(f) == 0 && ferror(f) == 0;
+    bool ok = fflush(f) == 0 && ferror(f) == 0 && fsync(fd) == 0;
     ok = (fclose(f) == 0) && ok;
     if (ok) ok = rename(tmp, p->path) == 0;
     if (!ok) remove(tmp);
@@ -207,39 +223,75 @@ bool tl_prefs_attach(tl_prefs *p, const char *path)
     p->path = path ? strdup(path) : NULL;
     if (!path) return true;
 
-    FILE *f = fopen(path, "r");
-    if (!f) return true;                 /* nothing saved yet: not an error */
+    if (!p->path) return false;
+    int fd = open(path, O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) return errno == ENOENT;
+    struct stat st;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_uid != getuid() || st.st_size > 8 * 1024 * 1024) {
+        close(fd); return false;
+    }
+    FILE *f = fdopen(fd, "r");
+    if (!f) { close(fd); return false; }
 
     char *line = NULL;
     size_t cap = 0;
     ssize_t len;
     bool first = true, ok = true;
+    tl_prefs *seen = tl_prefs_create();
+    if (!seen) { fclose(f); return false; }
     while ((len = getline(&line, &cap, f)) >= 0) {
+        if (memchr(line, 0, (size_t)len)) { ok = false; break; }
         while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) line[--len] = 0;
         if (first) {
             first = false;
-            if (strncmp(line, "husk-prefs", 10) != 0) { ok = false; break; }
+            if (strcmp(line, "husk-prefs 1") != 0) { ok = false; break; }
             continue;
         }
         /* TAG <tab> key <tab> value */
         char *t1 = strchr(line, '\t');
         char *t2 = t1 ? strchr(t1 + 1, '\t') : NULL;
-        if (!t1 || !t2) continue;
+        if (!t1 || !t2 || t1 != line + 1) { ok = false; break; }
         *t1 = 0; *t2 = 0;
         char *key = unescape(t1 + 1);
-        if (!key) continue;
+        if (!key) { ok = false; break; }
         const char *val = t2 + 1;
+        if (strchr(val, '\t') || tl_prefs_contains(seen, key)) { free(key); ok = false; break; }
+        tl_prefs_put_bool(seen, key, true);
+        if (seen->allocation_failed) { free(key); ok = false; break; }
+        char *end = NULL;
+        errno = 0;
         switch (line[0]) {
-            case 'I': tl_prefs_put_int(p, key, (int32_t)strtol(val, NULL, 10)); break;
-            case 'J': tl_prefs_put_long(p, key, (int64_t)strtoll(val, NULL, 10)); break;
-            case 'F': { uint32_t bits = (uint32_t)strtoul(val, NULL, 16); float fv; memcpy(&fv, &bits, 4);
-                        tl_prefs_put_float(p, key, fv); break; }
-            case 'Z': tl_prefs_put_bool(p, key, val[0] == '1'); break;
-            case 'S': { char *sv = unescape(val); if (sv) { tl_prefs_put_string(p, key, sv); free(sv); } break; }
-            default: break;
+            case 'I': case 'J': {
+                long long v = strtoll(val, &end, 10);
+                ok = *val && !isspace((unsigned char)*val) && end != val && !*end && errno != ERANGE;
+                if (line[0] == 'I') {
+                    ok = ok && v >= INT32_MIN && v <= INT32_MAX;
+                    if (ok) tl_prefs_put_int(p, key, (int32_t)v);
+                } else if (ok) tl_prefs_put_long(p, key, (int64_t)v);
+                break;
+            }
+            case 'F': {
+                unsigned long v = strtoul(val, &end, 16);
+                ok = strlen(val) == 8 && strspn(val,"0123456789abcdefABCDEF") == 8 && !*end && errno != ERANGE && v <= UINT32_MAX;
+                if (ok) { uint32_t bits = (uint32_t)v; float fv; memcpy(&fv, &bits, 4); tl_prefs_put_float(p, key, fv); }
+                break;
+            }
+            case 'Z':
+                ok = !strcmp(val, "0") || !strcmp(val, "1");
+                if (ok) tl_prefs_put_bool(p, key, val[0] == '1');
+                break;
+            case 'S': {
+                char *sv = unescape(val); ok = sv != NULL;
+                if (sv) { tl_prefs_put_string(p, key, sv); free(sv); }
+                break;
+            }
+            default: ok = false; break;
         }
         free(key);
+        if (!ok) break;
     }
+    ok = ok && !first && !ferror(f) && !p->allocation_failed;
+    tl_prefs_destroy(seen);
     free(line);
     fclose(f);
     return ok;

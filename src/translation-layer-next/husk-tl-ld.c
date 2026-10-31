@@ -614,20 +614,26 @@ tl_lib *tl_ld_lib_of(const void *addr)
     return NULL;
 }
 
+/* Validate every copied page, including ranges crossing a page boundary. */
+static bool aot_copy_range(const tl_lib *L, size_t off, size_t bytes)
+{
+    size_t span = L->npages * PAGE;
+    if (!bytes || off >= span || bytes > span - off) return false;
+    for (size_t p = off / PAGE; p <= (off + bytes - 1) / PAGE; p++)
+        if (!mixed_page(L, p)) return false;
+    return true;
+}
+
 void *tl_ld_aot_writable(const void *addr, size_t bytes)
 {
-    if (!addr || bytes == 0) return NULL;
-    const uint8_t *a = addr;
+    uintptr_t a = (uintptr_t)addr;
+    if (!a || !bytes) return NULL;
     for (int i = 0; i < G.nlibs; i++) {
         tl_lib *L = G.libs[i];
         if (!L->aot || !L->dup) continue;
-        size_t span = L->npages * PAGE;
-        uint64_t off;
-        if (a >= L->rx && a + bytes <= L->rx + span) off = (uint64_t)(a - L->rx);
-        else if (a >= L->dup && a + bytes <= L->dup + span) off = (uint64_t)(a - L->dup);
-        else continue;
-        if (!mixed_page(L, (size_t)(off / PAGE))) continue;
-        return L->dup + off;
+        uintptr_t base[] = {(uintptr_t)L->rx, (uintptr_t)L->dup};
+        for (int j = 0; j < 2; j++)
+            if (a >= base[j] && aot_copy_range(L, a - base[j], bytes)) return L->dup + (a - base[j]);
     }
     return NULL;
 }
@@ -664,14 +670,19 @@ bool tl_ld_aot_contains(const void *addr)
 
 bool tl_ld_covers(const void *addr, size_t bytes)
 {
-    if (!addr || bytes == 0) return false;
-    const uint8_t *lo = addr, *hi = lo + bytes;
+    uintptr_t lo = (uintptr_t)addr;
+    if (!lo || !bytes) return false;
+    /* Invalid wrapping ranges must never reach host munmap/mprotect. */
+    if (bytes > UINTPTR_MAX - lo) return true;
+    uintptr_t hi = lo + bytes;
     for (int i = 0; i < G.nlibs; i++) {
         tl_lib *L = G.libs[i];
         size_t span = (L->npages + L->nstub + 2) * PAGE;
-        if (L->rx && lo < L->rx + span && hi > L->rx) return true;
-        if (L->rw && L->rw != L->rx && lo < L->rw + span && hi > L->rw) return true;
-        if (L->dup && lo < L->dup + L->npages * PAGE && hi > L->dup) return true;
+        uintptr_t base[] = {(uintptr_t)L->rx, (uintptr_t)L->rw, (uintptr_t)L->dup};
+        for (int j = 0; j < 3; j++) {
+            size_t length = j == 2 ? L->npages * PAGE : span;
+            if (base[j] && hi > base[j] && (lo <= base[j] || lo - base[j] < length)) return true;
+        }
     }
     return false;
 }
@@ -2644,6 +2655,14 @@ static bool mono_aot_code_only(tl_lib *L)
     }
     #undef VA
     #undef OK
+    /* Mono metadata narrows its containing .text section, not unrelated ELF
+     * code such as .plt. Those imports also need the AOT GOT-copy rewrite. */
+    for (int i = 0; i < L->ncode && n < 16; i++) {
+        bool overlaps = false;
+        for (int j = 0; j < n; j++)
+            if (L->code[i].start < r[j].end && r[j].start < L->code[i].end) overlaps = true;
+        if (!overlaps) { r[n].start = L->code[i].start; r[n].end = L->code[i].end; n++; }
+    }
     L->ncode = n;
     for (int i = 0; i < n; i++) { L->code[i].start = r[i].start; L->code[i].end = r[i].end; }
     tl_log_line("ld: %s: Mono AOT image: patching only its code (%d ranges, %.1f of %.1f MiB)", L->name, n,
@@ -2702,40 +2721,53 @@ static void patch_library(tl_lib *L, size_t *t, size_t *a, size_t *ad, size_t *s
  * pcrel/datarel function address by (rx - dup) so FDE ranges still name the r-x PC. LSDA
  * pcrel from the copy then names the relocated typeinfo, which is what __cxa_throw stored.
  */
-static bool aot_add_enc(uint8_t *p, uint8_t enc, int64_t delta)
+typedef struct { uint8_t *at, value[8]; size_t size; } aot_unwind_patch;
+typedef struct { aot_unwind_patch *items; size_t count, capacity; } aot_unwind_plan;
+/* Validate the complete unwind graph before publishing any adjusted bytes. */
+static bool aot_add_enc(aot_unwind_plan *plan, uint8_t *p, uint8_t enc, int64_t delta)
 {
+    aot_unwind_patch patch = {.at=p};
     switch (enc & 0x0F) {
     case 0x0B: {
-        int32_t v; memcpy(&v, p, 4);
-        int64_t n = (int64_t)v + delta;
-        if (n < (int64_t)INT32_MIN || n > (int64_t)INT32_MAX) return false;
-        v = (int32_t)n; memcpy(p, &v, 4); return true;
+        int32_t v; memcpy(&v,p,4); int64_t n=(int64_t)v+delta;
+        if(n<INT32_MIN || n>INT32_MAX)return false;
+        v=(int32_t)n;memcpy(patch.value,&v,4);patch.size=4;break;
     }
     case 0x03: {
-        uint32_t v; memcpy(&v, p, 4);
-        int64_t n = (int64_t)v + delta;
-        if (n < 0 || n > (int64_t)UINT32_MAX) return false;
-        v = (uint32_t)n; memcpy(p, &v, 4); return true;
+        uint32_t v;memcpy(&v,p,4);int64_t n=(int64_t)v+delta;
+        if(n<0 || n>UINT32_MAX)return false;
+        v=(uint32_t)n;memcpy(patch.value,&v,4);patch.size=4;break;
     }
     case 0x00: case 0x04: case 0x0C: {
-        uint64_t v; memcpy(&v, p, 8);
-        v += (uint64_t)delta; memcpy(p, &v, 8); return true;
+        uint64_t v;memcpy(&v,p,8);v+=(uint64_t)delta;
+        memcpy(patch.value,&v,8);patch.size=8;break;
     }
-    default:
-        return false;
+    default:return false;
     }
+    if(plan->count==plan->capacity) {
+        size_t cap=plan->capacity ? plan->capacity*2 : 32;
+        if(cap>SIZE_MAX/sizeof(patch))return false;
+        void *grown=realloc(plan->items,cap*sizeof(patch));if(!grown)return false;
+        plan->items=grown;plan->capacity=cap;
+    }
+    plan->items[plan->count++]=patch;return true;
+}
+
+static int aot_patch_order(const void *a, const void *b)
+{
+    uintptr_t x=(uintptr_t)((const aot_unwind_patch *)a)->at, y=(uintptr_t)((const aot_unwind_patch *)b)->at;
+    return (x>y)-(x<y);
 }
 
 static uint8_t *aot_dup_at(tl_lib *L, uint64_t vaddr, size_t n)
 {
     if (vaddr < L->base_vaddr) return NULL;
     uint64_t off = vaddr - L->base_vaddr;
-    if (!L->dup || off + n > L->npages * PAGE) return NULL;
-    if (!mixed_page(L, (size_t)(off / PAGE))) return NULL;
+    if (!L->dup || !aot_copy_range(L, off, n)) return NULL;
     return L->dup + off;
 }
 
-static bool aot_slide_cie_personality(uint8_t *cie, uint8_t *end, int64_t delta, size_t *n_pers)
+static bool aot_slide_cie_personality(aot_unwind_plan *plan, uint8_t *cie, uint8_t *end, int64_t delta, size_t *n_pers)
 {
     if (cie + 12 > end) return false;
     uint32_t len; memcpy(&len, cie, 4);
@@ -2752,6 +2784,7 @@ static bool aot_slide_cie_personality(uint8_t *cie, uint8_t *end, int64_t delta,
     if (version == 1) q++; else if (!uleb(&q, cend, &t)) return false;
     if (aug[0] != 'z') return true;
     uint64_t alen; if (!uleb(&q, cend, &alen)) return false;
+    if (alen > (uint64_t)(cend - q)) return false;
     const uint8_t *aend = q + alen;
     for (const char *a = aug + 1; *a && q < aend; a++) {
         if (*a == 'R' || *a == 'L') q++;
@@ -2760,7 +2793,7 @@ static bool aot_slide_cie_personality(uint8_t *cie, uint8_t *end, int64_t delta,
             int64_t dummy; size_t psz;
             if (!read_enc(q, aend, (uint8_t)(penc & 0x0F), 0, &dummy, &psz)) return false;
             if (!(penc & 0x80) && ((penc & 0x70) == 0x10)) {
-                if (!aot_add_enc((uint8_t *)(uintptr_t)q, penc, delta)) return false;
+                if (!aot_add_enc(plan, (uint8_t *)(uintptr_t)q, penc, delta)) return false;
                 (*n_pers)++;
             }
             q += psz;
@@ -2771,78 +2804,62 @@ static bool aot_slide_cie_personality(uint8_t *cie, uint8_t *end, int64_t delta,
     return true;
 }
 
-static void aot_fix_cxx_unwind(tl_lib *L)
+static bool aot_fix_cxx_unwind(tl_lib *L)
 {
-    if (!L->aot || !L->dup || L->dup == L->rx) return;
-    int64_t delta = (int64_t)(uintptr_t)L->rx - (int64_t)(uintptr_t)L->dup;
-    if (delta >= (int64_t)INT32_MAX || delta <= (int64_t)INT32_MIN) {
-        tl_log_line("ld: %s: AOT data copy is too far from the image for C++ unwind (%lld)", L->name, (long long)delta);
-        return;
-    }
-    const uint32_t PT_EH = 0x6474e550u;
+    if (!L->aot || !L->dup || L->dup == L->rx) return true;
     int eh = -1;
-    for (unsigned i = 0; i < L->phnum; i++) if (L->phdr[i].p_type == PT_EH) eh = (int)i;
-    if (eh < 0) return;
-    uint64_t hdr_va = L->phdr[eh].p_vaddr;
-    uint8_t *hdr = aot_dup_at(L, hdr_va, 12);
-    if (!hdr) return;
-    uint8_t *img_end = L->dup + L->npages * PAGE;
-    if (hdr[0] != 1 || hdr[3] != 0x3B) {
-        tl_log_line("ld: %s: AOT unwind header is not version-1 datarel sdata4; C++ catch may still miss", L->name);
-        return;
+    for (unsigned i=0;i<L->phnum;i++) if(L->phdr[i].p_type==0x6474e550u)eh=(int)i;
+    if(eh<0)return true;
+    int64_t delta=(int64_t)(uintptr_t)L->rx-(int64_t)(uintptr_t)L->dup;
+    aot_unwind_plan plan={0}; bool ok=false;
+    size_t n_fde=0,n_pers=0;
+    uint64_t hdr_va=L->phdr[eh].p_vaddr;
+    uint8_t *hdr=aot_dup_at(L,hdr_va,12);
+    if(!hdr || delta>=INT32_MAX || delta<=INT32_MIN || hdr[0]!=1 || hdr[3]!=0x3B)goto done;
+    size_t hdr_size=(size_t)L->phdr[eh].p_memsz;
+    if(hdr_size<12 || !aot_dup_at(L,hdr_va,hdr_size))goto done;
+    uint8_t *hdr_end=hdr+hdr_size;
+    int64_t ehf,count;size_t s1,s2;
+    if(!read_enc(hdr+4,hdr_end,hdr[1],hdr_va+4,&ehf,&s1) ||
+       !read_enc(hdr+4+s1,hdr_end,hdr[2],0,&count,&s2))goto done;
+    uint8_t *tbl=hdr+4+s1+s2;
+    if(count<0 || (uint64_t)count>(size_t)(hdr_end-tbl)/8)goto done;
+    for(int64_t i=0;i<count;i++) {
+        int32_t fde_rel;memcpy(&fde_rel,tbl+(size_t)i*8+4,4);
+        if(!aot_add_enc(&plan,tbl+(size_t)i*8,0x0B,delta))goto done;
+        uint64_t fde_va=hdr_va+(uint64_t)(int64_t)fde_rel;
+        uint8_t *fde=aot_dup_at(L,fde_va,12);
+        if(!fde)goto done;
+        uint32_t len,cie_ptr;memcpy(&len,fde,4);memcpy(&cie_ptr,fde+4,4);
+        if(len<8 || len==UINT32_MAX || !cie_ptr || !aot_dup_at(L,fde_va,(size_t)len+4))goto done;
+        uint64_t cie_va=fde_va+4-cie_ptr;
+        uint8_t *cie=aot_dup_at(L,cie_va,12);if(!cie)goto done;
+        uint32_t clen;memcpy(&clen,cie,4);
+        if(clen<8 || clen==UINT32_MAX || !aot_dup_at(L,cie_va,(size_t)clen+4))goto done;
+        uint8_t enc;
+        if(!cie_fde_encoding(cie,cie+4+clen,&enc) ||
+           !aot_slide_cie_personality(&plan,cie,cie+4+clen,delta,&n_pers))goto done;
+        uint8_t *fld=fde+8;int64_t pc_begin,range;size_t sz1,sz2;
+        if(!read_enc(fld,fde+4+len,enc,fde_va+8,&pc_begin,&sz1) ||
+           !read_enc(fld+sz1,fde+4+len,(uint8_t)(enc&0x0F),0,&range,&sz2))goto done;
+        if((enc&0x70)!=0x10 && (enc&0x70)!=0)goto done;
+        if(!aot_add_enc(&plan,fld,enc,delta))goto done;
+        n_fde++;
     }
-    int64_t ehf, count; size_t s1, s2;
-    if (!read_enc(hdr + 4, img_end, hdr[1], hdr_va + 4, &ehf, &s1)
-        || !read_enc(hdr + 4 + s1, img_end, hdr[2], 0, &count, &s2)) return;
-    uint8_t *tbl = hdr + 4 + s1 + s2;
-    if (count <= 0 || tbl + (size_t)count * 8 > img_end) return;
-
-    size_t n_fde = 0, n_hdr = 0, n_pers = 0;
-    uint64_t last_cie = (uint64_t)-1; uint8_t last_enc = 0;
-    for (int64_t i = 0; i < count; i++) {
-        int32_t start_rel, fde_rel;
-        memcpy(&start_rel, tbl + (size_t)i * 8, 4);
-        memcpy(&fde_rel, tbl + (size_t)i * 8 + 4, 4);
-        int64_t ns = (int64_t)start_rel + delta;
-        if (ns < (int64_t)INT32_MIN || ns > (int64_t)INT32_MAX) {
-            tl_log_line("ld: %s: AOT unwind header start does not fit a 32-bit slide", L->name);
-            return;
-        }
-        int32_t ns32 = (int32_t)ns;
-        memcpy(tbl + (size_t)i * 8, &ns32, 4);
-        n_hdr++;
-
-        uint64_t fde_va = hdr_va + (uint64_t)(int64_t)fde_rel;
-        uint8_t *fde = aot_dup_at(L, fde_va, 12);
-        if (!fde) { tl_log_line("ld: %s: an FDE is not on a copied page; C++ catch may still miss", L->name); return; }
-        uint32_t len, cie_ptr; memcpy(&len, fde, 4); memcpy(&cie_ptr, fde + 4, 4);
-        if (len == 0 || len == 0xFFFFFFFFu || cie_ptr == 0 || fde + 4 + len > img_end) continue;
-        uint64_t cie_va = fde_va + 4 - cie_ptr;
-        uint8_t *cie = aot_dup_at(L, cie_va, 12);
-        if (!cie) continue;
-        if (cie_va != last_cie) {
-            if (!cie_fde_encoding(cie, img_end, &last_enc)) continue;
-            if (!aot_slide_cie_personality(cie, img_end, delta, &n_pers)) {
-                tl_log_line("ld: %s: AOT CIE personality could not be slid", L->name);
-                return;
-            }
-            last_cie = cie_va;
-        }
-        uint8_t *fld = fde + 8;
-        int64_t pc_begin, range; size_t sz1, sz2;
-        if (!read_enc(fld, fde + 4 + len, last_enc, fde_va + 8, &pc_begin, &sz1)) continue;
-        if (!read_enc(fld + sz1, fde + 4 + len, (uint8_t)(last_enc & 0x0F), 0, &range, &sz2)) continue;
-        if ((last_enc & 0x70) == 0x10 || (last_enc & 0x70) == 0x00) {
-            if (!aot_add_enc(fld, last_enc, delta)) {
-                tl_log_line("ld: %s: an FDE PC does not fit the AOT unwind slide", L->name);
-                return;
-            }
-            n_fde++;
-        }
+    qsort(plan.items,plan.count,sizeof(*plan.items),aot_patch_order);
+    for(size_t i=1;i<plan.count;i++) {
+        aot_unwind_patch *a=&plan.items[i-1],*b=&plan.items[i];
+        if((uintptr_t)b->at-(uintptr_t)a->at<a->size &&
+           (a->at!=b->at || a->size!=b->size || memcmp(a->value,b->value,a->size)))goto done;
     }
-    L->phdr[eh].p_vaddr = hdr_va + (uint64_t)(L->dup - L->rx);
-    tl_log_line("ld: %s: AOT C++ unwind tables use the writable copy (%zu FDE PCs, %zu header starts, %zu personalities, slide %lld)",
-                L->name, n_fde, n_hdr, n_pers, (long long)delta);
+    for(size_t i=0;i<plan.count;i++)memcpy(plan.items[i].at,plan.items[i].value,plan.items[i].size);
+    L->phdr[eh].p_vaddr=hdr_va+(uint64_t)((uintptr_t)L->dup-(uintptr_t)L->rx);
+    tl_log_line("ld: %s: AOT C++ unwind tables use the writable copy (%zu FDE PCs, %zu personalities)",L->name,n_fde,n_pers);
+    ok=true;
+done:
+    free(plan.items);
+    if(!ok)tl_log_line("ld: %s: AOT unwind table cannot be safely retargeted; library rejected without partial edits",L->name);
+    return ok;
 }
 
 static bool relocate(tl_lib *L)
@@ -2866,7 +2883,7 @@ static bool relocate(tl_lib *L)
          * them). The image's data pages are writable at their own addresses, so all but code pages took their relocations; a code
          * page a relocation names stays as the .so has it. A library built for 4 KiB pages has its data in copies after the image,
          * and reloc_one wrote each relocation there and on the page itself. */
-        aot_fix_cxx_unwind(L);
+        if (!aot_fix_cxx_unwind(L)) return false;
         L->state = 2;
         if (G.verbosity >= 1) {
             tl_log_line("ld: %-36s imported from its dylib (no executable memory made)", L->name);

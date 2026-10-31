@@ -85,7 +85,7 @@ static void il2cpp_terminate(void)
     atomic_store(&U.uncaught_exception, true);
     atomic_store(&U.stop, true);
     atomic_store(&U.state, TL_UNITY_FAILED);
-    tl_log_line("unity: uncaught IL2CPP exception on %s; that thread exits", g_unity_phase == 2 ? "UnityMain (a frame)" : "a worker");
+    tl_log_line("unity: uncaught IL2CPP exception on %s; that thread exits", g_unity_phase == 1 ? "UnityMain (initialization)" : g_unity_phase == 2 ? "UnityMain (a frame)" : g_unity_phase == 3 ? "UnityMain (shutdown)" : "a worker");
     pthread_exit(NULL);
 }
 
@@ -331,7 +331,7 @@ static void *unity_main(void *arg)
         if (!done) done = tl_jni_native("com/unity3d/player/UnityPlayerForActivityOrService", "nativeDone", "()Z");
         if (done) ((uint8_t (*)(void *, void *))done)(tl_jni_env(), U.player);
     }
-    ok = ok && done && !tl_jni_pending() && !atomic_load(&U.uncaught_exception);
+    ok = ok && done && !tl_jni_pending() && !atomic_load(&U.uncaught_exception) && tl_hle_flush_prefs();
     atomic_store(&U.state, ok ? TL_UNITY_DESTROYED : TL_UNITY_FAILED);
     tl_log_line("unity: native shutdown %s", ok ? "completed" : "failed");
     g_unity_phase = 0;

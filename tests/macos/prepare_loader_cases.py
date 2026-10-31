@@ -32,5 +32,5 @@ for name, go, page in [('go-data', True, 16384), ('mixed-data', False, 4096), ('
     obj = out/(name+'.o')
     subprocess.run([cc, '--target=aarch64-linux-android29', '-fPIC', *(['-DGO_DATA'] if go else []), *(['-DMONO_DATA'] if name == 'mono-data' else []),
                     '-c', root/'tests/macos/fixture/data_views.S', '-o', obj], check=True)
-    subprocess.run([ld, '-shared', '--no-relax', '--hash-style=gnu', '-z', f'max-page-size={page}', obj, '-o', out/(name+'.so')], check=True)
+    subprocess.run([ld, '-shared', '--no-relax', '--hash-style=gnu', '-z', f'max-page-size={page}', '--eh-frame-hdr', obj, '-o', out/(name+'.so')], check=True)
 (out/'ready').write_text('Android ELF namespace and data-view fixtures\n')

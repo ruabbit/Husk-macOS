@@ -338,7 +338,7 @@ static int androidKey(unsigned code)
 {
     NSDictionary *object;
     if(guestRuntime()) {
-        if(!self.lifecycleDestroyed)return NO;
+        if(!self.lifecycleDestroyed || !tl_hle_flush_prefs())return NO;
         // The receipt describes the completed native lifecycle. The game's
         // own databases and preferences live in the adjacent data directory.
         NSMutableDictionary *receipt=[@{@"schema":@1,@"session":sessionID,@"runtime":runtimeName(),@"lifecycle":@"destroyed"} mutableCopy];

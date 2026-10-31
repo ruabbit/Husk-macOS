@@ -1,5 +1,23 @@
 # 审计进度
 
+## 2026-10-31：3.2 AOT v9 / Unity JNI 偏好，build 25
+
+从干净 `2a4ddbd` 起步，origin 无外来提交；上游 `645c22a..d30e12e` **7 提交/28 路径**普通合并到 fork main=`3903b7d`，再合回 macOS=`2b67957`。七文件冲突按签名参数/命名空间、AOT 数据副本、ELF 地址分类、bionic 映像保护与 Unity 失败生命周期解决；未批量 ours/theirs。前轮 CI 40988087109 success 已复核；空闲 Product/PID 7565 经 CUA 正常退出，未启动用户游戏或 VM。收尾 fetch 两远端没有新增，祖先关系完整。
+
+AOT v9 已进入共享转换/签名/loader 与 Mac Runner，缓存升级 `mac-aot-3` / ABI 65545；修正 literal stub 返回 PC 和 Mono 裁剪遗漏独立 ELF PLT，保留应用/系统命名空间、精确地址分类和权限。可写副本覆盖完整跨页/溢出检查，C++ 展开表先验证全部修改并检查重叠，再一次发布；不支持或损坏的格式拒绝加载。受控 ELF 验证字面量、Go/Mono/混合页、执行视图 header/FDE 及异常格式拒绝，不代表真实 C++/IL2CPP throw/catch 已通过。
+
+上游 JNI SharedPreferences 原先只在内存保存且 commit 恒真，现复用共享 tl_prefs：完整名称哈希/游戏隔离、共享实例、编辑暂存、clear/remove/getAll 快照、标量/字符串序列化，0600 临时文件 fsync 后原子替换。严格拒绝非法数字/转义、重复键和 NUL；损坏库不覆盖，写入失败阻止 storage-closed/checkpoint。apply 在此 HLE 同步保存；真实 Java framework 的 prefs 仍保留自己的实现。普通与 JIT-less Unity ELF 各两个独立 Runner 验证正常销毁后偏好读回、输入/暂停/单次关闭回执，另有专门的写入失败打包回归。未宣称完整 StringSet/listener 或真实游戏存档兼容。
+
+保留上游 IL2CPP hook 的准确顺序：库构造函数之后、JNI_OnLoad 之前；未捕获异常仍进入 FAILED/停止线程，没有改成 longjmp 后继续成功。Mac 设置新增独立 Play without JIT 说明页，引导详情内默认关闭的每游戏选项与本地签名。初次 CUA 验收 PID 3231 发现段落截断，正常退出该空闲候选后修复多行高度，重新构建、全套与包检查后才进行最终界面验收；没有循环启动游戏或更改用户设置。
+
+最终默认 **184/184（299.05 秒）**；针对性 **25/25（41.28 秒）**，其中运行时二进制在最后纯 UI 换行修复前后不变。最终全套包含 AOT 打包 **12 项（30.06 秒）**、WebView **48 项（165.47 秒）**与 HTTP **5 项（22.13 秒）**。包检查 **18 arm64 Mach-O / 406 Java 资源 / 中英文各 782 条**及全部二进制摘要通过。11 个共享 C、3 个共享 Swift 仅 iOS SDK 语法检查，最终偏好解析器另复核；不是完整 iOS 构建、签名或设备证明。日志复用 current-upstream-*；首轮 Mono PLT 意外失败、munmap 断言与 IL2CPP 阶段夹具误判，以及初次 GUI 截断均保留记录。
+
+最终唯一 **3.2.0/build 25** Product 经 CUA 单次重开为 PID **21399**；完整路径、AX/截图确认原图标/TabView、全部 **11 个应用及图标**、默认关闭的 JIT-less 选项和完整换行的独立说明页，关闭设置并返回首页。实际初检与修复后共两次候选启动已分别记录，没有把初检的截断页面记为通过。未登录/上传、启动用户游戏/VM、操作 USB 或改变用户 APK/存档/Android 磁盘。
+
+交付状态：本地候选验证完成，源码提交/正常推送、远端 SHA 和本批 CI 待收尾。
+
+继续开放真实 JNA/Lua/Unity/Geode/.NET 独立存档、真实 IL2CPP 异常处理、转换期间 abrupt host/process loss、动态库/未知 Mono/生成代码模组；WebView 历史恢复与 host-stop、导航/destroy、Activity replacement/recreate、加载中/跨源/真实 HTTP 第三方插件；实体 IME/手柄/电源、文件面板/持久 URI、账号/认证 Play、VM/P6。已有转换取消与旧 Unity/Minecraft 打包路径不再重复列为未实现；无相关修复的 War Thunder、Egg、Clash 未重跑。
+
 ## 2026-10-30：Unity / 静态签名页 / 服务维护，build 24
 
 从干净 `11586e3` 起步，origin 无外来提交；上游 `ee85db6..645c22a` **13 提交/23 路径**普通合并到 main=`7a6bb7f`，再合回 macOS=`ec0ed02`。Compatibility/bionic mmap/Unity 三处冲突分别保留显式日志与 POST 不重试、签名页复用后继续拒绝动态执行分配、按实际注册签名初始化与缺失生命周期失败。前轮 CI 40824326328 success 已复核；空闲 build 23/PID 74471 经 CUA 正常退出，其他项目 UTM 保持。收尾再次 fetch 两远端，未新增提交，祖先关系完整。
