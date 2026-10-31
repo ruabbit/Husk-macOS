@@ -14,7 +14,7 @@ AOT v9 已进入共享转换/签名/loader 与 Mac Runner，缓存升级 `mac-ao
 
 最终唯一 **3.2.0/build 25** Product 经 CUA 单次重开为 PID **21399**；完整路径、AX/截图确认原图标/TabView、全部 **11 个应用及图标**、默认关闭的 JIT-less 选项和完整换行的独立说明页，关闭设置并返回首页。实际初检与修复后共两次候选启动已分别记录，没有把初检的截断页面记为通过。未登录/上传、启动用户游戏/VM、操作 USB 或改变用户 APK/存档/Android 磁盘。
 
-交付状态：本地候选验证完成，源码提交/正常推送、远端 SHA 和本批 CI 待收尾。
+交付状态：源码 f9360d2 与 main 3903b7d 已正常推送并读回。首轮 CI 41157183032 的构建/包检查和 48 项 hosted CTest（50.68 秒）通过，独立 P0 链接漏编 husk-tl-codewrite.c 而失败；已用真实共享实现补依赖，25/25 本机 P0 memory/core（14.98 秒，gui=false/faults=false）通过。修复 b9d7ad0 已推送并读回，候选二进制未改动；第二轮 [CI 41157776203](https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203)（head=b9d7ad0）已 **completed/success**：构建/包检查、**48 项 hosted 核心回归（51.34 秒）**及 **25 项 P0 memory/core** 通过；build-and-core 6 分 54 秒，hardware skipped。每日续跑提示已更新并精确读回，原每日 09:00、聊天和全部约束保持。
 
 继续开放真实 JNA/Lua/Unity/Geode/.NET 独立存档、真实 IL2CPP 异常处理、转换期间 abrupt host/process loss、动态库/未知 Mono/生成代码模组；WebView 历史恢复与 host-stop、导航/destroy、Activity replacement/recreate、加载中/跨源/真实 HTTP 第三方插件；实体 IME/手柄/电源、文件面板/持久 URI、账号/认证 Play、VM/P6。已有转换取消与旧 Unity/Minecraft 打包路径不再重复列为未实现；无相关修复的 War Thunder、Egg、Clash 未重跑。
 

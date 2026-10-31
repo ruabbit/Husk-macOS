@@ -5,10 +5,10 @@
   "integratedRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
   "checkedOn": "2026-10-31",
   "commitCount": 7,
-  "integration": "Origin then upstream fetched without origin additions. Normal merges of 7 commits / 28 paths into fork main 3903b7d and macOS 2b67957. Seven file conflicts resolved semantically, retaining Mac namespace/address/permission and failed-close behavior. Final local build 25, related/default tests, bundle and final CUA inspection passed after the initial inspection exposed and led to correction of truncated Settings text. Source commit/push and own-repository CI are pending.",
+  "integration": "Seven upstream commits merged normally into main 3903b7d, then macOS 2b67957; seven file conflicts resolved semantically. Product source f9360d2 passed local default 184 tests, related 25 tests, bundle and corrected GUI inspection. Main and source pushed and remote SHAs read back. First CI 41157183032 passed build/package and 48 hosted CTests but failed P0 linking because the standalone build omitted husk-tl-codewrite.c. Repair b9d7ad0 passed local P0 memory/core 25 checks with gui=false/faults=false, leaves Product bytes unchanged, and was pushed/read back; CI 41157776203 completed successfully: build/package checks, 48 hosted CTests (51.34 seconds), and 25 P0 memory/core checks; hardware skipped. Daily heartbeat evidence was updated and the complete prompt, original schedule and thread were read back exactly.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-pending-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.2",
     "revision": "d30e12ec8184182ef2adccd5ee86290dcfe47312"
@@ -30,12 +30,25 @@
         "sha256": "51103d3296172e9c52f6090d0a4c23b9d789f5d4fce083ddc2a6fe3b8dd99136"
       }
     },
-    "sourceRevision": null,
-    "productSourceRevision": null,
-    "deliveryStatus": "locally-verified-pending-push",
+    "sourceRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
+    "productSourceRevision": "f9360d235971631ede02f21c26e03b899a81ea00",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Initial CUA inspection (PID 3231) found truncated Settings instructions; that idle app was quit normally, wrapping was fixed and revalidated. Final build 25 Product launched once through CUA as PID 21399. Full executable path, AX and screenshots confirmed the original icon/TabView, all original 11 library entries and icons, and the separate Play without JIT Settings sheet. Its default-off per-game guidance and local signing explanation are visible. Closed Settings and returned Home without changing preferences, logging in or starting user games or VMs.",
     "pid": 21399,
-    "ci": null,
+    "ci": {
+      "run": 41157776203,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203",
+      "sourceRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 48,
+      "hostedCoreTestSeconds": 51.34,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 414
+    },
     "appSHA256": "143ac8edf195157541b156eb1e280f5b3012272eda542f400725f95f2704f206",
     "nativeRunnerSHA256": "0fffeb23700d6dab1339b41848b56ee403776249246b6c460d4b6cdafdd881d5",
     "webRunnerSHA256": "cb57b531b0ee69864d037e6512e25e796e70401ea8ff9477d76c0996934fbc84",
@@ -49,7 +62,7 @@
     "mainRevision": "3903b7dd9a211366ebb7eb731d8d5990d01b5db1",
     "macOSBaseRevision": "2a4ddbd89b255743e157078610ae12e5ee3298da",
     "macOSMergeRevision": "2b67957e316bacca2c55f275e7e7a17dafc4fb9d",
-    "macOSRevision": null,
+    "macOSRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
     "macOSAdaptation": "AOT v9 mac-aot-3/ABI 65545; corrected literal stub return PC and retained ELF PLT outside narrowed Mono text; complete copied-page/overflow checks and validate-then-publish unwind retargeting. Persistent named JNI HLE preferences with staged edits, 0600 fsync/atomic files, strict corrupt-file rejection, independent process reopen and failed-write storage-close rejection. Late IL2CPP hooks preserve FAILED state. Separate Mac JIT-less Settings guidance retains default-off per-game controls and local signing.",
     "defaultSuiteTests": 184,
     "defaultTestSeconds": 299.05,
@@ -61,8 +74,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "blocker": null,
     "previousCI": {
       "run": 40988087109,
@@ -77,8 +90,23 @@
       "hostedCoreTestSeconds": 45.02,
       "buildAndCoreSeconds": 272
     },
-    "ci": null,
-    "automationUpdatedAndReadBack": false
+    "ci": {
+      "run": 41157776203,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203",
+      "sourceRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 48,
+      "hostedCoreTestSeconds": 51.34,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 414
+    },
+    "automationUpdatedAndReadBack": true,
+    "p0RecheckTests": 25,
+    "p0RecheckSeconds": 14.98
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -275,6 +303,31 @@
       "hostedCoreTests": 47,
       "hostedCoreTestSeconds": 45.02,
       "buildAndCoreSeconds": 272
+    },
+    {
+      "run": 41157183032,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41157183032",
+      "sourceRevision": "f9360d235971631ede02f21c26e03b899a81ea00",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "failure",
+      "hardware": "skipped",
+      "hostedCoreTests": 48,
+      "hostedCoreTestSeconds": 50.68,
+      "failure": "The independent P0 loader build omitted the real husk-tl-codewrite.c required by AOT v9. Product build, bundle checks and all 48 hosted CTests passed; P0 linking failed at tl_codewrite_enable. Added the shared source and passed 25 local P0 memory/core checks (14.98 seconds), gui=false and faults=false."
+    },
+    {
+      "run": 41157776203,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203",
+      "sourceRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 48,
+      "hostedCoreTestSeconds": 51.34,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 414
     }
   ],
   "jniPreferencesIntegration": {

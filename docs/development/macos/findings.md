@@ -9,7 +9,7 @@
 - 上游新 JNI SharedPreferences 的 commit 原本恒真且仅内存。复用既有 tl_prefs，命名文件按完整名称哈希且分属 guest data，编辑器暂存至 commit/apply、clear 先于本批 put、支持各标量/字符串及 getAll 快照。共享序列化增加 0600 临时文件/同步/原子替换与读取错误；损坏库不覆盖。apply 同步写入，关闭前重试尚未写入值，失败阻止 storage-closed。此项不取代真实 Java framework 的 prefs，也不声称实现所有 StringSet/listener 行为。
 - Context7 Android ContextWrapper 文档复核同名共享实例、线程安全和提交后创建文件；JNI 多进程测试验证 staged edits、长名称/游戏隔离、全类型读回、快照、clear/remove、磁盘/损坏文件失败。打包 Unity 普通和 AOT 各两进程验证正常销毁后读回 closes；路径故障不得发布存储回执或 checkpoint。
 - IL2CPP hook 的准确阶段是库构造函数完成后、JNI_OnLoad 之前；首个夹具错误假设早于构造函数已修正，受控 ELF 验证真实上游阶段。未捕获异常仍置 FAILED/停止线程，未接受 longjmp 后继续游戏的成功状态。未主动制造异常崩溃来验收。
-- 最终针对性 25/25（41.28 秒），默认 184/184（299.05 秒），18 Mach-O/406 Java 资源与每语言 782 条通过；11 个共享 C 与 3 个 Swift 仅 iOS 语法检查。GUI 初检揭示说明页单行截断；按 SwiftUI 文档保留受约束宽度并采用理想多行高度，修复后重新全套验证，最终 CUA/PID 21399 的 AX/截图确认完整文案。提交/推送与 CI 待收尾，真实游戏/设备边界保持。
+- 最终针对性 25/25（41.28 秒），默认 184/184（299.05 秒），18 Mach-O/406 Java 资源与每语言 782 条通过；11 个共享 C 与 3 个 Swift 仅 iOS 语法检查。GUI 初检揭示说明页单行截断；按 SwiftUI 文档保留受约束宽度并采用理想多行高度，修复后重新全套验证，最终 CUA/PID 21399 的 AX/截图确认完整文案。源码 f9360d2 与 main 3903b7d 已正常推送并读回。首轮 CI 41157183032 的构建/包检查和 48 项 hosted CTest（50.68 秒）通过，独立 P0 链接漏编 husk-tl-codewrite.c 而失败；已用真实共享实现补依赖，25/25 本机 P0 memory/core（14.98 秒，gui=false/faults=false）通过。修复 b9d7ad0 已推送并读回，候选二进制未改动；第二轮 [CI 41157776203](https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203)（head=b9d7ad0）已 **completed/success**：构建/包检查、**48 项 hosted 核心回归（51.34 秒）**及 **25 项 P0 memory/core** 通过；build-and-core 6 分 54 秒，hardware skipped。每日续跑提示已更新并精确读回，原每日 09:00、聊天和全部约束保持。真实游戏/设备边界保持。 后续 loader/AOT 新增依赖时须同时核对独立 P0 构建源列表；本机复核使用 build/macos 内的输出目录。
 
 
 ## 2026-10-30：Unity / 静态签名页增量审计

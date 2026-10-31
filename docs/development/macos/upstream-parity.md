@@ -12,7 +12,7 @@
 | Unity 诊断和关闭 | 日志/策略/terminate hook 在稍后加载的 IL2CPP 构造函数后、JNI_OnLoad 前接入，保留未捕获异常 FAILED；普通和 JIT-less 打包 ELF 各两进程验证输入/暂停/正常关闭与 JNI 偏好重开；故障路径无 storage-closed/checkpoint | 未主动触发崩溃；商业游戏真实异常、正常退出与存档仍须独立证据 |
 | JIT-less 设置 | Mac 设置新增独立说明页，保留游戏详情内默认关闭的每游戏开关，使用本地 ad-hoc 签名；新中英文文案打包 | iOS 证书导入不是 Mac 必需步骤；本轮没有导入证书、改用户设置或启动用户游戏 |
 
-最终默认 **184/184（299.05 秒）**、针对性 **25/25（41.28 秒）**及包检查 **18 arm64 Mach-O / 406 Java 资源 / 中英文各 782 条**通过。11 个共享 C 和 3 个共享 Swift 通过 iOS SDK 语法检查；不代表完整 iOS 构建或设备。初次 GUI/PID 3231 发现说明页段落截断，正常退出后修复多行高度并重新构建/全套验证；最终候选单次重开 PID **21399**，AX/截图确认 11 应用、图标/TabView 和完整可见的说明页，已返回首页。两次候选启动原因如实记录，未启动用户游戏或改设置。源码提交/推送、远端 SHA 与本批 CI 待收尾。
+最终默认 **184/184（299.05 秒）**、针对性 **25/25（41.28 秒）**及包检查 **18 arm64 Mach-O / 406 Java 资源 / 中英文各 782 条**通过。11 个共享 C 和 3 个共享 Swift 通过 iOS SDK 语法检查；不代表完整 iOS 构建或设备。初次 GUI/PID 3231 发现说明页段落截断，正常退出后修复多行高度并重新构建/全套验证；最终候选单次重开 PID **21399**，AX/截图确认 11 应用、图标/TabView 和完整可见的说明页，已返回首页。两次候选启动原因如实记录，未启动用户游戏或改设置。源码 f9360d2 与 main 3903b7d 已正常推送并读回。首轮 CI 41157183032 的构建/包检查和 48 项 hosted CTest（50.68 秒）通过，独立 P0 链接漏编 husk-tl-codewrite.c 而失败；已用真实共享实现补依赖，25/25 本机 P0 memory/core（14.98 秒，gui=false/faults=false）通过。修复 b9d7ad0 已推送并读回，候选二进制未改动；第二轮 [CI 41157776203](https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203)（head=b9d7ad0）已 **completed/success**：构建/包检查、**48 项 hosted 核心回归（51.34 秒）**及 **25 项 P0 memory/core** 通过；build-and-core 6 分 54 秒，hardware skipped。每日续跑提示已更新并精确读回，原每日 09:00、聊天和全部约束保持。
 
 继续开放：转换中 abrupt host/process loss（本轮未通过主动崩溃模拟）、真实 JNA/Lua/Unity/Geode/.NET 独立存档、WebView 历史恢复/host-stop、导航/destroy、Activity replacement/recreate 顺序及加载中/跨源/第三方 HTTP 插件、实体 IME/手柄/电源、文件面板/持久 URI、个人账号/认证 Play、VM/P6。下一轮优先在可合法取得的真实应用及隔离存档上验证；真实样本不可用时继续 WebView 的确定性顺序回归，不重复启动无相关修复的商业失败样本。既有转换取消与旧 Unity/Minecraft 打包路径、全部此前接入的引擎保持已实现状态。
 
