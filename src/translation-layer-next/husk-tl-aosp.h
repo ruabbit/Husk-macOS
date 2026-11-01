@@ -11,11 +11,11 @@ extern "C" {
 /*
  * Optional AOSP userland next to the bundled java-runtime (framework.jar, not
  * copied into Husk's sources). When present it is on the boot path *after*
- * husk-framework.dex, so Husk still starts the APK and AOSP only fills classes
- * the stand-ins never defined.
+ * husk-framework-core.dex. Missing required jars fail; this is not a working
+ * Android system_server. The Mac product retains its pinned full framework.
  */
 bool husk_aosp_present(const char *java_root);
-/* Fill boot[] with existing jar paths. paths is a caller array of rows. Returns count. */
+/* Complete ordered boot path, or -1 for missing resources/capacity. */
 int husk_aosp_boot_jars(const char *java_root, char (*paths)[1200], int max, const char **boot);
 void husk_aosp_start_system(void);
 bool husk_aosp_using(void);

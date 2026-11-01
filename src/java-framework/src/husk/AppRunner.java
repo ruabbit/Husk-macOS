@@ -25,8 +25,9 @@ public final class AppRunner {
     private static int down;
     private static long downTime;
     private static boolean sPausedByHost;
-    private static boolean sEnding;
-    private static boolean sHostFinishRequested;
+    private static volatile boolean sEnding;
+    private static volatile boolean sHostFinishRequested;
+    public static boolean acceptsNewWork() { return !sEnding && !sHostFinishRequested; }
 
     /** Another APK is about to start: forget this app's activities, loader and factory. */
     public static void resetSession() {

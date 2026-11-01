@@ -52,7 +52,17 @@ const struct tl_zip *tl_ld_apk_at(int index);
 void tl_ld_interpose(const char *name, void *fn);
 
 /* Whether one of the APKs carries this arm64 library (an engine is told by the libraries it ships). */
+/* Optional interpreter backend. Standalone arm64 loader tools do not depend
+ * on the Java VM; an absent backend explicitly rejects ELF32. */
+typedef struct {
+    bool (*map)(tl_lib *, const char *, uint8_t *, size_t);
+    void *(*sym)(tl_lib *, const char *);
+    bool (*init)(tl_lib *);
+    void (*reset)(void);
+} tl_ld_arm32_backend;
+void tl_ld_register_arm32(const tl_ld_arm32_backend *backend);
 bool tl_ld_has_lib(const char *name);
+const char *tl_ld_lib_apk(const char *name); /* selected APK ABI only */
 bool tl_ld_is_arm32(const tl_lib *lib);
 int tl_ld_apk_libs(void (*cb)(const char *name, uint64_t size, void *user), void *user);
 

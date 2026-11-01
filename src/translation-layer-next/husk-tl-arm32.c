@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,6 +61,13 @@ static int Gnimp;
 static void *Gimp_fn[MAX_IMP];
 static char Gimp_name[MAX_IMP][96];
 static bool Gused;
+static _Atomic(const char *) Gerror;
+const char *tl_a32_error(void) { return atomic_load(&Gerror); }
+static void fail(const char *message)
+{
+    const char *expected = NULL;
+    if (atomic_compare_exchange_strong(&Gerror, &expected, message)) tl_log_line("a32: %s", message);
+}
 static int nM;
 static void *Hptr[512];
 static int nHptr = 1;
@@ -69,14 +77,23 @@ static int Gnhand = 1;
 
 static uint8_t *host(uint32_t va)
 {
-    if (!Gmem || va >= Gcap) return NULL;
+    if (!Gmem || !va || va >= Gcap) return NULL;
     return Gmem + va;
+}
+
+static uint8_t *range(uint32_t va, size_t n);
+static const char *guest_string(uint32_t va)
+{
+    const char *p = (const char *)host(va);
+    if (p && memchr(p, 0, Gcap - va)) return p;
+    fail("invalid guest string"); return NULL;
 }
 
 static uint32_t halloc(uint32_t n)
 {
+    if (!n || n > IMP_BASE - 15u) return 0;
     n = (n + 15u) & ~15u;
-    if (Gheap + n >= IMP_BASE) return 0;
+    if (Gheap >= IMP_BASE || n > IMP_BASE - Gheap) return 0;
     uint32_t p = Gheap; Gheap += n; return p;
 }
 
@@ -115,6 +132,7 @@ uint32_t tl_a32_ref(jobj *o) { return to_h(o); }
 void tl_a32_reset(void)
 {
     Gheap = GHEAP;
+    atomic_store(&Gerror, NULL);
     Gused = false;
     Gnhand = 1;
     nM = 0;
@@ -142,7 +160,7 @@ static int intern_imp(const char *name, void *fn, int kind)
 {
     (void)kind;
     for (int i = 0; i < Gnimp; i++) if (!strcmp(Gimp_name[i], name)) return i;
-    if (Gnimp >= MAX_IMP) { tl_log_line("a32: import table full (%s)", name); return -1; }
+    if (Gnimp >= 199) { tl_log_line("a32: import table full (%s)", name); return -1; }
     int i = Gnimp++;
     snprintf(Gimp_name[i], sizeof(Gimp_name[0]), "%s", name);
     Gimp_fn[i] = fn;
@@ -151,21 +169,21 @@ static int intern_imp(const char *name, void *fn, int kind)
 
 static void *wrap_memcpy(uint32_t d, uint32_t s, uint32_t n)
 {
-    uint8_t *D = host(d), *S = host(s);
-    if (D && S) memcpy(D, S, n);
+    uint8_t *D = range(d, n), *S = range(s, n);
+    if (D && S) memcpy(D, S, n); else fail("guest memcpy range");
     return (void *)(uintptr_t)d;
 }
 static void *wrap_memmove(uint32_t d, uint32_t s, uint32_t n)
 {
-    uint8_t *D = host(d), *S = host(s);
-    if (D && S) memmove(D, S, n);
+    uint8_t *D = range(d, n), *S = range(s, n);
+    if (D && S) memmove(D, S, n); else fail("guest memmove range");
     return (void *)(uintptr_t)d;
 }
 static void *wrap_memset(uint32_t d, uint32_t c, uint32_t n)
 {
-    uint8_t *D = host(d); if (D) memset(D, (int)c, n); return (void *)(uintptr_t)d;
+    uint8_t *D = range(d, n); if (D) memset(D, (int)c, n); else fail("guest memset range"); return (void *)(uintptr_t)d;
 }
-static uint32_t wrap_strlen(uint32_t s) { const char *p = (const char *)host(s); return p ? (uint32_t)strlen(p) : 0; }
+static uint32_t wrap_strlen(uint32_t s) { const char *p = guest_string(s); return p ? (uint32_t)strlen(p) : 0; }
 static int wrap_strcmp(uint32_t a, uint32_t b)
 {
     const char *A = (const char *)host(a), *B = (const char *)host(b);
@@ -578,9 +596,13 @@ static void seed_imports(void)
 static void *resolve_imp(const char *name)
 {
     for (int i = 0; i < Gnimp; i++) if (!strcmp(Gimp_name[i], name)) return (void *)(uintptr_t)imp_va(i);
-    void *fn = (void *)(uintptr_t)wrap_ok;
-    if (!strncmp(name, "AAsset", 6) && strstr(name, "open")) fn = (void *)(uintptr_t)wrap_asset_open;
-    else if (!strcmp(name, "ALooper_pollOnce")) fn = (void *)(uintptr_t)wrap_looper_poll;
+    void *fn = NULL;
+    if (!strcmp(name, "ALooper_pollOnce")) fn = (void *)(uintptr_t)wrap_looper_poll;
+    /* Unknown imports must not silently return success. */
+    if (!fn && strncmp(name, "egl", 3)) {
+        tl_log_line("a32: unsupported import %s", name);
+        return NULL;
+    }
     int i = intern_imp(name, fn, 0);
     if (i >= 0 && strncmp(name, "egl", 3) && strncmp(name, "__aeabi_", 8) && strncmp(name, "pthread_", 8)
         && name[0] != 'A' && strncmp(name, "__cxa_", 6) && strncmp(name, "__gnu_", 6)
@@ -779,6 +801,7 @@ static uint32_t jcall(int id, uint32_t *a)
         return 0;
     }
     default:
+        fail("unsupported JNI operation");
         tl_log_line("a32: JNI #%d not translated yet", id);
         return 0;
     }
@@ -805,12 +828,12 @@ static uint32_t lookup_export(const char *nm)
     if (!nm || !nm[0]) return 0;
     for (int i = 0; i < nM; i++) {
         uint32_t strtab = M[i].strtab, symtab = M[i].symtab, ent = M[i].syment, slide = M[i].slide;
-        uint32_t n = M[i].nsyms ? M[i].nsyms : 65536u;
+        uint32_t n = M[i].nsyms;
         for (uint32_t s = 1; s < n; s++) {
             uint8_t *p = host(symtab + s * ent);
             if (!p) break;
             sym32 sy; memcpy(&sy, p, sizeof(sy));
-            const char *n2 = sy.name ? (const char *)host(strtab + sy.name) : NULL;
+            const char *n2 = sy.name ? guest_string(strtab + sy.name) : NULL;
             if (n2 && !strcmp(n2, nm) && sy.shndx) return sy.value + slide;
         }
     }
@@ -826,9 +849,13 @@ static struct a32_mapped *meta(tl_lib *L)
 static uint32_t rd32(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v; }
 static uint16_t rd16(const uint8_t *p) { uint16_t v; memcpy(&v, p, 2); return v; }
 
+static uint8_t *range(uint32_t va, size_t n)
+{
+    return Gmem && va && va <= Gcap && n <= Gcap - va ? Gmem + va : NULL;
+}
 static uint32_t gwrite(uint32_t va, const void *src, uint32_t n)
 {
-    uint8_t *d = host(va); if (!d) return 0; memcpy(d, src, n); return n;
+    uint8_t *d = range(va, n); if (!d) return 0; memcpy(d, src, n); return n;
 }
 
 bool tl_a32_map(tl_lib *L, const char *name, uint8_t *file, size_t flen)
@@ -854,19 +881,25 @@ bool tl_a32_map(tl_lib *L, const char *name, uint8_t *file, size_t flen)
         if (ve) *ve = vmfn;
     }
     ehdr32 eh; memcpy(&eh, file, sizeof(eh));
-    if (eh.phoff + (uint32_t)eh.phnum * eh.phentsize > flen) return false;
+    if (eh.phentsize != sizeof(phdr32) || !eh.phnum || eh.phnum > 1024 ||
+        eh.phoff > flen || (size_t)eh.phnum * eh.phentsize > flen - eh.phoff) return false;
 
     uint32_t lo = ~0u, hi = 0;
     for (int i = 0; i < eh.phnum; i++) {
         phdr32 p; memcpy(&p, file + eh.phoff + (size_t)i * eh.phentsize, sizeof(p));
+        if (p.off > flen || p.filesz > flen - p.off) return false;
         if (p.type != 1 || !p.memsz) continue;
+        if (p.filesz > p.memsz || p.vaddr > UINT32_MAX - p.memsz) return false;
         if (p.vaddr < lo) lo = p.vaddr;
         if (p.vaddr + p.memsz > hi) hi = p.vaddr + p.memsz;
     }
     if (lo == ~0u) return false;
-    uint32_t need = (hi - (lo & ~0xFFFu)) + 0x1000;
+    uint64_t span = (uint64_t)hi - (lo & ~0xFFFu) + 0x1000;
+    if (span > IMP_BASE - GHEAP) return false;
+    uint32_t need = (uint32_t)span;
     uint32_t base = halloc(need);
     if (!base) { tl_log_line("a32: no guest space for %s", name); return false; }
+    memset(Gmem + base, 0, need);
     uint32_t slide = base - (lo & ~0xFFFu);
 
     uint32_t dyn_v = 0, dyn_sz = 0;
@@ -882,6 +915,7 @@ bool tl_a32_map(tl_lib *L, const char *name, uint8_t *file, size_t flen)
     uint32_t init = 0, init_array = 0, init_arraysz = 0, soname = 0, nsyms = 0;
     uint32_t needed[32]; int nneeded = 0;
     if (dyn_v && dyn_sz) {
+        if (!range(dyn_v, dyn_sz) || dyn_sz % 8) return false;
         for (uint32_t o = 0; o + 8 <= dyn_sz; o += 8) {
             dyn32 d; memcpy(&d, host(dyn_v + o), 8);
             if (d.tag == 0) break;
@@ -899,31 +933,38 @@ bool tl_a32_map(tl_lib *L, const char *name, uint8_t *file, size_t flen)
             else if (d.tag == 14) soname = d.val;
             else if (d.tag == 4) {
                 uint32_t *h = (uint32_t *)host(d.val + slide);
-                if (h) nsyms = h[1];
+                if (!range(d.val + slide, 8)) return false;
+                nsyms = h[1];
             }
             else if (d.tag == 1 && nneeded < 32) needed[nneeded++] = d.val;
         }
     }
 
+    if (syment != sizeof(sym32) || !nsyms || nsyms > 65536 ||
+        !range(symtab, (size_t)nsyms * syment) || !range(strtab, 1) ||
+        (init_arraysz && (init_arraysz % 4 || !range(init_array, init_arraysz)))) return false;
     /* relocations */
     uint32_t rels[2] = { rel, jmprel }; uint32_t rsz[2] = { relsz, pltrelsz };
     for (int t = 0; t < 2; t++) {
+        if (rsz[t] % 8 || !range(rels[t], rsz[t])) return false;
         for (uint32_t o = 0; o + 8 <= rsz[t]; o += 8) {
             rel32 r; memcpy(&r, host(rels[t] + o), 8);
             uint32_t *loc = (uint32_t *)host(r.off + slide);
-            if (!loc) continue;
+            if (!range(r.off + slide, 4)) return false;
             int type = (int)(r.info & 0xff), symi = (int)(r.info >> 8);
             uint32_t S = 0;
             const char *nm = NULL;
+            if (symi >= nsyms) return false;
             if (symi && symtab && strtab) {
                 sym32 s; memcpy(&s, host(symtab + (uint32_t)symi * syment), sizeof(s));
-                nm = (const char *)host(strtab + s.name);
+                nm = guest_string(strtab + s.name);
                 if (s.shndx) S = s.value + slide;
                 else if (nm && nm[0]) {
                     uint32_t ex = lookup_export(nm);
                     if (ex) S = ex;
                     else {
                         void *im = resolve_imp(nm);
+                        if (!im) return false;
                         S = (uint32_t)(uintptr_t)im;
                     }
                 }
@@ -934,7 +975,8 @@ bool tl_a32_map(tl_lib *L, const char *name, uint8_t *file, size_t flen)
             case 21: *loc = S; break;                   /* GLOB_DAT */
             case 22: *loc = S; break;                   /* JUMP_SLOT */
             case 23: *loc += slide; break;              /* RELATIVE */
-            default: break;
+            case 0: break;
+            default: return false;
             }
             (void)pltrel;
         }
@@ -960,12 +1002,12 @@ void *tl_a32_sym(tl_lib *L, const char *name)
     uint32_t ent = m->syment;
     uint32_t slide = m->slide;
     if (!symtab || !strtab) return NULL;
-    uint32_t n = m->nsyms ? m->nsyms : 65536u;
+    uint32_t n = m->nsyms;
     for (uint32_t i = 1; i < n; i++) {
         uint8_t *p = host(symtab + i * ent);
         if (!p) break;
         sym32 s; memcpy(&s, p, sizeof(s));
-        const char *nm = s.name ? (const char *)host(strtab + s.name) : NULL;
+        const char *nm = s.name ? guest_string(strtab + s.name) : NULL;
         if (nm && !strcmp(nm, name) && s.shndx)
             return tl_a32_sym_tag(s.value + slide);
     }
@@ -1025,11 +1067,11 @@ static void set_nzcv_sub(uint32_t a, uint32_t b, uint32_t r)
     CPU.cpsr = (CPU.cpsr & 0x0FFFFFFFu) | (r & 0x80000000u) | (r == 0 ? 0x40000000u : 0) | (c << 29) | (v << 28);
 }
 
-static uint32_t load32(uint32_t a) { uint32_t v = 0; uint8_t *p = host(a); if (p) memcpy(&v, p, 4); return v; }
-static uint32_t load16(uint32_t a) { uint16_t v = 0; uint8_t *p = host(a); if (p) memcpy(&v, p, 2); return v; }
+static uint32_t load32(uint32_t a) { uint32_t v = 0; uint8_t *p = range(a,4); if (p) memcpy(&v, p, 4); else fail("guest read range"); return v; }
+static uint32_t load16(uint32_t a) { uint16_t v = 0; uint8_t *p = range(a,2); if (p) memcpy(&v, p, 2); else fail("guest read range"); return v; }
 static uint32_t load8(uint32_t a) { uint8_t *p = host(a); return p ? *p : 0; }
-static void store32(uint32_t a, uint32_t v) { uint8_t *p = host(a); if (p) memcpy(p, &v, 4); }
-static void store16(uint32_t a, uint32_t v) { uint8_t *p = host(a); uint16_t x = (uint16_t)v; if (p) memcpy(p, &x, 2); }
+static void store32(uint32_t a, uint32_t v) { uint8_t *p = range(a,4); if(!p)fail("guest write range"); if (p) memcpy(p, &v, 4); }
+static void store16(uint32_t a, uint32_t v) { uint8_t *p = range(a,2); if(!p)fail("guest write range"); uint16_t x = (uint16_t)v; if (p) memcpy(p, &x, 2); }
 static void store8(uint32_t a, uint32_t v) { uint8_t *p = host(a); if (p) *p = (uint8_t)v; }
 
 static uint32_t pc_val(void)
@@ -1581,10 +1623,12 @@ static int32_t a32_call_inner(uint32_t pc, uint32_t r0, uint32_t r1, uint32_t r2
     CPU.r[R_PC] = pc & ~1u;
     CPU.cpsr = (pc & 1) ? 0x20 : 0;
     Gunk = 0;
-    for (int n = 0; n < 2000000; n++) {
+    for (int n = 0; n < 2000000 && !tl_a32_error(); n++) {
         if (!exec_one()) break;
+        if (Gunk) { fail("unsupported instruction"); break; }
         if (CPU.r[R_PC] == SENTINEL) break;
     }
+    if (CPU.r[R_PC] != SENTINEL) fail("instruction budget or invalid program counter");
     int32_t r = (int32_t)CPU.r[0];
     memcpy(CPU.r, save, sizeof(save)); CPU.cpsr = cpsr;
     return r;
@@ -1616,11 +1660,14 @@ int32_t tl_a32_jni_onload(tl_lib *L)
 
 bool tl_a32_init(tl_lib *L)
 {
-    /* Static constructors of a 32-bit game are Thumb-2 C++ and not a complete
-     * ISA yet; running them is what left Minecraft on "loading the engine"
-     * for minutes. NativeActivity still starts from ANativeActivity_onCreate. */
-    (void)L;
-    return true;
+    struct a32_mapped *m = meta(L);
+    if (!m || tl_a32_error()) return false;
+    if (m->init) tl_a32_call(m->init, 0, 0, 0, 0);
+    for (uint32_t off = 0; off < m->init_arraysz && !tl_a32_error(); off += 4) {
+        uint32_t fn = load32(m->init_array + off);
+        if (fn && fn != UINT32_MAX) tl_a32_call(fn, 0, 0, 0, 0);
+    }
+    return !tl_a32_error();
 }
 
 bool tl_a32_jni_native(void *fn, dvm_method *m, jobj *self, const jvalue *params, jvalue *ret)
@@ -1653,5 +1700,13 @@ bool tl_a32_jni_native(void *fn, dvm_method *m, jobj *self, const jvalue *params
     else if (rk == 'Z') { ret->j = 0; ret->z = (uint8_t)r; }
     else if (rk == 'J' || rk == 'D') ret->j = (int64_t)(uint32_t)r;
     else ret->i = r;
-    return !tl_jni_pending();
+    return !tl_jni_pending() && !tl_a32_error();
+}
+
+/* Keep standalone ARM32 mapping tools independent of the full host loader. */
+extern void tl_ld_register_arm32(const tl_ld_arm32_backend *) __attribute__((weak_import));
+__attribute__((constructor)) static void attach_loader(void)
+{
+    static const tl_ld_arm32_backend backend = { tl_a32_map, tl_a32_sym, tl_a32_init, tl_a32_reset };
+    if (tl_ld_register_arm32) tl_ld_register_arm32(&backend);
 }

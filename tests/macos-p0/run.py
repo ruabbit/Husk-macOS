@@ -88,7 +88,7 @@ def build():
         with (OUT / f"{name}.plist").open("wb") as f:
             plistlib.dump({f"com.apple.security.cs.{key}": True for key in keys}, f)
     sdk = command(["xcrun", "--sdk", "macosx", "--show-sdk-path"])
-    common = [host, "-isysroot", sdk, "-O2", "-g", "-Wall", "-Wextra", "-I", NEXT, "-I", CLASSIC]
+    common = [host, "-DHUSK_MACOS_RUNTIME=1", "-isysroot", sdk, "-O2", "-g", "-Wall", "-Wextra", "-I", NEXT, "-I", CLASSIC]
     command([*common, HERE / "xmem-test.c", HERE / "host-adapter.c", NEXT / "husk-tl-xmem.c", "-o", OUT / "xmem-dev"])
     modern = [NEXT / "husk-tl-ld.c", NEXT / "husk-tl-a64.c", NEXT / "husk-tl-xmem.c", NEXT / "husk-tl-codewrite.c",
               CLASSIC / "husk-tl-elf.c", CLASSIC / "husk-tl-zip.c", HERE / "host-adapter.c"]
@@ -230,13 +230,16 @@ def core_tests(common):
 
 
 def main():
+    global OUT
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=OUT, help="Output directory for the selected validation build")
     parser.add_argument("--build-only", action="store_true")
-    parser.add_argument("--suite", choices=["all", "memory", "runner", "core"], default="all")
+    parser.add_argument("--suite", choices=["all", "memory", "runner", "core", "memory-core"], default="all")
     parser.add_argument("--gui", action="store_true", help="Opt in to visible windows and focus/menu checks")
     parser.add_argument("--faults", action="store_true", help="Opt in to deliberate crashes/kills; macOS may show crash reports")
     parser.add_argument("--cycles", type=int, help="Runner start/stop count (default 2 in background, 1 with --gui)")
     args = parser.parse_args()
+    OUT = args.output.resolve()
     if args.gui and args.faults:
         parser.error("Run fault injection separately without --gui")
     cycles = args.cycles if args.cycles is not None else (1 if args.gui else 2)
@@ -245,12 +248,12 @@ def main():
     try:
         common, _ = build()
         if not args.build_only:
-            if args.suite in ("all", "memory"):
+            if args.suite in ("all", "memory", "memory-core"):
                 memory_tests(args.faults)
             if args.suite in ("all", "runner"):
                 from lifecycle_test import tests
                 tests(OUT, RESULTS, sign, gui=args.gui, faults=args.faults, cycles=cycles)
-            if args.suite in ("all", "core"):
+            if args.suite in ("all", "core", "memory-core"):
                 core_tests(common)
     finally:
         OUT.mkdir(parents=True, exist_ok=True)

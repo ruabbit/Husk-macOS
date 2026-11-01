@@ -787,3 +787,5 @@
 "Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode." = "运行时生成代码的游戏或模组可能无法使用。如果准备或启动失败，请关闭该游戏的 JIT-less，恢复通常的运行方式。";
 
 "Play without JIT" = "无需 JIT 游玩";
+"Play without JIT 社区列表" = "免 JIT 模式社区报告";
+"此应用使用 32 位 ARM；输入、线程关闭与存档接入尚未完成，暂不可运行。" = "此应用使用 32 位 ARM；输入、线程关闭与存档接入尚未完成，暂不可运行。";

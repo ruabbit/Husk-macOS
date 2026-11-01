@@ -1,5 +1,21 @@
 # 审计进度
 
+## 2026-11-01：3.2.1 ARM32 / Binder 同步，进行中
+
+干净 e069286 起步，origin 无外来提交；前轮 CI 41157776203 completed/success 已复核。上游 d30e12e..c95c960 两提交/79路径，main 普通合并为 6eabc3d；macOS 普通合并完成为 df2973a。初始唯一空闲候选 PID 21399 经 CUA 正常退出并确认消失；无本项目 Runner/VM/构建。尚未推送或启动新候选。首轮构建在合并自动留下的 tl_javaapp_stop void/bool 双声明失败；保留原布尔存储关闭协议后修复，失败日志 current-upstream-build-initial.log 保留。
+
+十五文件冲突逐处保留 fork 安全构建包装、可注入缓存与 POST 不重试、Documents 授权/生命周期、AOT 失败关闭与命名空间、mmap 边界、Java 线程所有权/关闭协议、引擎停止失败判定；新增 ARM32 与 Binder 功能须继续检查实际调用链。
+
+
+本轮已把 ARM32/Binder/ServiceManager/AOSP/Dalvik native 编入 Mac，生成受控 core DEX 并加入来源校验；ARM32 的输入/线程退出/存储协议尚未完整，因此 loader、扫描器、资料库、Java ABI 与 Store 请求统一保持 arm64 能力。恢复解释器构造函数和显式失败，受控 ARM/Thumb ELF 不作为 32 位 Minecraft 可玩证明。AOSP 占位服务改为明确 unsupported，生产 Mac 拒绝未经 pin 的 AOSP jar，完整现有 Java framework 仍使用。
+
+新增前台 JobService 队列与 host-stop 销毁顺序，普通/JIT-less 真实 DEX 会话验证 jobs_closed 保存重开；新 Binder 传输/关闭复用、core DEX/boot 路径和 ARM32 基础夹具第一轮通过。首轮针对性 11/12（14.74 秒），社区缓存旧 GET 次数断言失败后已修正并补无结果不回退检查；P0 第一轮扫描器仍称 ARM32 可用已修正，第二轮 25 项退出成功。新 Parcel 精确签名/句柄/长度/容量/令牌/本进程身份回归与 ABI 功能声明断言正在最终重验。前台任务不宣称 Android 后台/约束/持久化调度完整。
+
+首轮全套发现 Documents 合并增加的 encoded-path 提前返回绕过授权集合，java-lifecycle-documents 的伪造 URI 检查失败。已移除该捷径，恢复完整 authority/path/已授权 canonical 路径校验；首轮全套 189/190（325.30 秒），该项是唯一失败；重建 Java framework 后专门回归 1/1（0.78 秒）通过，最终合并候选仍须完整重验。收尾 fetch 另发现上游 10bbbd7/8f65f2f 两条增量，计划在保存本轮适配后正常合并，复用 AOSP descriptor/PING 并拒绝未按事务编号实现的通用权限/窗口回复。
+
+当前 build 26 构建和最终套件尚在执行；上游范围与每个未完成项的证据/下一步已写入 upstream-parity.md，未推送未验分支，也未启动候选。
+
+
 ## 2026-10-31：3.2 AOT v9 / Unity JNI 偏好，build 25
 
 从干净 `2a4ddbd` 起步，origin 无外来提交；上游 `645c22a..d30e12e` **7 提交/28 路径**普通合并到 fork main=`3903b7d`，再合回 macOS=`2b67957`。七文件冲突按签名参数/命名空间、AOT 数据副本、ELF 地址分类、bionic 映像保护与 Unity 失败生命周期解决；未批量 ours/theirs。前轮 CI 40988087109 success 已复核；空闲 Product/PID 7565 经 CUA 正常退出，未启动用户游戏或 VM。收尾 fetch 两远端没有新增，祖先关系完整。

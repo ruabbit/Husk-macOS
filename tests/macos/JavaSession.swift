@@ -85,6 +85,7 @@ import SharedLibrary
             let prefs = try String(contentsOf: checkpoint.deletingLastPathComponent().appendingPathComponent(nativeActivity ? "data/shared_prefs/nativeboot.xml" : "data/shared_prefs/lifecycle.xml"), encoding: .utf8)
             try check(prefs.contains("i destroyed 1") && prefs.contains(nativeActivity ? "i events 262143" : "i events 63"), "real-input-callbacks-and-final-preferences-persisted")
             if !nativeActivity {
+                try check(prefs.contains("b jobs_closed true"), "packaged foreground jobs cancelled/replaced/stopped before storage close")
                 try check(prefs.contains("b host_environment true"), "packaged Java battery-clock-locale-identity checks completed")
                 let log = try String(contentsOf: paths.logs.appendingPathComponent(session.sessionID!).appendingPathComponent("stderr.log"), encoding: .utf8)
                 if language != "system" { try check(log.contains("HUSK_GUEST_STDOUT_MARKER " + language), "selected Mac language reaches the packaged Java VM before Application startup") }

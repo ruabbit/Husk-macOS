@@ -28,9 +28,11 @@ public final class Services {
         return s;
     }
     public static ComponentName start(Context from, Intent i) {
+        if (!AppRunner.acceptsNewWork()) return null;
         Manifest.Component c = find(i);
         if (c == null) return null;
         new Handler(Looper.getMainLooper()).post(() -> {
+            if (!AppRunner.acceptsNewWork()) return;
             try { Service s = create(c); s.onStartCommand(i, 0, 1); } catch (Throwable t) { android.util.Log.e("Husk", "service " + c.name + " failed", t); }
         });
         return new ComponentName(Native.packageName(), c.name);
@@ -44,15 +46,17 @@ public final class Services {
     }
     public static void stopSelf(Service s) { String k = null; for (java.util.Map.Entry<String, Service> e : sRunning.entrySet()) if (e.getValue() == s) k = e.getKey(); if (k != null) { sRunning.remove(k); s.onDestroy(); } }
     public static boolean bind(Context from, Intent i, ServiceConnection conn) {
+        if (!AppRunner.acceptsNewWork()) return false;
         final IBinder play = PlayStore.bind(i);
         if (play != null) {
             final ComponentName cn = new ComponentName(GooglePackages.VENDING, i.getAction());
-            new Handler(Looper.getMainLooper()).post(() -> conn.onServiceConnected(cn, play));
+            new Handler(Looper.getMainLooper()).post(() -> { if (AppRunner.acceptsNewWork()) conn.onServiceConnected(cn, play); });
             return true;
         }
         Manifest.Component c = find(i);
         if (c == null) return false;
         new Handler(Looper.getMainLooper()).post(() -> {
+            if (!AppRunner.acceptsNewWork()) return;
             try {
                 Service s = create(c);
                 IBinder b = s.onBind(i);
@@ -65,27 +69,80 @@ public final class Services {
     }
     public static void unbind(ServiceConnection conn) { sBound.remove(conn); }
     static void finishForHost() {
+        java.util.ArrayList<Job> jobs;
+        synchronized (sJobs) { jobs = new java.util.ArrayList<>(sJobs.values()); jobs.addAll(sRetiring); sJobs.clear(); sRetiring.clear(); }
+        for (Job job : jobs) stopJob(job);
         for (Service service : new java.util.ArrayList<>(sRunning.values())) service.onDestroy();
         sRunning.clear(); sBound.clear();
     }
-    /** JobScheduler: start the JobService named on the job and call onStartJob on the main thread. */
-    public static void runJob(android.app.job.JobInfo j) {
-        if (j == null || j.getService() == null) return;
-        final android.content.ComponentName cn = j.getService();
+    private static final HashMap<Integer, Job> sJobs = new HashMap<>();
+    private static final java.util.ArrayList<Job> sRetiring = new java.util.ArrayList<>();
+    private static final class Job {
+        android.app.job.JobInfo info;
+        android.app.job.JobService service;
+        android.app.job.JobParameters params;
+    }
+    /** Bounded foreground subset: no Android background scheduler or persistence. */
+    public static int scheduleJob(android.app.job.JobInfo info) {
+        if (info == null || info.getService() == null) throw new IllegalArgumentException("missing JobService");
+        if (!AppRunner.acceptsNewWork() || !info.huskCanRun()) return android.app.job.JobScheduler.RESULT_FAILURE;
+        Manifest.Component found = null;
+        if (Native.packageName().equals(info.getService().getPackageName()))
+            for (Manifest.Component c : Manifest.services)
+                if (c.name.equals(info.getService().getClassName()) && c.enabled) { found = c; break; }
+        if (found == null) throw new IllegalArgumentException("JobService is absent or disabled");
+        final Manifest.Component component = found;
+        final Job job = new Job(); job.info = info;
+        final Job previous;
+        synchronized (sJobs) { previous = sJobs.put(info.getId(), job); if (previous != null) sRetiring.add(previous); }
         new Handler(Looper.getMainLooper()).post(() -> {
+            stopJob(previous);
+            synchronized (sJobs) { if (sJobs.get(info.getId()) != job || !AppRunner.acceptsNewWork()) return; }
             try {
-                Manifest.Component c = null;
-                for (Manifest.Component s : Manifest.services) if (s.name.equals(cn.getClassName())) { c = s; break; }
-                if (c == null) { c = new Manifest.Component(); c.name = cn.getClassName(); c.kind = "service"; c.enabled = true; }
-                Service s = create(c);
-                if (s instanceof android.app.job.JobService) {
-                    android.app.job.JobParameters p = new android.app.job.JobParameters();
-                    p.huskJobId = j.getId();
-                    p.huskExtras = j.getExtras();
-                    ((android.app.job.JobService) s).onStartJob(p);
-                } else s.onStartCommand(new Intent().setComponent(cn), 0, 1);
-            } catch (Throwable t) { android.util.Log.e("Husk", "job " + cn.getClassName() + " failed", t); }
+                Service service = create(component);
+                if (!(service instanceof android.app.job.JobService)) throw new IllegalArgumentException("not a JobService");
+                job.service = (android.app.job.JobService)service;
+                job.params = new android.app.job.JobParameters();
+                job.params.huskJobId = info.getId(); job.params.huskExtras = info.getExtras();
+                if (!job.service.onStartJob(job.params)) finishJob(job.params, false);
+            } catch (Exception e) {
+                synchronized (sJobs) { if (sJobs.get(info.getId()) == job) sJobs.remove(info.getId()); }
+                throw new RuntimeException("JobService failed", e);
+            }
         });
+        return android.app.job.JobScheduler.RESULT_SUCCESS;
+    }
+    private static void stopJob(Job job) {
+        android.app.job.JobService service;
+        synchronized (sJobs) {
+            sRetiring.remove(job);
+            if (job == null || job.service == null || job.params == null) return;
+            service = job.service; job.service = null;
+        }
+        if (service.onStopJob(job.params)) android.util.Log.w("Husk", "Background JobScheduler rescheduling is unavailable");
+    }
+    public static void cancelJob(int id) {
+        final Job job;
+        synchronized (sJobs) { job = sJobs.remove(id); if (job != null) sRetiring.add(job); }
+        if (job != null) new Handler(Looper.getMainLooper()).post(() -> stopJob(job));
+    }
+    public static void cancelJobs() {
+        java.util.ArrayList<Integer> ids;
+        synchronized (sJobs) { ids = new java.util.ArrayList<>(sJobs.keySet()); }
+        for (Integer id : ids) cancelJob(id);
+    }
+    public static java.util.List<android.app.job.JobInfo> pendingJobs() {
+        java.util.ArrayList<android.app.job.JobInfo> result = new java.util.ArrayList<>();
+        synchronized (sJobs) { for (Job job : sJobs.values()) result.add(job.info); }
+        return result;
+    }
+    public static void finishJob(android.app.job.JobParameters params, boolean reschedule) {
+        if (params == null) return;
+        synchronized (sJobs) {
+            Job job = sJobs.get(params.getJobId());
+            if (job != null && job.params == params) { sJobs.remove(params.getJobId()); job.service = null; }
+        }
+        if (reschedule) android.util.Log.w("Husk", "Background JobScheduler rescheduling is unavailable");
     }
 
     /** A system service by name, or null for those Husk has nothing for. */

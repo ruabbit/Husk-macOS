@@ -88,6 +88,7 @@ private final class FixtureHTTP: URLProtocol, @unchecked Sendable {
 @main struct PlaySupportTests {
     @MainActor static func main() async {
         do {
+            try check(PlayDevice.platforms == ["arm64-v8a"], "Store ABI matches macOS launch support")
             let args = CommandLine.arguments
             if args.count == 3, args[1] == "--live" {
                 let service = GooglePlayService()

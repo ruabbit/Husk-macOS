@@ -6,6 +6,8 @@
 #include "husk-tl-binder.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <stdatomic.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,10 +74,12 @@ typedef struct {
     uint64_t cookie;
 } flat_obj;
 
-enum { MAX_SESS = 32, MAX_CALL = 64, MAX_NODE = 256 };
+enum { MAX_SESS = 32, MAX_CALL = 64, MAX_NODE = 256, MAX_PARCEL = 1 << 20 };
 
 typedef struct sess {
-    bool used;
+    bool used, initialized;
+    atomic_bool closing;
+    unsigned refs;
     int fd;
     uint8_t *map;
     size_t map_len, map_used;
@@ -100,11 +104,37 @@ static sess *g_call[MAX_CALL];
 static int g_ncall;
 static node g_node[MAX_NODE];
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_changed = PTHREAD_COND_INITIALIZER;
 
 static sess *by_fd(int fd)
 {
     for (int i = 0; i < MAX_SESS; i++) if (g_sess[i].used && g_sess[i].fd == fd) return &g_sess[i];
     return NULL;
+}
+
+/* Sessions remain allocated; close wakes readers and waits for every admitted
+ * ioctl before releasing buffers. Mutexes are not destroyed under waiters. */
+static sess *acquire(int fd)
+{
+    pthread_mutex_lock(&g_lock);
+    sess *s = by_fd(fd);
+    if (s && !atomic_load(&s->closing)) s->refs++;
+    else s = NULL;
+    pthread_mutex_unlock(&g_lock);
+    return s;
+}
+static void release(sess *s)
+{
+    pthread_mutex_lock(&g_lock);
+    s->refs--; pthread_cond_broadcast(&g_changed);
+    pthread_mutex_unlock(&g_lock);
+}
+static bool parcel_valid(const void *data, size_t len, const uint64_t *offsets, size_t count)
+{
+    if (len > MAX_PARCEL || (len && !data) || count > 4096 || (count && !offsets)) return false;
+    for (size_t i = 0; i < count; ++i)
+        if (offsets[i] > len || sizeof(flat_obj) > len - offsets[i] || offsets[i] % 4) return false;
+    return true;
 }
 
 bool husk_binder_is_path(const char *path)
@@ -117,40 +147,44 @@ int husk_binder_open(void)
     int p[2];
     if (pipe(p) != 0) return -1;
     close(p[1]);
+    if (fcntl(p[0], F_SETFD, FD_CLOEXEC) < 0) { close(p[0]); return -1; }
     pthread_mutex_lock(&g_lock);
     sess *s = NULL;
     for (int i = 0; i < MAX_SESS; i++) if (!g_sess[i].used) { s = &g_sess[i]; break; }
     if (!s) { pthread_mutex_unlock(&g_lock); close(p[0]); errno = EMFILE; return -1; }
-    memset(s, 0, sizeof(*s));
-    s->used = true;
-    s->fd = p[0];
-    pthread_mutex_init(&s->lock, NULL);
-    pthread_cond_init(&s->cv, NULL);
+    if (!s->initialized) {
+        pthread_mutex_init(&s->lock, NULL); pthread_cond_init(&s->cv, NULL);
+        s->initialized = true;
+    }
+    s->used = true; s->refs = 0; atomic_store(&s->closing, false);
+    s->fd = p[0]; s->looping = false;
     pthread_mutex_unlock(&g_lock);
     tl_log_line("binder: open fd %d", s->fd);
     return s->fd;
 }
 
-bool husk_binder_is_fd(int fd) { return by_fd(fd) != NULL; }
+bool husk_binder_is_fd(int fd) { sess *s = acquire(fd); if (!s) return false; release(s); return true; }
 
 void *husk_binder_mmap(int fd, size_t len)
 {
-    sess *s = by_fd(fd);
+    sess *s = acquire(fd);
     if (!s) { errno = EBADF; return MAP_FAILED; }
+    if (!len || len > MAX_PARCEL) { release(s); errno = EINVAL; return MAP_FAILED; }
     if (len < 4096) len = 4096;
-    void *p = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (p == MAP_FAILED) return MAP_FAILED;
     pthread_mutex_lock(&s->lock);
-    if (s->map) munmap(s->map, s->map_len);
-    s->map = p;
-    s->map_len = len;
-    s->map_used = 0;
-    pthread_mutex_unlock(&s->lock);
+    void *p = MAP_FAILED;
+    if (s->map) errno = EBUSY;
+    else {
+        p = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (p != MAP_FAILED) { s->map = p; s->map_len = len; s->map_used = 0; }
+    }
+    pthread_mutex_unlock(&s->lock); release(s);
     return p;
 }
 
 static void push(sess *s, const void *p, size_t n)
 {
+    if (n > MAX_PARCEL || s->in_len > MAX_PARCEL - n) { errno = ENOSPC; return; }
     if (s->in_len + n > s->in_cap) {
         size_t cap = s->in_cap ? s->in_cap * 2 : 4096;
         while (cap < s->in_len + n) cap *= 2;
@@ -166,9 +200,9 @@ static void push(sess *s, const void *p, size_t n)
 
 static void *alloc_buf(sess *s, size_t n)
 {
+    if (n > MAX_PARCEL) return NULL;
     n = (n + 7) & ~(size_t)7;
-    if (!s->map || s->map_used + n > s->map_len) s->map_used = 0;
-    if (!s->map || s->map_used + n > s->map_len) return NULL;
+    if (!s->map || n > s->map_len || s->map_used > s->map_len - n) return NULL;
     void *p = s->map + s->map_used;
     s->map_used += n;
     return p;
@@ -228,7 +262,7 @@ static void rewrite_objects(sess *from, uint8_t *data, size_t dlen, const uint64
     if (!data || !offs) return;
     for (size_t i = 0; i < n_off; i++) {
         size_t at = (size_t)offs[i];
-        if (at + sizeof(flat_obj) > dlen) continue;
+        if (at > dlen || sizeof(flat_obj) > dlen - at) continue;
         flat_obj o;
         memcpy(&o, data + at, sizeof(o));
         if (o.type == BINDER_TYPE_BINDER || o.type == BINDER_TYPE_WEAK_BINDER) {
@@ -264,6 +298,7 @@ static void deliver_txn(sess *to, uint32_t br, const binder_txn *t, const void *
     binder_txn out = *t;
     size_t need = (size_t)t->data_size + (size_t)t->offsets_size;
     void *buf = alloc_buf(to, need ? need : 8);
+    if (!buf) { uint32_t failed = BR_FAILED_REPLY; push(to, &failed, sizeof(failed)); return; }
     if (buf && t->data_size) memcpy(buf, data, (size_t)t->data_size);
     if (buf && t->offsets_size) memcpy((uint8_t *)buf + (size_t)t->data_size, offs, (size_t)t->offsets_size);
     out.buffer = (uint64_t)(uintptr_t)buf;
@@ -278,6 +313,10 @@ static void reply_from_local(sess *s, uint32_t flags, husk_binder_reply *r)
     if (flags & TF_ONE_WAY) {
         husk_binder_reply_free(r);
         return;
+    }
+    if (!parcel_valid(r->data, r->data_size, r->offsets, r->n_offsets)) {
+        pthread_mutex_lock(&s->lock); uint32_t fail = BR_FAILED_REPLY; push(s, &fail, 4); pthread_mutex_unlock(&s->lock);
+        husk_binder_reply_free(r); return;
     }
     binder_txn t;
     memset(&t, 0, sizeof(t));
@@ -308,7 +347,12 @@ static bool dispatch(uint32_t handle, sess *from, binder_txn *t, const void *dat
     } else if (handle < MAX_NODE && g_node[handle].used) {
         to = g_node[handle].owner;
     }
-    if (to && from && !(t->flags & TF_ONE_WAY) && g_ncall < MAX_CALL) g_call[g_ncall++] = from;
+    if (to && (!to->used || atomic_load(&to->closing))) to = NULL;
+    if (to && from && !(t->flags & TF_ONE_WAY)) {
+        if (g_ncall == MAX_CALL) to = NULL;
+        else g_call[g_ncall++] = from;
+    }
+    if (to) to->refs++;
     pthread_mutex_unlock(&g_lock);
 
     if (fn) {
@@ -344,6 +388,7 @@ static bool dispatch(uint32_t handle, sess *from, binder_txn *t, const void *dat
     if (copy && offs && n_off) rewrite_objects(from, copy, (size_t)t->data_size, (const uint64_t *)offs, n_off);
     deliver_txn(to, BR_TRANSACTION, t, copy ? copy : data, offs);
     pthread_mutex_unlock(&to->lock);
+    release(to);
     free(copy);
     return true;
 }
@@ -353,6 +398,7 @@ int husk_binder_transact(uint32_t handle, uint32_t code, uint32_t flags,
                          const uint64_t *offsets, size_t n_offsets,
                          husk_binder_reply *reply)
 {
+    if (!parcel_valid(data, data_size, offsets, n_offsets)) { errno = EINVAL; return -1; }
     binder_txn t;
     memset(&t, 0, sizeof(t));
     t.handle = handle;
@@ -361,10 +407,14 @@ int husk_binder_transact(uint32_t handle, uint32_t code, uint32_t flags,
     t.data_size = data_size;
     t.offsets_size = n_offsets * 8;
     husk_binder_reply slot = {0};
+    husk_binder_reply *previous = t_reply_slot;
     t_reply_slot = reply ? &slot : NULL;
     bool ok = dispatch(handle, NULL, &t, data, offsets);
-    t_reply_slot = NULL;
+    t_reply_slot = previous;
     if (!ok) { errno = ESRCH; return -1; }
+    if (!parcel_valid(slot.data, slot.data_size, slot.offsets, slot.n_offsets)) {
+        husk_binder_reply_free(&slot); errno = EINVAL; return -1;
+    }
     if (reply) *reply = slot;
     return 0;
 }
@@ -397,22 +447,25 @@ static int write_cmds(sess *s, const uint8_t *buf, size_t n)
             continue;
         }
         if (cmd == BC_INCREFS || cmd == BC_ACQUIRE || cmd == BC_RELEASE || cmd == BC_DECREFS) {
-            if (i + 4 > n) break;
+            if (i + 4 > n) { errno = EINVAL; return -1; }
             i += 4;
             continue;
         }
         if (cmd == BC_FREE_BUFFER) {
-            if (i + 8 > n) break;
+            if (i + 8 > n) { errno = EINVAL; return -1; }
             i += 8;
             continue;
         }
         if (cmd == BC_TRANSACTION || cmd == BC_REPLY) {
-            if (i + sizeof(binder_txn) > n) break;
+            if (i + sizeof(binder_txn) > n) { errno = EINVAL; return -1; }
             binder_txn t;
             memcpy(&t, buf + i, sizeof(t));
             i += sizeof(t);
             const void *data = (const void *)(uintptr_t)t.buffer;
             const void *offs = (const void *)(uintptr_t)t.offsets;
+            if (t.offsets_size % 8 || !parcel_valid(data, t.data_size, offs, t.offsets_size / 8)) {
+                errno = EINVAL; return -1;
+            }
             pthread_mutex_lock(&s->lock);
             uint32_t done = BR_TRANSACTION_COMPLETE;
             push(s, &done, 4);
@@ -422,6 +475,8 @@ static int write_cmds(sess *s, const uint8_t *buf, size_t n)
                 sess *to = NULL;
                 pthread_mutex_lock(&g_lock);
                 if (g_ncall > 0) to = g_call[--g_ncall];
+                if (to && (!to->used || atomic_load(&to->closing))) to = NULL;
+                if (to) to->refs++;
                 pthread_mutex_unlock(&g_lock);
                 if (!to) {
                     pthread_mutex_lock(&s->lock);
@@ -433,6 +488,7 @@ static int write_cmds(sess *s, const uint8_t *buf, size_t n)
                 pthread_mutex_lock(&to->lock);
                 deliver_txn(to, BR_REPLY, &t, data, offs);
                 pthread_mutex_unlock(&to->lock);
+                release(to);
                 continue;
             }
             if (!dispatch((uint32_t)t.handle, s, &t, data, offs)) {
@@ -443,15 +499,17 @@ static int write_cmds(sess *s, const uint8_t *buf, size_t n)
             }
             continue;
         }
-        break;
+        errno = EINVAL; return -1;
     }
+    if (i != n) { errno = EINVAL; return -1; }
     return 0;
 }
 
 static int read_out(sess *s, uint8_t *dst, size_t cap, uint64_t *consumed, bool wait)
 {
     pthread_mutex_lock(&s->lock);
-    while (s->in_len == 0 && wait) pthread_cond_wait(&s->cv, &s->lock);
+    while (s->in_len == 0 && wait && !atomic_load(&s->closing)) pthread_cond_wait(&s->cv, &s->lock);
+    if (atomic_load(&s->closing)) { pthread_mutex_unlock(&s->lock); errno = EBADF; return -1; }
     size_t n = s->in_len < cap ? s->in_len : cap;
     if (n) {
         memcpy(dst, s->in, n);
@@ -463,10 +521,9 @@ static int read_out(sess *s, uint8_t *dst, size_t cap, uint64_t *consumed, bool 
     return 0;
 }
 
-int husk_binder_ioctl(int fd, unsigned long req, void *arg)
+static int session_ioctl(sess *s, unsigned long req, void *arg)
 {
-    sess *s = by_fd(fd);
-    if (!s) { errno = EBADF; return -1; }
+    int fd = s->fd;
     if (req == BINDER_VERSION) {
         if (!arg) { errno = EINVAL; return -1; }
         *(int32_t *)arg = BINDER_PROTOCOL;
@@ -483,36 +540,46 @@ int husk_binder_ioctl(int fd, unsigned long req, void *arg)
         tl_log_line("binder: context manager is fd %d", fd);
         return 0;
     }
+    if (!arg) { errno = EINVAL; return -1; }
     if (req != BINDER_WRITE_READ) { errno = EINVAL; return -1; }
     binder_write_read wr;
     memcpy(&wr, arg, sizeof(wr));
+    if (wr.write_size > MAX_PARCEL || wr.read_size > MAX_PARCEL ||
+        (wr.write_size && !wr.write_buffer) || (wr.read_size && !wr.read_buffer)) { errno = EINVAL; return -1; }
+    wr.write_consumed = 0;
     if (wr.write_size) {
-        write_cmds(s, (const uint8_t *)(uintptr_t)wr.write_buffer, (size_t)wr.write_size);
+        if (write_cmds(s, (const uint8_t *)(uintptr_t)wr.write_buffer, (size_t)wr.write_size) < 0) return -1;
         wr.write_consumed = wr.write_size;
     }
     wr.read_consumed = 0;
     if (wr.read_size) {
         bool wait = true;
-        read_out(s, (uint8_t *)(uintptr_t)wr.read_buffer, (size_t)wr.read_size, &wr.read_consumed, wait);
+        if (read_out(s, (uint8_t *)(uintptr_t)wr.read_buffer, (size_t)wr.read_size, &wr.read_consumed, wait) < 0) return -1;
     }
     memcpy(arg, &wr, sizeof(wr));
     return 0;
 }
 
+int husk_binder_ioctl(int fd, unsigned long req, void *arg)
+{
+    sess *s = acquire(fd); if (!s) { errno = EBADF; return -1; }
+    int result = session_ioctl(s, req, arg); release(s); return result;
+}
+
 void husk_binder_close(int fd)
 {
-    sess *s = by_fd(fd);
-    if (!s) return;
     pthread_mutex_lock(&g_lock);
+    sess *s = by_fd(fd);
+    if (!s || atomic_exchange(&s->closing, true)) { pthread_mutex_unlock(&g_lock); return; }
     if (g_mgr == s) g_mgr = NULL;
-    for (int i = 0; i < MAX_NODE; i++) if (g_node[i].owner == s) g_node[i].owner = NULL;
+    for (int i = 0; i < MAX_NODE; i++) if (g_node[i].owner == s) memset(&g_node[i], 0, sizeof(node));
+    for (int i = 0; i < g_ncall; i++) if (g_call[i] == s) g_call[i] = NULL;
     pthread_mutex_unlock(&g_lock);
-    pthread_mutex_lock(&s->lock);
-    pthread_cond_broadcast(&s->cv);
+    pthread_mutex_lock(&s->lock); pthread_cond_broadcast(&s->cv); pthread_mutex_unlock(&s->lock);
+    pthread_mutex_lock(&g_lock);
+    while (s->refs) pthread_cond_wait(&g_changed, &g_lock);
     if (s->map) munmap(s->map, s->map_len);
-    free(s->in);
-    pthread_mutex_unlock(&s->lock);
-    pthread_mutex_destroy(&s->lock);
-    pthread_cond_destroy(&s->cv);
+    free(s->in); s->map = NULL; s->map_len = s->map_used = s->in_len = s->in_cap = 0; s->in = NULL;
     s->used = false;
+    pthread_mutex_unlock(&g_lock);
 }

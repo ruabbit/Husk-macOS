@@ -120,7 +120,7 @@ static void *run(void *unused)
         if(documents){jvalue result;CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","documentResult","()I",NULL,&result));CHECK(result.i==15);}
         if(controller)CHECK(controller_result()==255);
         jvalue result;CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","result","()I",NULL,&result));CHECK(result.i==63);
-        char p[1400],text[512]={0};snprintf(p,sizeof(p),"%s/shared_prefs/lifecycle.xml",data);FILE *f=fopen(p,"r");CHECK(f);fread(text,1,sizeof(text)-1,f);fclose(f);CHECK(strstr(text,"i destroyed 1"));
+        char p[1400],text[512]={0};snprintf(p,sizeof(p),"%s/shared_prefs/lifecycle.xml",data);FILE *f=fopen(p,"r");CHECK(f);fread(text,1,sizeof(text)-1,f);fclose(f);CHECK(strstr(text,"i destroyed 1"));CHECK(strstr(text,"b jobs_closed true"));
         snprintf(p,sizeof(p),"%s/files/lifecycle.db",data);sqlite3 *db=NULL;sqlite3_stmt *st=NULL;
         CHECK(sqlite3_open_v2(p,&db,SQLITE_OPEN_READONLY,NULL)==SQLITE_OK);
         CHECK(sqlite3_prepare_v2(db,"SELECT sum(value) FROM lifecycle",-1,&st,NULL)==SQLITE_OK);

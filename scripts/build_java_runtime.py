@@ -74,6 +74,9 @@ def verify(root, check_sources=False):
     framework = json.loads((root/'husk-framework.json').read_text())
     if framework['dexSHA256'] != digest(root/'husk-framework.dex') or framework['d8SHA256'] != lock['d8']['sha256']:
         raise RuntimeError('Framework provenance does not match DEX or D8')
+    if 'coreDexSHA256' in framework:
+        if framework['coreDexSHA256'] != digest(root/'husk-framework-core.dex'):
+            raise RuntimeError('Core framework provenance does not match DEX')
     if check_sources and framework['sourcesSHA256'] != source_digest():
         raise RuntimeError('Framework DEX is stale relative to the checked-in sources')
     for path in root.rglob('*.so'):

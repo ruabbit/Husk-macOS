@@ -29,7 +29,12 @@ enum PlayDevice {
     static let screenHeight = 2400
     static let screenDensity = 420
     static let glEsVersion = 0x0003_0002                 // OpenGL ES 3.2
+#if os(macOS)
+    // Keep downloads aligned with the macOS runner's admitted ABI.
+    static let platforms = ["arm64-v8a"]
+#else
     static let platforms = ["arm64-v8a", "armeabi-v7a", "armeabi"]
+#endif
     static let simOperator = "310260"
     static let cellOperator = "310260"
 

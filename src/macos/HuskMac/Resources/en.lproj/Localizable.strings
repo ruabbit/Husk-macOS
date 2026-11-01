@@ -787,3 +787,5 @@
 "Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode." = "Games or mods that generate code while running may not work. If preparation or launch fails, turn off JIT-less for that game to use its usual mode.";
 
 "Play without JIT" = "Play without JIT";
+"Play without JIT 社区列表" = "Play without JIT community reports";
+"此应用使用 32 位 ARM；输入、线程关闭与存档接入尚未完成，暂不可运行。" = "This app uses 32-bit ARM. Input, worker shutdown and saves are not yet connected on macOS, so it cannot run yet.";

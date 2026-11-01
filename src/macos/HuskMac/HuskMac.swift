@@ -288,7 +288,7 @@ struct LibraryView: View {
             CompatibilityStore.shared.markAsked(package)
             reporting = CompatSubject(package: package, name: game.title, isGame: true,
                 iconPath: model.paths.game(game.id).appendingPathComponent("icon.data").path,
-                afterPlaying: true, runtime: game.runtime)
+                afterPlaying: true, runtime: game.runtime, jitless: game.settings.jitless)
         }
     }
 }
@@ -372,7 +372,7 @@ struct GameDetail: View {
                 if let package = game.packageName, game.fixture == nil {
                     MacCompatibilitySection(subject: CompatSubject(package: package, name: game.title, isGame: true,
                         iconPath: model.paths.game(game.id).appendingPathComponent("icon.data").path,
-                        runtime: game.runtime), reporting: $reporting)
+                        runtime: game.runtime, jitless: game.settings.jitless), reporting: $reporting)
                 }
                 GroupBox("游戏设置") {
                     VStack(alignment: .leading, spacing: 12) {

@@ -44,19 +44,23 @@ private final class CompatibilityProtocol: URLProtocol {
             guard ok else { throw NSError(domain: message, code: 1) }; print("PASS \(message)")
         }
         let list = Data(#"{"apps":[{"package":"org.husk.fixture","name":"Fixture","official":{"status":"opens","note":"iPhone test"},"community":{"reports":2,"counts":{"works":2}}}]}"#.utf8)
+        let jitlessList = Data(#"{"apps":[{"package":"org.husk.fixture","name":"Fixture","official":{"status":"broken","note":"JIT-less fixture"},"community":{"reports":1,"counts":{"broken":1}}}]}"#.utf8)
         var requests: [URLRequest] = []
         CompatibilityProtocol.handler = { request in
             requests.append(request)
             if request.url?.host == "first.invalid" { return (503, Data()) }
-            return (200, list)
+            return (200, request.url?.query == "jitless=1" ? jitlessList : list)
         }
         await store.refresh()
-        try check(requests.count == 2 && store.workingSite == sites[1], "GET falls back after server failure")
+        try check(requests.count == 4 && requests.filter { $0.url?.query == "jitless=1" }.count == 2 && store.workingSite == sites[1], "GET falls back after server failure")
         try check(store.entry("org.husk.fixture")?.status == .opens, "official result retains its source")
         await store.refresh()
-        try check(requests.count == 2, "fresh cache avoids duplicate GET")
+        try check(requests.count == 4, "fresh cache avoids duplicate GET")
         let restored = CompatibilityStore(session: session, sites: sites, cache: cache, defaults: defaults)
         try check(restored.entry("org.husk.fixture")?.community.reports == 2, "offline cache restored")
+        try check(restored.entry("org.husk.fixture", jitless: true)?.status == .broken && restored.entry("org.husk.fixture")?.status == .opens, "JIT-less and default caches restore independently")
+        let isolated = CompatibilityStore(session: session, sites: sites, cache: root.appendingPathComponent("another/list.json"), defaults: defaults)
+        try check(isolated.jitlessEntries.isEmpty, "injected cache does not read another library's JIT-less data")
         requests = []
         CompatibilityProtocol.handler = { request in requests.append(request); return (403, Data()) }
         await store.refresh(force: true)
@@ -138,6 +142,9 @@ private final class CompatibilityProtocol: URLProtocol {
             try await store.send(package: "org.husk.fixture", name: "Fixture", isGame: true, status: .opens, notes: "", author: "")
             throw NSError(domain: "expected network failure", code: 1)
         } catch let error as URLError { try check(error.code == .networkConnectionLost && posts == 1, "ambiguous POST is never retried at another site") }
+        CompatibilityProtocol.handler = { request in (200, request.url?.query == "jitless=1" ? Data(#"{"apps":[]}"#.utf8) : list) }
+        await store.refresh(force: true)
+        try check(store.entry("org.husk.fixture", jitless: true) == nil && store.entry("org.husk.fixture") != nil, "missing JIT-less result never falls back to ordinary compatibility")
         print("PASS compatibility: isolated protocol only; no public report sent")
     }
 }

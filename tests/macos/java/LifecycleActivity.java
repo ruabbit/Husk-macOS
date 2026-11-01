@@ -28,6 +28,7 @@ public final class LifecycleActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); owner = Thread.currentThread(); events |= 1;
         Runtime31Checks.nativeRuntime();
+        JobChecks.start(this);
         System.out.println("HUSK_REOPEN_DESTROYED " + getSharedPreferences("lifecycle", 0).getInt("destroyed", 0));
         HostEnvironmentChecks.run(this);
         if ("framework".equals(System.getenv("HUSK_JAVA_CASE"))) FrameworkChecks.run(this);
@@ -102,6 +103,7 @@ public final class LifecycleActivity extends Activity {
         callback(); delay();
         System.out.println("HUSK_GUEST_DESTROY_STDOUT");
         if ("destroy-failed".equals(System.getenv("HUSK_JAVA_CASE"))) throw new IllegalStateException("test onDestroy failure");
+        JobChecks.activityDestroy();
         events |= 32;
         getSharedPreferences("lifecycle", 0).edit().putInt("destroyed", 1).putInt("events", wrongThread ? -1 : events).apply();
         getSharedPreferences("lifecycle", 0).edit().putInt("controller_events", controllerResult()).putInt("controller_held", heldButtons).apply();

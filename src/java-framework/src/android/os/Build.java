@@ -13,8 +13,10 @@ public class Build {
     public static boolean isBuildConsistent() { return true; }
     public static final String FINGERPRINT = "google/shiba/shiba:14/UP1A.231105.001/11000000:user/release-keys", HOST = "husk", USER = "husk";
     public static final String SERIAL = "unknown", BOOTLOADER = "unknown", RADIO = "unknown";
-    public static final String CPU_ABI = "arm64-v8a", CPU_ABI2 = "armeabi-v7a";
-    public static final String[] SUPPORTED_ABIS = { "arm64-v8a", "armeabi-v7a", "armeabi" }, SUPPORTED_64_BIT_ABIS = { "arm64-v8a" }, SUPPORTED_32_BIT_ABIS = { "armeabi-v7a", "armeabi" };
+    private static final boolean ARM32 = "1".equals(husk.Native.systemProperty("husk.runtime.arm32"));
+    public static final String CPU_ABI = "arm64-v8a", CPU_ABI2 = ARM32 ? "armeabi-v7a" : "";
+    public static final String[] SUPPORTED_ABIS = ARM32 ? new String[]{ "arm64-v8a", "armeabi-v7a", "armeabi" } : new String[]{ "arm64-v8a" },
+        SUPPORTED_64_BIT_ABIS = { "arm64-v8a" }, SUPPORTED_32_BIT_ABIS = ARM32 ? new String[]{ "armeabi-v7a", "armeabi" } : new String[0];
     public static final long TIME = 0;
     public static String getSerial() { return SERIAL; }
     public static class VERSION {

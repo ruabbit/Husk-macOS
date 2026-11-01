@@ -120,7 +120,17 @@ public class PackageManager {
         FEATURE_VULKAN_HARDWARE_LEVEL, FEATURE_VULKAN_HARDWARE_VERSION, "android.software.opengles.deqp.level",
         FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS, FEATURE_FREEFORM_WINDOW_MANAGEMENT,
     };
+    private static final String[] MAC_FEATURES = { FEATURE_TOUCHSCREEN, FEATURE_TOUCHSCREEN_MULTITOUCH,
+        FEATURE_TOUCHSCREEN_MULTITOUCH_DISTINCT, FEATURE_FAKETOUCH, FEATURE_SCREEN_PORTRAIT,
+        FEATURE_SCREEN_LANDSCAPE, FEATURE_WIFI, FEATURE_AUDIO_OUTPUT, FEATURE_OPENGLES_EXTENSION_PACK,
+        FEATURE_SENSOR_ACCELEROMETER, FEATURE_INPUT_METHODS, FEATURE_GAMEPAD, FEATURE_WEBVIEW };
+    private static boolean macHost() { return "macos".equals(husk.Native.systemProperty("husk.host.platform")); }
     public boolean hasSystemFeature(String name, int version) {
+        if (macHost()) {
+            if (version > 0) return false;
+            for (String feature : MAC_FEATURES) if (feature.equals(name)) return true;
+            return false;
+        }
         if (name == null) return false;
         if (name.startsWith("android.hardware.touchscreen") || name.startsWith("android.hardware.faketouch")
                 || name.startsWith("android.hardware.camera") || name.startsWith("android.hardware.wifi")
@@ -139,13 +149,15 @@ public class PackageManager {
         return false;
     }
     public FeatureInfo[] getSystemAvailableFeatures() {
-        FeatureInfo[] f = new FeatureInfo[FEATURES_YES.length + 1];
-        for (int i = 0; i < FEATURES_YES.length; i++) { f[i] = new FeatureInfo(); f[i].name = FEATURES_YES[i]; }
-        f[FEATURES_YES.length] = new FeatureInfo();
-        f[FEATURES_YES.length].reqGlEsVersion = ConfigurationInfo.huskDevice().reqGlEsVersion;
+        String[] names = macHost() ? MAC_FEATURES : FEATURES_YES;
+        FeatureInfo[] f = new FeatureInfo[names.length + 1];
+        for (int i = 0; i < names.length; i++) { f[i] = new FeatureInfo(); f[i].name = names[i]; }
+        f[names.length] = new FeatureInfo();
+        f[names.length].reqGlEsVersion = ConfigurationInfo.huskDevice().reqGlEsVersion;
         return f;
     }
     public String[] getSystemSharedLibraryNames() {
+        if (macHost()) return new String[]{ "org.apache.http.legacy" };
         return new String[] { "android.test.base", "android.test.mock", "android.test.runner", "org.apache.http.legacy",
                               "android.ext.shared", "javax.obex" };
     }

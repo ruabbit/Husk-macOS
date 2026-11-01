@@ -14,6 +14,7 @@
 static char **arguments;
 static int failure;
 static int argument_count;
+extern bool mac_parcel_checks(void);
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL Java boot line %d: %s\n",__LINE__,#c); failure=1; return NULL; } } while(0)
 static void *run(void *unused)
 {
@@ -55,6 +56,7 @@ static void *run(void *unused)
     void *get_id=method(env,tl_jni_class_object("android/view/InputDevice"),"getId","()I");
     CHECK(get_id && call_int(env,device,get_id,NULL)==1);
     CHECK(!tl_jni_pending());
+    CHECK(mac_parcel_checks());
     puts("PASS real Dalvik boot, libcore, ICU/time zones, Conscrypt, framework and InputEvent JNI dispatch");
     return NULL;
 }

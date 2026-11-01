@@ -3,25 +3,20 @@
 #include "husk-tl-dvm.h"
 #include "husk-tl-jni.h"
 #include "husk-tl-ld.h"
+#include "husk-tl-aosp.h"
+#include "husk-tl-servicemanager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 bool tl_dvm_boot(const char *root, const char *data)
 {
-    /* Keep the same order as the iOS Java host and java-runtime.lock.json. */
-    static const char *names[] = {
-        "com.android.art/javalib/core-oj.jar", "com.android.art/javalib/core-libart.jar",
-        "com.android.art/javalib/okhttp.jar", "com.android.art/javalib/bouncycastle.jar",
-        "com.android.art/javalib/apache-xml.jar", "com.android.i18n/javalib/core-icu4j.jar",
-        "com.android.conscrypt/javalib/conscrypt.jar", "husk-framework.dex", "org.apache.http.legacy.jar"
-    };
-    char paths[9][1200], value[1200]; const char *boot[9];
+    /* Complete checked boot path: never silently omit a required jar. Mac's
+     * resource verifier admits only manifest-listed files before reaching here. */
+    char paths[20][1200], value[1200]; const char *boot[20];
     if (!root || !data) return false;
-    for (int i = 0; i < 9; ++i) {
-        if (snprintf(paths[i], sizeof(paths[i]), "%s/%s", root, names[i]) >= (int)sizeof(paths[i]) || access(paths[i], R_OK)) return false;
-        boot[i] = paths[i];
-    }
+    int count = husk_aosp_boot_jars(root, paths, 20, boot);
+    if (count < 0) return false;
     static const char *modules[] = {"art", "i18n", "tzdata"};
     static const char *vars[] = {"ANDROID_ART_ROOT", "ANDROID_I18N_ROOT", "ANDROID_TZDATA_ROOT"};
     for (int i = 0; i < 3; ++i) {
@@ -29,7 +24,9 @@ bool tl_dvm_boot(const char *root, const char *data)
     }
     if (setenv("ANDROID_ROOT", data, 1) || setenv("ANDROID_DATA", data, 1)) return false;
     tl_jni_init();
-    if (!tl_dvm_start(boot, 9)) return false;
+    husk_sm_start();
+    if (husk_aosp_using()) husk_aosp_start_system();
+    if (!tl_dvm_start(boot, count)) return false;
     snprintf(value, sizeof(value), "%s/com.android.i18n/lib64", root); tl_ld_add_search_dir(value);
     snprintf(value, sizeof(value), "%s/com.android.conscrypt/lib64", root); tl_ld_add_search_dir(value);
     snprintf(value, sizeof(value), "%s/com.android.art/lib64", root);

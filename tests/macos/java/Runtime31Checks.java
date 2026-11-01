@@ -36,6 +36,12 @@ final class Runtime31Checks {
                 } else require(pm.hasSystemFeature(feature.name));
             }
             require(glVersions == 1);
+            require(android.os.Build.SUPPORTED_ABIS.length == 1 && android.os.Build.SUPPORTED_ABIS[0].equals("arm64-v8a"));
+            require(android.os.Build.SUPPORTED_32_BIT_ABIS.length == 0 && android.os.Build.CPU_ABI2.isEmpty());
+            require(!pm.hasSystemFeature("android.hardware.camera") && !pm.hasSystemFeature("android.hardware.telephony"));
+            require(!pm.hasSystemFeature("android.hardware.hardware_keystore") && !pm.hasSystemFeature("android.hardware.vulkan.level", 1));
+            require(pm.hasSystemFeature("android.software.webview"));
+            require(pm.getSystemSharedLibraryNames().length == 1 && pm.getSystemSharedLibraryNames()[0].equals("org.apache.http.legacy"));
             WindowInsets unattached = new View(activity).getRootWindowInsets();
             require(unattached != null && unattached.getSystemWindowInsetBottom() >= 0 && unattached.getSystemWindowInsetTop() >= 0);
             ClassLoader parent = Runtime31Checks.class.getClassLoader();

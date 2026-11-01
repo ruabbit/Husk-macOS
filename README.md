@@ -1,40 +1,40 @@
 # Husk
 
-This fork now includes a native **macOS / Apple Silicon** application. Its internal
-prototype has a SwiftUI library, a separate game process, two repository-owned
-Orbit Garden ELF game fixtures, and a Minecraft GameActivity path. The exact
-1.26.52.3 arm64 APK recorded in the [P4 report](docs/2026-10-08-macos-p4-report.md)
-has completed the P4 checks. Other single-APK arm64 Minecraft builds can now be
-started from the GUI with the same launch action. Old imports
-are reclassified using the installed runtime, without deleting their data.
-Other engines can be imported and scanned; the iOS compatibility list below
-does not establish macOS support.
+This fork provides a native **macOS / Apple Silicon** app with an AppKit game
+window, a SwiftUI library and independent NativeRunner, WebRunner and optional
+VMRunner processes. The arm64 translation paths include Minecraft, Unity,
+Java/Dalvik, Cocos, Godot, GameMaker, SDL, Rockstar and NativeActivity. Engine
+routing and controlled lifecycle tests do not establish compatibility with every
+game. See the [macOS feature and evidence matrix](docs/development/macos/upstream-parity.md)
+for implemented behavior, real-application evidence and open work.
 
-Upstream source changes through `a08b695` are merged with the macOS changes,
-including the upstream Git ancestry. See [the source receipt](dependencies/upstream.lock.json)
-and [the current validation and push status](docs/development/macos/progress.md).
+Upstream source through `c95c960` (3.2.1) is merged with its Git history. The new
+ARM32 interpreter is compiled and exercised with controlled ARM/Thumb ELF files,
+but macOS launch remains unavailable until input, worker shutdown and save
+handling are connected. AOSP boot-path/core-DEX preparation and partial local
+Binder transport are not a complete Android system service implementation.
+The existing arm64 runtime remains available. Per-game Play without JIT uses
+local signing and defaults to off; it does not make engines that generate code
+fully compatible.
 
 Build with `./scripts/build_macos.sh`, then open
-`build/macos/Product/HuskMac.app`. The first build fetches the pinned macOS ANGLE
-and MoltenVK sources. `./scripts/test_macos.sh` runs without visible windows or
-audible output. No iOS pairing, QEMU images or personal runtime library paths are
-required. See [the macOS guide](docs/macos.md) for prerequisites, data handling,
-verification and current limits. Validation evidence is recorded in the
-[P1–P3 report](docs/2026-10-08-macos-p1-p3-report.md) and the
-[Minecraft P4 report](docs/2026-10-08-macos-p4-report.md).
-An optional native VM candidate now boots Android through TCG or HVF, with
-Metal output and an independent VMRunner. Its current dependencies require
-macOS 27. Minecraft installation works in the VM, but gameplay remains blocked
-by a black screen; sustained guest audio is also unverified. See the
-[P5 report](docs/2026-10-08-macos-p5-report.md) before enabling this mode.
-The main app and native runner have a provisional macOS 14 build target; the
-optional VM declares the minimum required by its packaged dependencies and is
-disabled on older systems. GitHub CI is configured on stable `macos-26` but has
-not run remotely. macOS release licensing remains open; see the
-[license audit](docs/01-licensing.md#macos-distribution-status-2026-10-08) and
-[review fixes](docs/2026-10-08-macos-review-report.md). Development notes are under
+`build/macos/Product/HuskMac.app`. The build retains pinned graphics and Java
+runtime dependencies. `./scripts/test_macos.sh` runs the default background suite;
+package verification and hosted CI results are recorded with the exact candidate
+in [progress.md](docs/development/macos/progress.md) and the
+[source receipt](dependencies/upstream.lock.json). Keep those results separate
+from physical input, authenticated Play, real game save/reopen and iOS device
+acceptance.
+
+See the [macOS guide](docs/macos.md) for prerequisites and data handling. The main
+app and native runner target macOS 14. Optional VM dependencies currently require
+macOS 27; VM gameplay and P6 remain open (see the
+[P5 report](docs/2026-10-08-macos-p5-report.md)). The translation layer requires no
+USB device, Android VM image or personal iOS signing certificate. Distribution
+licensing remains documented in the [license audit](docs/01-licensing.md#macos-distribution-status-2026-10-08).
+Development work and validation boundaries are tracked under
 [`docs/development/macos`](docs/development/macos/task_plan.md); the P0 runner is
-retained only as a [test harness](tests/macos-p0/README.md).
+retained as a [test harness](tests/macos-p0/README.md).
 The iOS source and documentation remain below.
 
 <p align="center">

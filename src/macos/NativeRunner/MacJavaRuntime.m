@@ -40,6 +40,16 @@ static BOOL validate(NSString *root)
         NSDictionary *entry=files[name];
         if(![entry isKindOfClass:NSDictionary.class]||![sha256(path) isEqual:entry[@"sha256"]])return NO;
     }
+    NSDirectoryEnumerator *enumerator = [NSFileManager.defaultManager enumeratorAtPath:root];
+    for (NSString *name in enumerator) {
+        if ([name isEqual:@"runtime-manifest.json"]) continue;
+        BOOL directory = NO;
+        if (![NSFileManager.defaultManager fileExistsAtPath:[root stringByAppendingPathComponent:name] isDirectory:&directory]) return NO;
+        if (!directory && !files[name]) return NO;
+    }
+    // Optional framework jars are not admitted by an unrecorded file placed
+    // beside the runtime. A future pinned AOSP bundle must record its boot path.
+    if (files[@"aosp/framework.jar"] || files[@"framework.jar"]) return NO;
     return files[@"husk-framework.dex"]&&files[@"framework-res.apk"]&&files[@"com.android.art/javalib/core-oj.jar"]&&
         files[@"android-system/etc/fonts.xml"]&&files[@"android-system/etc/font_fallback.xml"];
 }

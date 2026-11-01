@@ -1346,7 +1346,12 @@ static void *b_mmap(void *addr, size_t len, int prot, int flags, int fd, long of
     if (!len || len > SIZE_MAX - (TL_XMEM_PAGE - 1) || ((flags & 0x10) && (!addr || (uintptr_t)addr > UINTPTR_MAX - len))) {
         tl_set_guest_errno(22); return MAP_FAILED;
     }
-    if (fd >= 0 && husk_binder_is_fd(fd)) return husk_binder_mmap(fd, len);
+    if (fd >= 0 && husk_binder_is_fd(fd)) {
+        if ((prot & PROT_EXEC) || (flags & 0x10) || off != 0) { tl_set_guest_errno(22); return MAP_FAILED; }
+        void *mapped = husk_binder_mmap(fd, len);
+        if (mapped == MAP_FAILED) tl_set_guest_errno(errno);
+        return mapped;
+    }
     /* A library file mapped executable (libffi's static trampolines): for a library imported from a dylib, its own signed code */
     if ((prot & PROT_EXEC) && !(flags & 0x20) && fd >= 0 && off >= 0) {
         size_t rounded = (len + TL_XMEM_PAGE - 1) & ~(size_t)(TL_XMEM_PAGE - 1);

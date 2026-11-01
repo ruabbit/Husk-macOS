@@ -11,12 +11,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 void tl_log_line(const char *fmt, ...);
 
 static bool g_using;
 
-static bool readable(const char *p) { return p && p[0] && access(p, R_OK) == 0; }
+static bool readable(const char *p) { struct stat st; return p && p[0] && !lstat(p, &st) && S_ISREG(st.st_mode) && access(p, R_OK) == 0; }
 
 const char *husk_aosp_framework_path(const char *java_root, char *out, int cap)
 {
@@ -37,75 +38,53 @@ bool husk_aosp_present(const char *java_root)
 
 bool husk_aosp_using(void) { return g_using; }
 
-static int add_if(const char *path, char (*paths)[1200], int max, const char **boot, int nb)
+static bool add_path(const char *root, const char *name, char (*paths)[1200], int max, const char **boot, int *count)
 {
-    if (nb >= max || !readable(path)) return nb;
-    snprintf(paths[nb], 1200, "%s", path);
-    boot[nb] = paths[nb];
-    return nb + 1;
+    if (*count >= max || snprintf(paths[*count], 1200, "%s/%s", root, name) >= 1200 || !readable(paths[*count])) return false;
+    boot[*count] = paths[*count]; (*count)++; return true;
 }
 
-int husk_aosp_boot_jars(const char *java_root, char (*paths)[1200], int max, const char **boot)
+int husk_aosp_boot_jars(const char *root, char (*paths)[1200], int max, const char **boot)
 {
-    int nb = 0;
-    if (!java_root || !paths || !boot || max < 12) return 0;
-    const char *r = java_root;
-    char p[1200];
-    static const char *const art[] = { "core-oj", "core-libart", "okhttp", "bouncycastle", "apache-xml" };
-    for (int i = 0; i < 5; i++) {
-        snprintf(p, sizeof(p), "%s/com.android.art/javalib/%s.jar", r, art[i]);
-        nb = add_if(p, paths, max, boot, nb);
-    }
-    snprintf(p, sizeof(p), "%s/com.android.i18n/javalib/core-icu4j.jar", r);
-    nb = add_if(p, paths, max, boot, nb);
-    snprintf(p, sizeof(p), "%s/com.android.conscrypt/javalib/conscrypt.jar", r);
-    nb = add_if(p, paths, max, boot, nb);
-
-    /* Handwritten Activity/View/Resources first. If AOSP is present, use the
-     * core dex (no generated empty stubs) so framework.jar supplies those APIs. */
-    bool aosp = husk_aosp_present(r);
-    bool core = false;
-    snprintf(p, sizeof(p), "%s/husk-framework-core.dex", r);
-    if (aosp && readable(p)) {
-        nb = add_if(p, paths, max, boot, nb);
-        core = true;
-        tl_log_line("aosp: husk-framework-core.dex + framework.jar (generated stubs omitted)");
-    } else {
-        snprintf(p, sizeof(p), "%s/husk-framework.dex", r);
-        nb = add_if(p, paths, max, boot, nb);
-    }
-
+    g_using = false;
+    if (!root || !paths || !boot || max < 9) return -1;
+    static const char *const common[] = {
+        "com.android.art/javalib/core-oj.jar", "com.android.art/javalib/core-libart.jar",
+        "com.android.art/javalib/okhttp.jar", "com.android.art/javalib/bouncycastle.jar",
+        "com.android.art/javalib/apache-xml.jar", "com.android.i18n/javalib/core-icu4j.jar",
+        "com.android.conscrypt/javalib/conscrypt.jar"
+    };
+    int count = 0;
+    for (int i = 0; i < 7; ++i) if (!add_path(root, common[i], paths, max, boot, &count)) return -1;
+    bool aosp = husk_aosp_present(root);
+    if (!add_path(root, aosp ? "husk-framework-core.dex" : "husk-framework.dex", paths, max, boot, &count)) return -1;
     if (aosp) {
-        static const char *const fw[] = {
-            "aosp/framework.jar", "framework.jar",
-            "aosp/framework-graphics.jar", "framework-graphics.jar",
-            "aosp/ext.jar", "ext.jar",
-            "aosp/telephony-common.jar", "telephony-common.jar",
-            "aosp/voip-common.jar", "voip-common.jar",
-            "aosp/ims-common.jar", "ims-common.jar",
-            "aosp/services.jar", "services.jar",
-        };
-        for (int i = 0; i < (int)(sizeof(fw) / sizeof(fw[0])); i++) {
-            snprintf(p, sizeof(p), "%s/%s", r, fw[i]);
-            nb = add_if(p, paths, max, boot, nb);
+        static const char *const names[] = { "framework.jar", "framework-graphics.jar", "ext.jar", "telephony-common.jar", "voip-common.jar", "ims-common.jar", "services.jar" };
+        for (int i = 0; i < 7; ++i) {
+            char name[100], check[1200];
+            snprintf(name, sizeof(name), "aosp/%s", names[i]);
+            if (snprintf(check, sizeof(check), "%s/%s", root, name) >= (int)sizeof(check)) return -1;
+            if (!readable(check)) snprintf(name, sizeof(name), "%s", names[i]);
+            if (snprintf(check, sizeof(check), "%s/%s", root, name) >= (int)sizeof(check)) return -1;
+            if (readable(check) && !add_path(root, name, paths, max, boot, &count)) return -1;
         }
-        g_using = true;
-        if (!core) tl_log_line("aosp: framework.jar fills classes the full husk-framework.dex does not define");
-    } else {
-        g_using = false;
     }
-    snprintf(p, sizeof(p), "%s/org.apache.http.legacy.jar", r);
-    nb = add_if(p, paths, max, boot, nb);
-    return nb;
+    if (!add_path(root, "org.apache.http.legacy.jar", paths, max, boot, &count)) return -1;
+    g_using = aosp;
+    return count;
 }
 
 static void svc_txn(uint32_t code, uint32_t flags, const uint8_t *data, size_t data_size,
                     const uint64_t *offsets, size_t n_offsets, husk_binder_reply *reply, void *cookie)
 {
     (void)code; (void)flags; (void)data; (void)data_size; (void)offsets; (void)n_offsets; (void)cookie;
-    /* writeNoException + a run of zeros: readException succeeds; typed nulls are writeInt(0). */
-    size_t n = 64;
+    /* Unsupported framework transactions must not look like successful AMS,
+     * account, permission or graphics service replies. Parcel EX_UNSUPPORTED_OPERATION. */
+    size_t n = 8;
     uint8_t *buf = calloc(1, n);
+    if (!buf) return;
+    int32_t unsupported = -7;
+    memcpy(buf, &unsupported, sizeof(unsupported));
     reply->data = buf;
     reply->data_size = n;
 }
@@ -131,5 +110,5 @@ void husk_aosp_start_system(void)
         NULL
     };
     for (int i = 0; names[i]; i++) add_svc(names[i]);
-    tl_log_line("aosp: native system_server slice is up");
+    tl_log_line("aosp: service names registered; framework transactions are unsupported");
 }

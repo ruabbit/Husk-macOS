@@ -97,8 +97,6 @@ public final class Documents extends ContentProvider {
         try { return f.getCanonicalPath(); } catch (java.io.IOException e) { throw new SecurityException("Invalid document", e); }
     }
     private static File fileOf(Uri u) {
-        String enc = u.getEncodedPath();
-        if (enc != null && enc.startsWith("/document/")) return new File(Uri.decode(enc.substring("/document/".length())));
         java.util.List<String> seg = u.getPathSegments();
         if (!ContentResolver.SCHEME_CONTENT.equals(u.getScheme()) || !AUTHORITY.equals(u.getAuthority()) ||
                 seg.size() != 2 || !"document".equals(seg.get(0))) throw new SecurityException("Invalid document URI");

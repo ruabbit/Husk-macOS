@@ -32,6 +32,7 @@ bool tl_a32_init(tl_lib *L);                             /* DT_INIT / init_array
 int32_t tl_a32_call(uint32_t pc, uint32_t r0, uint32_t r1, uint32_t r2, uint32_t r3);
 int32_t tl_a32_jni_onload(tl_lib *L);
 bool tl_a32_jni_native(void *fn, dvm_method *m, jobj *self, const jvalue *params, jvalue *ret);
+const char *tl_a32_error(void); /* sticky interpreter failure; never a successful return */
 bool tl_a32_active(void);                                /* a 32-bit library is loaded this session */
 void tl_a32_reset(void);                                 /* drop the guest map so another APK can load */
 uint32_t tl_a32_alloc(uint32_t n);                       /* guest heap; 0 if the map is full */

@@ -24,7 +24,7 @@ sources = [source] if web or keystore else [source, Path(__file__).parent/'java/
 if web:
     sources += sorted((Path(__file__).parent/'java/webkit').glob('*.java'))
 if not web and not keystore:
-    sources += [Path(__file__).parent/'java/MissingOptional.java', Path(__file__).parent/'java/unicode/例.java', Path(__file__).parent/'java/HostEnvironmentChecks.java']
+    sources += [Path(__file__).parent/'java/MissingOptional.java', Path(__file__).parent/'java/unicode/例.java', Path(__file__).parent/'java/HostEnvironmentChecks.java', Path(__file__).parent/'java/JobChecks.java']
 subprocess.run([jdk/'bin/javac', '--release', '8', '-cp', android, '-d', output/'classes', *sources], check=True)
 if not web and not keystore:
     (output/'classes/missing/optional/MissingOptional.class').unlink()
@@ -44,6 +44,8 @@ if web:
 if keystore:
     strings[2] = 'org.husk.keystore'
     strings[6] = 'org.husk.keystore.KeyStoreActivity'
+if not web and not keystore:
+    strings += ['service', 'org.husk.lifecycle.JobChecks$Worker']
 le = lambda n: struct.pack('<I',n)
 text = b''; offsets = []
 for value in strings:
@@ -62,6 +64,8 @@ body+=begin('application')+begin('activity',[('name',3,6)])+begin('intent-filter
 body+=begin('category',[('name',3,11)])+end('category')+end('intent-filter')+end('activity')
 if web:
     body+=begin('activity',[('name',3,len(strings)-1)])+end('activity')
+if not web and not keystore:
+    body+=begin('service',[('name',3,strings.index('org.husk.lifecycle.JobChecks$Worker'))])+end('service')
 body+=end('application')+end('manifest')
 manifest=struct.pack('<HHI',3,8,len(body)+8)+body
 native_libraries = []

@@ -121,6 +121,11 @@ struct tl_lib {
     uint8_t source_sha256[CC_SHA256_DIGEST_LENGTH]; /* exact ELF, including app-made copies used by libffi */
     bool arm32;                    /* ELF32 ARM, translated to AArch64 (husk-tl-arm32.c) */
 };
+static const tl_ld_arm32_backend *g_arm32;
+void tl_ld_register_arm32(const tl_ld_arm32_backend *backend) { if (!g_arm32) g_arm32 = backend; }
+static bool is_arm32_elf(const uint8_t *f, size_t n) {
+    return f && n >= 52 && !memcmp(f, "\x7f" "ELF", 4) && f[4] == 1 && f[5] == 1 && f[18] == 40 && f[19] == 0;
+}
 static inline bool data_page(const tl_lib *L, size_t page);
 static bool in_code(const tl_lib *L, uint64_t vaddr);
 static bool writable_range(const tl_lib *L, uint64_t lo, uint64_t hi);
@@ -247,13 +252,24 @@ void tl_ld_reset_session(void)
     }
     G.nlibs = keep;
     pthread_mutex_unlock(&g_big);
-    tl_a32_reset();
+    if (g_arm32) g_arm32->reset();
     tl_log_line("ld: the app's libraries are forgotten; another APK can load");
 }
 
 const tl_zip *tl_ld_apk_at(int i) { return (i >= 0 && i < G.napks) ? &G.apks[i] : NULL; }
 
+/* Select one ABI for the complete APK set; never satisfy an arm64 dependency
+ * with a same-name ARM32 library. Mac ARM32 launch remains gated until the
+ * interpreter's thread/input/destruction contract is complete. */
 static const char *const k_lib_dirs[] = { "lib/arm64-v8a/", "lib/armeabi-v7a/", "lib/armeabi/" };
+static int apk_lib_abi(void)
+{
+    for (int d = 0; d < 3; ++d)
+        for (int i = 0; i < G.napks; ++i)
+            for (size_t k = 0; k < G.apks[i].count; ++k)
+                if (!strncmp(G.apks[i].entries[k].name, k_lib_dirs[d], strlen(k_lib_dirs[d]))) return d;
+    return 0;
+}
 
 static bool lib_zip_name(const char *nm, size_t l, const char *dir, const char **leaf)
 {
@@ -268,7 +284,7 @@ int tl_ld_apk_libs(void (*cb)(const char *name, uint64_t size, void *user), void
 {
     int n = 0;
     char seen[256][64]; int nseen = 0;
-    for (int d = 0; d < 3; d++)
+    for (int d = apk_lib_abi(), end = d + 1; d < end; d++)
         for (int i = 0; i < G.napks; i++)
             for (size_t k = 0; k < G.apks[i].count; k++) {
                 const char *nm = G.apks[i].entries[k].name, *leaf;
@@ -287,7 +303,7 @@ int tl_ld_apk_libs(void (*cb)(const char *name, uint64_t size, void *user), void
 const char *tl_ld_lib_apk(const char *name)
 {
     char entry[200];
-    for (int d = 0; d < 3; d++) {
+    for (int d = apk_lib_abi(), end = d + 1; d < end; d++) {
         snprintf(entry, sizeof(entry), "%s%s", k_lib_dirs[d], name);
         for (int i = 0; i < G.napks; i++) if (tl_zip_find(&G.apks[i], entry)) return g_apk_paths[i];
     }
@@ -297,7 +313,7 @@ const char *tl_ld_lib_apk(const char *name)
 bool tl_ld_has_lib(const char *name)
 {
     char path[160];
-    for (int d = 0; d < 3; d++) {
+    for (int d = apk_lib_abi(), end = d + 1; d < end; d++) {
         snprintf(path, sizeof(path), "%s%s", k_lib_dirs[d], name);
         for (int i = 0; i < G.napks; i++) if (tl_zip_find(&G.apks[i], path)) return true;
     }
@@ -309,7 +325,7 @@ bool tl_ld_is_arm32(const tl_lib *lib) { return lib && lib->arm32; }
 static bool fetch_from_apks(const char *name, uint8_t **out, size_t *len)
 {
     char path[160];
-    for (int d = 0; d < 3; d++) {
+    for (int d = apk_lib_abi(), end = d + 1; d < end; d++) {
         snprintf(path, sizeof(path), "%s%s", k_lib_dirs[d], name);
         for (int i = 0; i < G.napks; i++) {
             const tl_zip_entry *e = tl_zip_find(&G.apks[i], path);
@@ -622,13 +638,13 @@ static void *lookup_for(tl_lib *L, const char *name, bool *weak_hit)
 void *tl_ld_sym(tl_lib *lib, const char *name)
 {
     if (lib) {
-        if (lib->arm32) return tl_a32_sym(lib, name);
+        if (lib->arm32) return g_arm32 ? g_arm32->sym(lib, name) : NULL;
         const elf_sym *s = lib_find(lib, name);
         return s ? sym_value(lib, s) : NULL;
     }
     for (int i = 0; i < G.nlibs; i++) {
         if (G.libs[i]->arm32) {
-            void *p = tl_a32_sym(G.libs[i], name);
+            void *p = g_arm32 ? g_arm32->sym(G.libs[i], name) : NULL;
             if (p) return p;
             continue;
         }
@@ -644,7 +660,7 @@ void *tl_ld_sym_deep(tl_lib *lib, const char *name, tl_lib **found_in)
 {
     if (!lib) return NULL;
     if (lib->arm32) {
-        void *p = tl_a32_sym(lib, name);
+        void *p = g_arm32 ? g_arm32->sym(lib, name) : NULL;
         if (p) { if (found_in) *found_in = lib; return p; }
         return NULL;
     }
@@ -2383,16 +2399,21 @@ static tl_lib *map_library(const char *name, uint8_t *file, size_t flen, bool sy
     if (!g_aot_dir && getenv("TL_AOT_DIR")) tl_ld_set_aot_dir(getenv("TL_AOT_DIR"));
     if (G.nlibs >= MAX_LIBS) { tl_log_line("ld: too many libraries"); return NULL; }
     const elf_ehdr *eh = (const elf_ehdr *)file;
-    if (tl_a32_is_elf(file, flen)) {
+    if (is_arm32_elf(file, flen)) {
+#if defined(HUSK_MACOS_RUNTIME)
+        tl_log_line("ld: ARM32 launch is not available: NativeActivity input, worker shutdown and save acknowledgement are incomplete");
+        return NULL;
+#else
         tl_lib *A = calloc(1, sizeof(*A));
         if (!A) return NULL;
-        if (!tl_a32_map(A, name, file, flen)) { free(A); return NULL; }
+        if (!g_arm32 || !g_arm32->map(A, name, file, flen)) { free(A); return NULL; }
         snprintf(A->name, sizeof(A->name), "%s", name);
         snprintf(A->soname, sizeof(A->soname), "%s", name);
         A->arm32 = true;
         A->state = 2;
         G.libs[G.nlibs++] = A;
         return A;
+#endif
     }
     if (flen < sizeof(*eh) || memcmp(file, "\x7f""ELF", 4) != 0 || eh->e_ident[4] != 2 || eh->e_ident[5] != 1
         || eh->e_machine != EM_AARCH64_) {
@@ -3047,7 +3068,7 @@ static tl_lib *load_locked(const char *name, int depth, bool system)
         return NULL;
     }
     char e[160] = "";
-    bool a32 = tl_a32_is_elf(file, flen);
+    bool a32 = is_arm32_elf(file, flen);
     bool xmem = a32 ? true : tl_xmem_open(768u << 20, e, sizeof(e));
     if (!xmem) {   /* only libraries made ahead of time (tl_ld_set_aot_dir) can load: map_library says which cannot */
         static bool said;
@@ -3087,8 +3108,10 @@ static bool init_locked(tl_lib *L)
     if (L->state < 2) return false;
     L->state = 3;
     if (L->arm32) {
-        for (int i = L->ndeps - 1; i >= 0; i--) init_locked(L->deps[i]);
-        return tl_a32_init(L);
+        for (int i = L->ndeps - 1; i >= 0; i--) if (!init_locked(L->deps[i])) { L->state = 2; return false; }
+        bool ok = g_arm32 && g_arm32->init(L);
+        if (!ok) L->state = 2;
+        return ok;
     }
     build_scope(L);
     /* Needed libraries initialise first, in the order the linker would run them: the

@@ -325,11 +325,13 @@ char *husk_tl_scan(const char *const *paths, int count)
             abis[abi] = true;
             note_engine(&eng, file);
             if (abi != ABI_ARM64) {
+#ifndef HUSK_MACOS_RUNTIME
                 if (abi == 1 || abi == 2) {
                     memset(rep, 0, sizeof(*rep));
                     rep->ok = true;
                     write_library(&j, base_name(paths[p]), abi, file, e, rep);
                 }
+#endif
                 continue;
             }
             nameset_add(own, file);
@@ -409,9 +411,14 @@ char *husk_tl_scan(const char *const *paths, int count)
                  "need%s extra work from the loader.", arm64_trouble, arm64_libs,
                  arm64_libs == 1 ? "y" : "ies", arm64_trouble == 1 ? "s" : "");
     } else if (abis[1] || abis[2]) {
+#ifdef HUSK_MACOS_RUNTIME
+        verdict = "noArm64";
+        snprintf(summary, sizeof(summary), "32-bit ARM native code. macOS input, worker shutdown and save support are not yet connected.");
+#else
         verdict = "native";
         snprintf(summary, sizeof(summary), "32-bit ARM native code. Husk translates it "
                  "to arm64 the same way it loads arm64 libraries.");
+#endif
     } else {
         verdict = "noArm64";
         bool x86 = abis[3] || abis[4];

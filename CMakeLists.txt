@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Supported native architecture")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Provisional deployment floor; requires separate machine validation")
-project(HuskMac VERSION 3.2.0 LANGUAGES C OBJC Swift)
+project(HuskMac VERSION 3.2.1 LANGUAGES C OBJC Swift)
 if(NOT APPLE OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "HuskMac currently targets native macOS arm64")
 endif()
@@ -42,6 +42,7 @@ add_library(SharedCore STATIC
     ${CLASSIC}/husk-tl-json.c ${CLASSIC}/husk-tl-prefs.c ${CLASSIC}/husk-tl-blit.c
     ${MAC}/SharedCore/Archive.c)
 target_include_directories(SharedCore PUBLIC ${MAC}/SharedCore PRIVATE ${CLASSIC})
+target_compile_definitions(SharedCore PRIVATE HUSK_MACOS_RUNTIME=1)
 target_link_libraries(SharedCore PUBLIC z "-framework CoreGraphics")
 
 add_executable(MacArchiveExtractTests tests/macos/ArchiveExtract.c)
@@ -78,6 +79,8 @@ set_tests_properties(macos-apk-icons macos-session-diagnostics PROPERTIES TIMEOU
 
 add_library(GameActivityRuntime STATIC
     ${CLASSIC}/husk-tl-sound.c
+    ${NEXT}/husk-tl-arm32.c ${NEXT}/husk-tl-binder.c ${NEXT}/husk-tl-servicemanager.c ${NEXT}/husk-tl-aosp.c
+    ${NEXT}/husk-tl-dvm-binder.c
     ${NEXT}/husk-tl-aot.c ${NEXT}/husk-tl-codesign.c
     ${NEXT}/husk-tl-ld.c ${NEXT}/husk-tl-a64.c ${NEXT}/husk-tl-xmem.c ${NEXT}/husk-tl-va.c ${NEXT}/husk-tl-codewrite.c
     ${NEXT}/husk-tl-bionic.c ${NEXT}/husk-tl-bionic-str.c ${NEXT}/husk-tl-bionic-io.c
@@ -102,6 +105,7 @@ add_library(GameActivityRuntime STATIC
     ${NEXT}/husk-tl-sdl.c ${NEXT}/husk-tl-sdl-apps.c ${NEXT}/husk-tl-gtasa.c
     ${NEXT}/husk-tl-geode.c ${NEXT}/husk-tl-python.c
     ${NEXT}/husk-tl-audio.c ${NEXT}/husk-tl-http.m ${NEXT}/husk-tl-vulkan.m)
+target_compile_definitions(GameActivityRuntime PRIVATE HUSK_MACOS_RUNTIME=1)
 target_include_directories(GameActivityRuntime PUBLIC ${NEXT} PRIVATE ${CLASSIC})
 target_compile_options(GameActivityRuntime PRIVATE "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>")
 target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv sqlite3 "-framework Foundation" "-framework Security"
@@ -109,6 +113,22 @@ target_link_libraries(GameActivityRuntime PUBLIC SharedCore resolv sqlite3 "-fra
     "-framework CoreText" "-framework ImageIO" "-framework WebKit" "-framework VideoToolbox"
     "-framework CoreMedia" "-framework CoreVideo" "-framework Accelerate" "-framework IOKit")
 add_library(NativeRuntime ALIAS GameActivityRuntime)
+
+foreach(case BinderLifecycle AOSPBoot)
+    add_executable(${case}Tests tests/macos/${case}.c ${NEXT}/husk-tl-binder.c ${NEXT}/husk-tl-servicemanager.c ${NEXT}/husk-tl-aosp.c)
+    target_include_directories(${case}Tests PRIVATE ${NEXT})
+    target_compile_options(${case}Tests PRIVATE -UNDEBUG)
+endforeach()
+add_test(NAME core-binder-lifecycle COMMAND BinderLifecycleTests)
+add_test(NAME core-aosp-boot-path COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/AOSPBoot.py "$<TARGET_FILE:AOSPBootTests>" "${CMAKE_BINARY_DIR}")
+foreach(case binder servicemanager)
+    add_executable(${case}Tests tools/${case}-test.c ${NEXT}/husk-tl-binder.c ${NEXT}/husk-tl-servicemanager.c)
+    target_include_directories(${case}Tests PRIVATE ${NEXT})
+    add_test(NAME core-${case}-transport COMMAND ${case}Tests)
+endforeach()
+add_test(NAME java-framework-core COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/FrameworkCore.py "${HUSK_JAVA_RUNTIME}")
+set_tests_properties(core-binder-lifecycle core-aosp-boot-path core-binder-transport core-servicemanager-transport java-framework-core PROPERTIES TIMEOUT 20)
+
 
 add_executable(GodotFileTests tests/macos/GodotFiles.c)
 target_link_libraries(GodotFileTests PRIVATE NativeRuntime)
@@ -381,7 +401,7 @@ target_link_libraries(GuestThreadTests PRIVATE NativeRuntime)
 add_test(NAME java-native-thread-close COMMAND GuestThreadTests)
 add_test(NAME java-native-thread-live COMMAND GuestThreadTests live)
 set_tests_properties(java-native-thread-close java-native-thread-live PROPERTIES TIMEOUT 10)
-add_executable(JavaBootTests tests/macos/JavaBoot.c ${MAC}/NativeRunner/MacDiagnostics.c)
+add_executable(JavaBootTests tests/macos/JavaBoot.c tests/macos/ParcelChecks.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaBootTests PRIVATE ${MAC}/NativeRunner)
 target_link_libraries(JavaBootTests PRIVATE NativeRuntime)
 add_dependencies(JavaBootTests JavaRuntimeResources)
@@ -394,6 +414,17 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/LoaderTests/ready"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_loader_cases.py "${CMAKE_BINARY_DIR}/LoaderTests"
     DEPENDS tests/macos/prepare_loader_cases.py tests/macos/fixture/namespace.c tests/macos/fixture/data_views.S scripts/build_macos_fixture.py VERBATIM)
 add_custom_target(LoaderFixtures DEPENDS "${CMAKE_BINARY_DIR}/LoaderTests/ready")
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/ARM32Cases/libarm32.so" "${CMAKE_BINARY_DIR}/ARM32Cases/mixed.apk"
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_arm32.py "${CMAKE_BINARY_DIR}/ARM32Cases" "${CMAKE_BINARY_DIR}/LoaderTests/app.apk"
+    DEPENDS tests/macos/prepare_arm32.py tests/macos/fixture/arm32.S scripts/build_macos_fixture.py "${CMAKE_BINARY_DIR}/LoaderTests/ready" VERBATIM)
+add_custom_target(ARM32Fixtures DEPENDS "${CMAKE_BINARY_DIR}/ARM32Cases/libarm32.so" "${CMAKE_BINARY_DIR}/ARM32Cases/mixed.apk")
+add_executable(ARM32Tests tests/macos/ARM32.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_compile_options(ARM32Tests PRIVATE -UNDEBUG)
+target_link_libraries(ARM32Tests PRIVATE NativeRuntime)
+add_dependencies(ARM32Tests ARM32Fixtures)
+add_test(NAME core-arm32-interpreter COMMAND ARM32Tests "${CMAKE_BINARY_DIR}/ARM32Cases/libarm32.so" "${CMAKE_BINARY_DIR}/ARM32Cases/mixed.apk")
+set_tests_properties(core-arm32-interpreter PROPERTIES TIMEOUT 20)
+
 add_executable(RuntimeUpdateTests tests/macos/RuntimeUpdates.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_link_libraries(RuntimeUpdateTests PRIVATE NativeRuntime)
 add_dependencies(RuntimeUpdateTests LoaderFixtures)
@@ -434,7 +465,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java tests/macos/fixture/runtime_java.c tests/macos/fixture/runtime_plugin.c scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/java/JobChecks.java tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java tests/macos/fixture/runtime_java.c tests/macos/fixture/runtime_plugin.c scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)

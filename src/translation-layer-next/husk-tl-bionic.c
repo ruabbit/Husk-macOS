@@ -106,6 +106,11 @@ void tl_note_once(const char *what)
 /* ------------------------------------------------------------ properties */
 
 static const struct { const char *k, *v; } k_props[] = {
+#ifdef HUSK_MACOS_RUNTIME
+    { "husk.host.platform", "macos" }, { "husk.runtime.arm32", "0" },
+#else
+    { "husk.host.platform", "ios" }, { "husk.runtime.arm32", "1" },
+#endif
     { "ro.build.version.sdk", "34" }, { "ro.build.version.release", "14" },
     { "ro.build.version.release_or_codename", "14" }, { "ro.build.version.codename", "REL" },
     { "ro.build.version.incremental", "11000000" }, { "ro.build.version.security_patch", "2024-05-05" },

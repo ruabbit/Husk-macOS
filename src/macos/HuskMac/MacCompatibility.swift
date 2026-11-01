@@ -20,13 +20,14 @@ struct MacCompatibilitySection: View {
     var body: some View {
         GroupBox("社区兼容性") {
             VStack(alignment: .leading, spacing: 10) {
+                if subject.jitless { Text("Play without JIT 社区列表").font(.subheadline) }
                 if store.maintenance {
                     Label("社区服务正在维护，新的报告可由服务端排队保存。", systemImage: "wrench.and.screwdriver")
                         .foregroundStyle(.orange)
-                    Text(store.entry(subject.package) == nil ? "维护期间无法获取此应用的报告。" : "以下为本机缓存，可能不是最新结果。")
+                    Text(store.entry(subject.package, jitless: subject.jitless) == nil ? "维护期间无法获取此应用的报告。" : "以下为本机缓存，可能不是最新结果。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if let entry = store.entry(subject.package), let status = entry.status {
+                if let entry = store.entry(subject.package, jitless: subject.jitless), let status = entry.status {
                     Label(status.macLabel, systemImage: status.symbol).foregroundStyle(status.color)
                     if let official = entry.official, !official.note.isEmpty { Text(official.note).textSelection(.enabled) }
                     Text("\(entry.community.reports) 份玩家报告").font(.caption).foregroundStyle(.secondary)
@@ -129,7 +130,7 @@ struct MacCompatReportSheet: View {
             do {
                 queued = try await CompatibilityStore.shared.send(package: subject.package, name: subject.name, isGame: isGame,
                     status: status, notes: notes, author: author, iconPath: subject.iconPath, runtime: subject.runtime,
-                    attachLog: logText != nil, logText: logText)
+                    attachLog: logText != nil, logText: logText, jitless: subject.jitless)
                 if queued == nil { dismiss() }
             } catch { self.error = error.localizedDescription }
             sending = false

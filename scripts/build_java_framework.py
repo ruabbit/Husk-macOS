@@ -84,8 +84,27 @@ def build(output):
                         '--lib', jdk, '--classpath', work/'stubs.jar', '--output', work, work/'classes.jar'], check=True)
         if (work/'classes2.dex').exists():
             raise RuntimeError('Framework unexpectedly exceeds one DEX; update boot class path before packaging')
+        # Keep handwritten outer classes and their nested types; generated
+        # top-level stubs must not shadow optional framework.jar definitions.
+        core = work/'core-classes'
+        for path in sorted((work/'classes').rglob('*.class')):
+            rel = path.relative_to(work/'classes')
+            outer = rel.as_posix()[:-6].split('$', 1)[0]
+            if not (base/'src'/(outer+'.java')).is_file():
+                continue
+            dest = core/rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, dest)
+        jar_classes(core, work/'core.jar')
+        (work/'core-out').mkdir()
+        subprocess.run([jdk/'bin/java', '-cp', d8, 'com.android.tools.r8.D8', '--min-api', '26',
+                        '--lib', jdk, '--classpath', work/'stubs.jar', '--output', work/'core-out', work/'core.jar'], check=True)
+        if (work/'core-out/classes2.dex').exists():
+            raise RuntimeError('Core framework unexpectedly exceeds one DEX')
         shutil.copyfile(work/'classes.dex', output)
-    record = {'schema': 1, 'sourcesSHA256': source_digest(), 'dexSHA256': digest(output),
+        core_output = output.with_name(output.stem+'-core.dex')
+        shutil.copyfile(work/'core-out/classes.dex', core_output)
+    record = {'schema': 1, 'sourcesSHA256': source_digest(), 'dexSHA256': digest(output), 'coreDexSHA256': digest(core_output),
               'compiler': version, 'd8SHA256': digest(d8), 'minAPI': 26, 'javaRelease': 8}
     output.with_suffix('.json').write_text(json.dumps(record, indent=2)+'\n')
     print(f'Built {output} ({output.stat().st_size} bytes)')

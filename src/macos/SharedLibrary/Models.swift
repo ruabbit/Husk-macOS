@@ -98,7 +98,12 @@ public struct LibraryGame: Identifiable, Codable, Sendable {
     public var playable: Bool { runtime != nil }
     public var unavailableReason: String? {
         if playable { return nil }
-        if !abis.contains("arm64-v8a") { return "此应用没有受支持的 arm64 游戏入口。" }
+        if !abis.contains("arm64-v8a") {
+            if abis.contains("armeabi-v7a") || abis.contains("armeabi") {
+                return "此应用使用 32 位 ARM；输入、线程关闭与存档接入尚未完成，暂不可运行。"
+            }
+            return "此应用没有受支持的 arm64 游戏入口。"
+        }
         return "已完成扫描；此游戏的引擎尚未接入 macOS 原生运行组件。"
     }
 

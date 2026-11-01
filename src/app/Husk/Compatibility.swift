@@ -291,7 +291,7 @@ final class CompatibilityStore: ObservableObject {
     @discardableResult
     func send(package: String, name: String, isGame: Bool, status: Status, notes: String, author: String,
               iconPath: String? = nil, runtime: String? = nil, attachLog: Bool = false, logURL: URL? = nil,
-              logText: String? = nil) async throws -> String? {
+              logText: String? = nil, jitless: Bool = false) async throws -> String? {
         var body: [String: String] = [
             "package": package, "name": name, "type": isGame ? "game" : "app", "status": status.rawValue,
             "device": Self.device, "ios": Self.systemVersion, "build": Self.build, "jit": Self.jitMethod,
@@ -300,6 +300,7 @@ final class CompatibilityStore: ObservableObject {
 #if os(macOS)
         // The upstream schema names its OS field `ios`. Keep the actual platform
         // in both that field and the visible note, never submit an iPhone result.
+        body["jit"] = jitless ? "macOS Play without JIT (local signing)" : Self.jitMethod
         body["notes"] = "[Husk macOS; \(Self.systemVersion); runtime: \(runtime ?? "unknown")]\n" + notes
 #endif
         if body["author"]?.isEmpty == true { body["author"] = nil }
@@ -381,6 +382,7 @@ struct CompatSubject: Identifiable {
     /// After playing, rather than from the page's button.
     var afterPlaying = false
     var runtime: String? = nil
+    var jitless = false
     var id: String { package }
 }
 

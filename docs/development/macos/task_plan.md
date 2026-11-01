@@ -1,5 +1,16 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-11-01 ARM32 / Binder / 3.2.1，进行中
+
+- [x] 干净 e069286 起步；两远端 fetch，origin 无新增；前轮 CI 41157776203 success 复核。空闲 Product/PID 21399 经 CUA 正常退出，无本项目 Runner/VM/构建。
+- [x] upstream d30e12e..c95c960 两提交/79路径；main 普通合并 6eabc3d；Java Vulkan 配置与会话初值均保留。
+- [x] macOS 普通合并 df2973a，15 文件语义冲突逐处解决；保留安全构建入口、POST 不重复、缓存隔离、失败生命周期/存储关闭。
+- [x] 接入共享编译、前台任务/服务关闭、core DEX、Binder 与 JIT-less 社区缓存；ARM32 完整生命周期和真实 AOSP 服务保留开放，具体证据/下一步见 parity。
+- [ ] 唯一 build/macos 构建、相关回归、独立 P0、默认全套与包检查；更新版本候选并单次 CUA 验收。
+- [ ] 更新来源锁/parity/记录，正常推送两分支并读 SHA，核对 CI 与每日续跑状态。
+- [ ] 真实应用/游戏、WebView 顺序/跨源、实体设备/Play/VM/P6 保持开放。
+
+
 ## 当前执行：2026-10-31 AOT v9 / Unity 偏好，已交付
 
 - [x] 干净 2a4ddbd 起步；origin 无新增，前轮 CI 40988087109 success 已复核。空闲 Product/PID 7565 经 CUA 正常退出，无本项目 Runner/VM/构建。
