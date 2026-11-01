@@ -3,10 +3,10 @@
 ## 当前执行：2026-11-01 ARM32 / Binder / 3.2.1，进行中
 
 - [x] 干净 e069286 起步；两远端 fetch，origin 无新增；前轮 CI 41157776203 success 复核。空闲 Product/PID 21399 经 CUA 正常退出，无本项目 Runner/VM/构建。
-- [x] upstream d30e12e..c95c960 两提交/79路径；main 普通合并 6eabc3d；Java Vulkan 配置与会话初值均保留。
-- [x] macOS 普通合并 df2973a，15 文件语义冲突逐处解决；保留安全构建入口、POST 不重复、缓存隔离、失败生命周期/存储关闭。
+- [x] upstream d30e12e..8f65f2f 四提交/79路径分两批普通合并；main 6eabc3d→4acac6a，macOS df2973a→754d189，中间适配 dd3f844；Java Vulkan 配置与会话初值均保留。
+- [x] macOS 首批 15 文件和后批 AOSP/Java 两文件语义冲突逐处解决；保留安全构建入口、POST 不重复、缓存隔离、失败生命周期/存储关闭。
 - [x] 接入共享编译、前台任务/服务关闭、core DEX、Binder 与 JIT-less 社区缓存；ARM32 完整生命周期和真实 AOSP 服务保留开放，具体证据/下一步见 parity。
-- [ ] 唯一 build/macos 构建、相关回归、独立 P0、默认全套与包检查；更新版本候选并单次 CUA 验收。
+- [x] 唯一 build/macos/build 26：相关 19/19、独立 P0 25/25、默认 190/190（313.65 秒）和 18 Mach-O/407 Java 资源/两语言各 784 条通过。CUA 单次启动 PID 26795，11 应用/图标及 JIT-less 说明确认，返回首页。
 - [ ] 更新来源锁/parity/记录，正常推送两分支并读 SHA，核对 CI 与每日续跑状态。
 - [ ] 真实应用/游戏、WebView 顺序/跨源、实体设备/Play/VM/P6 保持开放。
 

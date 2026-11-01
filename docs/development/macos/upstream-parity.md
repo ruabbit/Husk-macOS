@@ -1,20 +1,20 @@
 # 上游功能与 macOS 接入现况
 
-## 2026-11-01：3.2.1 ARM32 / Binder / 前台任务，build 26 验证中
+## 2026-11-01：3.2.1 ARM32 / Binder / 前台任务，build 26 本地验证完成
 
-`d30e12e..c95c960` 共 **2 提交/79 路径**已普通合并到 fork main=`6eabc3d`，再合回 macOS=`df2973a`；origin 无外来提交。main 一处 Java 冲突保留 Vulkan 配置与初始会话状态；macOS 十五文件逐处保留安全构建入口、POST 不重试/缓存隔离、Documents 授权、签名命名空间、内存边界、线程所有权及失败关闭判定。上游 3.2.1 不能等同本轮所有新运行能力已完成。
+`d30e12e..8f65f2f` 累计 **4 提交/79 路径**分两批普通合并：main=`6eabc3d`→`4acac6a`，macOS=`df2973a`→`754d189`；中间适配保存为 `dd3f844`，origin 无外来提交。main 一处 Java 冲突保留 Vulkan 配置与初始会话状态；macOS 十五文件逐处保留安全构建入口、POST 不重试/缓存隔离、Documents 授权、签名命名空间、内存边界、线程所有权及失败关闭判定。上游 3.2.1 不能等同本轮所有新运行能力已完成。
 
-对照 `TLReport.nativeEngine`、`TLUnityView.swift`、`src/app/project.yml`/Xcode sources、Mac CMake/Models/NativeRunner、Store/登录及图形构建：新增的是 ARM32 架构与 Binder/AOSP 路径，既有 arm64 引擎分发未减少。Mac 继续以独立进程隔离游戏，保留 AppKit、固定画布、输入、默认失焦继续、暂停/正常销毁及 storage-closed 协议；未采用上游同一宿主进程反复卸载游戏的 UI 策略。Store PlayDevice 的 ABI 请求保持 arm64-only，登录策略和图形 pin 未变化。
+对照 `TLReport.nativeEngine`、`TLUnityView.swift`、`src/app/project.yml`/Xcode sources、Mac CMake/Models/NativeRunner、Store/登录及图形构建：新增的是 ARM32 架构与 Binder/AOSP 路径，既有 arm64 引擎分发未减少。Mac 继续以独立进程隔离游戏，保留 AppKit、固定画布、输入、默认失焦继续、暂停/正常销毁及 storage-closed 协议；上游后续 `10bbbd7` 也撤回同一宿主进程反复切换游戏；Mac 保留原有独立 Runner。Store PlayDevice 的 ABI 请求保持 arm64-only，登录策略和图形 pin 未变化。
 
 | 增量 | macOS 实际接入 | 验证范围与开放项 |
 | --- | --- | --- |
 | ARM32 | 共享解释器编入 CMake；恢复 DT_INIT/init-array 构造函数，指令预算/未知导入/不支持 JNI 保持失败；基本 ELF/内存范围检查。loader、扫描器、资料库、Java Build 与 Store 统一保持 ARM32 不可启动；APK 集合只选一个 ABI，不能用 ARM32 补 arm64 缺库 | 受控 ARM/Thumb ELF 验证构造函数、符号、JNI_OnLoad、有限指令预算及混合 ABI 隔离。不是 32 位 Minecraft 兼容。仍缺完整 ISA/宽返回值/线程 ABI、worker 所有权、NativeActivity 输入/暂停/销毁与保存回执。下一步先扩展解释器/线程夹具，再连生命周期；未满足前不放行资料库 |
-| Binder / native Parcel | /dev/binder、ServiceManager、Dalvik native 编入；CLOEXEC、传输长度/offset 边界、关闭唤醒与已准入 ioctl 排空、嵌套本地回复槽；Parcel 使用序号句柄、精确签名、容量/读取/令牌校验和销毁互斥，不从字节恢复宿主 jobject | 传输/ServiceManager/关闭与 fd 复用通过第一轮；本轮新增真实 Dalvik 中原生 Parcel 回归待最终确认。当前仅进程内传输；多客户端并发路由、buffer 回收、完整 Android token/object/String8 ABI、真实 AOSP 客户端仍开放。调用者 UID 为本进程真实 UID，不冒充 Android system 或 Play |
-| AOSP 准备 | 安全 Python 构建生成并记录 core DEX 摘要，保留手写外部类与嵌套类；完整有序 boot path 校验，缺资源/容量/符号链接拒绝。生产 Mac 验 manifest，拒绝未登记资源与可选 AOSP framework.jar；现有完整 framework 保留 | core DEX 类集合、路径与显式 unsupported 服务响应是受控证据。上游 64 零字节假成功服务改为 unsupported；真实 AOSP boot、AMS/权限/图形/系统服务尚未接入，不能称完整 Android 系统或认证服务 |
-| Java 前台 JobService | 复用 AppMain 和服务生命周期；共享队列、同 ID 替换/取消、extras、jobFinished、异步 onStopJob 及宿主结束时先停任务再销毁服务；结束后拒绝新增服务/任务 | 真实 DEX 普通与 JIT-less 打包会话保存 jobs_closed 并重开，待最终全套确认。缺少声明的服务不伪造，充电/网络/周期/持久化/最小延迟等未实现约束返回失败；后台调度、重调度、命名空间和 work items 继续开放 |
+| Binder / native Parcel | /dev/binder、ServiceManager、Dalvik native 编入；CLOEXEC、传输长度/offset 边界、关闭唤醒与已准入 ioctl 排空、嵌套本地回复槽；Parcel 使用序号句柄、精确签名、容量/读取/令牌校验和销毁互斥，不从字节恢复宿主 jobject | 传输/ServiceManager/关闭与 fd 复用、真实 Dalvik 原生 Parcel 精确签名/边界/令牌/过期句柄/真实本地身份回归已在最终全套通过。当前仅进程内传输；多客户端并发路由、buffer 回收、完整 Android token/object/String8 ABI、真实 AOSP 客户端仍开放。传输中的 sender PID/effective UID 和 JNI 调用者身份为本进程真实值，不冒充 Android system 或 Play |
+| AOSP 准备 | 安全 Python 构建生成并记录 core DEX 摘要，保留手写外部类与嵌套类；完整有序 boot path 校验，缺资源/容量/符号链接拒绝。生产 Mac 验 manifest，拒绝未登记资源与可选 AOSP framework.jar；现有完整 framework 保留 | core DEX 类集合、路径与显式 unsupported 服务响应是受控证据。首批 64 零字节假成功已拒绝；第二批复用真实接口描述/PING 和额外 boot 路径，按服务名泛化的权限/窗口/AMS 回复仍拒绝，待版本固定的事务编号/结构实现；真实 AOSP boot、AMS/权限/图形/系统服务尚未接入，不能称完整 Android 系统或认证服务 |
+| Java 前台 JobService | 复用 AppMain 和服务生命周期；共享队列、同 ID 替换/取消、extras、jobFinished、异步 onStopJob 及宿主结束时先停任务再销毁服务；结束后拒绝新增服务/任务 | 真实 DEX 普通与 JIT-less 打包会话保存 jobs_closed 并重开，最终全套通过。缺少声明的服务不伪造，充电/网络/周期/持久化/最小延迟等未实现约束返回失败；后台调度、重调度、命名空间和 work items 继续开放 |
 | JIT-less 社区列表 | 每游戏设置选择独立查询/磁盘缓存，无结果不回退普通列表；报告区分 Mac 本地签名，保留维护/排队提示和 POST 不重试；中英文新增文案 | 隔离 HTTP 缓存/请求与模式选择回归。没有真实报告、登录或上传；iPhone 社区结果不作为 Mac 兼容结论 |
 
-当前尚未推送或启动 build 26。首轮构建 void/bool 关闭声明冲突、ARM32 测试缺公共声明/输出目录冲突、社区 GET 次数旧断言与 P0 扫描器 ARM32 误标均保留失败日志并修正；最终验证结果在 progress.md 记录后才交付。独立 P0 使用 build/macos/P0Validation，无 GUI/故障注入。
+追加两处 AOSP/Java 冲突保留完整 boot path/安装路径映射和新 session 元数据。最终 build 26 已单次 CUA 启动为 PID 26795；原图标/TabView、11 应用和图标、JIT-less 关闭及独立说明页完整可见，返回首页。首轮构建 void/bool 关闭声明冲突、ARM32 测试缺公共声明/输出目录冲突、社区 GET 次数旧断言与 P0 扫描器 ARM32 误标均保留失败日志并修正；Documents encoded-path 提前返回绕过授权的问题已修复并保留首次失败证据。最终默认 190/190（313.65 秒）、针对性 19/19（17.61 秒）、18 Mach-O/407 Java 资源/中英文各 784 条通过。独立 P0 25/25 使用 build/macos/P0Validation，无 GUI/故障注入；共享 20 C/16 Swift 仅 iOS SDK 语法检查。两分支推送与本批 CI 待收尾。设置总页既有语言/导入帮助截断保留 UI 待办，独立 JIT-less 页不受影响。
 
 既有真实应用/游戏、WebView 历史与 host-stop/导航与 destroy/Activity replacement-recreate/加载中和跨来源、真实第三方 HTTP 插件、实体 IME/手柄/电源、账号/认证 Play、VM/P6 待办继续开放。未重跑无相关修复的 War Thunder、Egg、Clash，未启动用户游戏/VM或操作 USB。
 

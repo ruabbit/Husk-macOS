@@ -299,7 +299,7 @@ NAT(B_context)
 }
 
 NAT(B_pid) { UNUSED; *ret = I((int32_t)getpid()); return true; }
-NAT(B_uid) { UNUSED; *ret = I((int32_t)getuid()); return true; }
+NAT(B_uid) { UNUSED; *ret = I((int32_t)geteuid()); return true; }
 
 dvm_native_fn dvm_binder_native(const char *cls, const char *name, const char *sig);
 

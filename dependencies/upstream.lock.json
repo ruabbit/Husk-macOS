@@ -2,22 +2,22 @@
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
   "previousRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
-  "integratedRevision": "c95c960418f0a19bd2fca72a7c28eb0c1c69b190",
+  "integratedRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
   "checkedOn": "2026-11-01",
-  "commitCount": 2,
-  "integration": "Ordinary upstream and fork merges complete. ARM32 interpreter and Binder sources compiled with controlled regressions; macOS ARM32 launch remains gated pending complete input/worker shutdown/save. Foreground jobs and split JIT-less community caches adapted. Final default, GUI and push still pending.",
+  "commitCount": 4,
+  "integration": "Four upstream commits merged normally in two fetch batches: main 6eabc3d then 4acac6a, macOS df2973a then 754d189; adaptation checkpoint dd3f844. AOSP descriptors/PING and optional paths reused; unimplemented version-specific service methods fail explicitly. Final local build, default suite, bundle and one CUA launch passed. ARM32 lifecycle and full AOSP remain open; push and CI pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "local-validation-in-progress",
+  "deliveryStatus": "locally-verified-push-pending",
   "release": {
     "tag": "3.2.1",
     "revision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
-    "note": "Remote tag 3.2.1 points to d30e12e; integrated main is c95c960, two commits later."
+    "note": "Remote tag 3.2.1 points to d30e12e; integrated main 8f65f2f includes four later commits."
   },
   "candidate": {
     "version": "3.2.1",
     "build": "26",
-    "deliveryStatus": "local-validation-in-progress",
+    "deliveryStatus": "locally-verified-push-pending",
     "bundleMachO": 18,
     "javaResources": 407,
     "localizations": {
@@ -30,28 +30,32 @@
         "sha256": "2a0634fe72ef70a437f832a7ef862b3bc910d129078cd993b1214b31ae35e56a"
       }
     },
-    "frameworkSHA256": "f8737de5726c447d8a2f0022d75b4dedc6343053ad2b90fb1290e5e4d62409fe",
-    "appSHA256": "9bd0dfdfec2d9de0643aeddf49737c2910c46e9ac761fd14cfe2df9abdb6be73",
-    "nativeRunnerSHA256": "e0c43bea2ca08f8063ebfcd28c9401725668b3ec4f26305a89b2be8403e31ec5",
+    "frameworkSHA256": "a3670652d53b629942684e0a411589ce5d0c7d09496258da4be40e73b0ca36bc",
+    "appSHA256": "c0d2c241395eb42e9224f03b78dcadc529e1bef370daf839bbc1989dbc0a6650",
+    "nativeRunnerSHA256": "1be5de3fb985ccd11eaf5c4c8d3c1f3d54fcc2524099be0f4f44f205b9811992",
     "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a"
+    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
+    "defaultTests": 190,
+    "defaultTestSeconds": 313.65,
+    "pid": 26795,
+    "gui": "Final build 26 Product launched once through CUA as PID 26795. Full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, selected app JIT-less off, and the complete Play without JIT Settings sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Existing Settings overview language/import help truncation remains an open UI issue; the separate JIT-less sheet is fully visible."
   },
   "lastCheck": {
-    "upstreamNewCommits": 2,
+    "upstreamNewCommits": 4,
     "upstreamChangedPaths": 79,
     "originNewCommits": 0,
-    "mainRevision": "6eabc3d08e8aec72ee9ec5e0505d4c2392cb7137",
+    "mainRevision": "4acac6aebc61ce867c86cdf23bf2ce41673763c3",
     "macOSBaseRevision": "e069286722f2596cb766b85007643926682a7749",
-    "macOSMergeRevision": "df2973acaada8b07f65b37f7e5b4566c6968b64f",
-    "fullDefaultSuitePassed": false,
-    "newBundleVerified": false,
-    "newCandidateRestarted": false,
+    "macOSMergeRevision": "754d189aad420f8caf04eccc745bf37f75afed54",
+    "fullDefaultSuitePassed": true,
+    "newBundleVerified": true,
+    "newCandidateRestarted": true,
     "pushed": false,
     "remoteSHAsVerified": false,
     "previousCI": 41157776203,
     "blocker": null,
-    "targetedTests": 16,
-    "targetedTestSeconds": 14.92,
+    "targetedTests": 19,
+    "targetedTestSeconds": 17.61,
     "p0RecheckTests": 25,
     "p0RecheckSeconds": 6.53,
     "sharedIOSSyntax": {
@@ -66,7 +70,17 @@
       "seconds": 325.3,
       "failure": "java-lifecycle-documents: upstream early encoded-path return bypassed the selected-file grant check; removed and single-case recheck passed in 0.78 seconds."
     },
-    "pendingUpstreamRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b"
+    "defaultTests": 190,
+    "defaultTestSeconds": 313.65,
+    "javaWebTests": 48,
+    "javaWebTestSeconds": 171.86,
+    "httpTests": 5,
+    "httpTestSeconds": 22.89,
+    "aotPackagedSessions": 12,
+    "aotPackagedSessionSeconds": 26.03,
+    "bundleBinaryDigestsMatched": 18,
+    "automationUpdatedAndReadBack": false,
+    "p0RecheckSecondsNote": "Sum of 25 individual test durations; excludes the independent build time. gui=false and faults=false."
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -146,9 +160,9 @@
   "lastUpstreamMerge": {
     "date": "2026-11-01",
     "previousRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
-    "integratedRevision": "c95c960418f0a19bd2fca72a7c28eb0c1c69b190",
-    "commitCount": 2,
-    "mainRevision": "6eabc3d08e8aec72ee9ec5e0505d4c2392cb7137"
+    "integratedRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
+    "commitCount": 4,
+    "mainRevision": "4acac6aebc61ce867c86cdf23bf2ce41673763c3"
   },
   "runtime31Integration": {
     "status": "macos-packaged-and-fixture-verified",
@@ -354,18 +368,20 @@
   },
   "binderAOSPIntegration": {
     "status": "partial-local-transport-core-dex-preparation",
-    "implementation": "CLOEXEC/bounded transport, close wakes and drains admitted ioctls, exact native Parcel signatures and registered handles. ServiceManager registered; unsupported AOSP services return explicit exceptions. Core DEX generation/digest and complete boot-path checks; production Mac rejects optional unpinned framework jars.",
+    "implementation": "CLOEXEC/bounded local transport, close wake/drain, real host PID/effective UID overriding untrusted fields, exact Parcel native signatures and registered handles. Upstream service names/interface descriptors/PING and connectivity/tethering boot-path additions reused; method, permission and shell transactions remain explicitly unsupported. Core DEX generation/digest and complete boot-path checks; production Mac rejects optional unpinned framework jars.",
     "remaining": [
       "Real AOSP boot and Android system service contracts.",
       "Concurrent client routing, buffer reclamation and complete Binder token/object/String8 ABI.",
       "No Play identity, authentication or key-transfer compatibility is established."
-    ]
+    ],
+    "validation": "Final 19 targeted and 190 default tests passed, including real Dalvik Parcel native signatures/bounds/tokens/stale handles/local identity, local Binder close/transport/identity, boot paths/descriptors/PING and explicit unsupported method/permission/shell replies."
   },
   "foregroundJobs": {
     "status": "controlled-appmain-lifecycle",
     "implementation": "Declared enabled app JobService, shared queue, cancel/replacement/extras/jobFinished, host stop and service destruction; unsupported constraints/enqueue fail.",
     "remaining": [
       "Background, periodic, constraint-aware or persistent scheduling, rescheduling, namespaces and work items."
-    ]
+    ],
+    "validation": "Final default suite includes ordinary and JIT-less Java packaged process reopen, reading jobs_closed after job stop and service destruction."
   }
 }

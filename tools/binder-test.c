@@ -73,6 +73,7 @@ static void *server(void *arg)
         if (cmd == BR_TRANSACTION && i + sizeof(txn_t) <= n) {
             txn_t t;
             memcpy(&t, in + i, sizeof(t));
+            if (t.sender_pid != getpid() || t.sender_euid != geteuid()) return NULL;
             const char *msg = (const char *)(uintptr_t)t.buffer;
             if (t.data_size < 5 || memcmp(msg, "ping", 4) != 0) return NULL;
             char pong[] = "pong";
@@ -110,7 +111,8 @@ int main(void)
     pthread_create(&th, NULL, server, NULL);
     usleep(50000);
     char ping[] = "ping";
-    txn_t t = { .handle = 0, .code = 1, .data_size = 5, .buffer = (uint64_t)(uintptr_t)ping };
+    txn_t t = { .handle = 0, .code = 1, .sender_pid = 1, .sender_euid = 1000,
+                .data_size = 5, .buffer = (uint64_t)(uintptr_t)ping };
     uint8_t w[4 + sizeof(txn_t)], in[512];
     uint32_t bc = BC_TRANSACTION;
     memcpy(w, &bc, 4);

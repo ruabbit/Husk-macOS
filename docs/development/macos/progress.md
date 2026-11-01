@@ -1,20 +1,22 @@
 # 审计进度
 
-## 2026-11-01：3.2.1 ARM32 / Binder 同步，进行中
+## 2026-11-01：3.2.1 ARM32 / Binder，build 26 本地验证完成，推送待收尾
 
-干净 e069286 起步，origin 无外来提交；前轮 CI 41157776203 completed/success 已复核。上游 d30e12e..c95c960 两提交/79路径，main 普通合并为 6eabc3d；macOS 普通合并完成为 df2973a。初始唯一空闲候选 PID 21399 经 CUA 正常退出并确认消失；无本项目 Runner/VM/构建。尚未推送或启动新候选。首轮构建在合并自动留下的 tl_javaapp_stop void/bool 双声明失败；保留原布尔存储关闭协议后修复，失败日志 current-upstream-build-initial.log 保留。
+从干净 e069286 起步，origin 无外来提交，前轮 CI 41157776203 success 已复核。两次 fetch 累计上游 `d30e12e..8f65f2f` **4 提交/79 路径**：首批普通合并 main=`6eabc3d`、macOS=`df2973a`，适配保存为 `dd3f844`；收尾发现 10bbbd7/8f65f2f，再普通合并 main=`4acac6a`、macOS=`754d189`。main 首批一处 Java 冲突保留 Vulkan 配置与初始状态；Mac 首批十五文件及后批 AOSP/Java 两文件逐处保留 POST 不重试/缓存隔离、安全构建、授权、签名命名空间、安装路径、内存边界与失败关闭协议。没有批量 ours/theirs。远端 3.2.1 tag 实际指向 d30e12e，合入的是其后的 main 四提交。
 
-十五文件冲突逐处保留 fork 安全构建包装、可注入缓存与 POST 不重试、Documents 授权/生命周期、AOT 失败关闭与命名空间、mmap 边界、Java 线程所有权/关闭协议、引擎停止失败判定；新增 ARM32 与 Binder 功能须继续检查实际调用链。
+逐项核对 TLReport.nativeEngine、TLUnityView、project.yml/Xcode sources、CMake/Models/各 Runner、Store/登录和图形 pin。Mac 继续独立 Runner、AppKit 固定画布/输入、默认失焦继续、暂停/正常销毁与 storage-closed。ARM32 共享解释器已编入并恢复构造函数、有限指令预算和显式失败；受控 ARM/Thumb ELF、混合 APK ABI 隔离通过。但线程/宽结果/ISA、NativeActivity 输入/暂停/销毁/保存不完整，因此扫描器、资料库、loader、Java Build 与 Store 一致保持 arm64-only，不能称 32 位 Minecraft 可玩。上游后批也撤回同进程游戏切换。
 
+Binder/ServiceManager/Dalvik native 已编入，增加 CLOEXEC、有界传输、关闭唤醒和 admitted ioctl 排空、精确 Parcel native 签名/序号句柄/长度容量/令牌校验。传输的 sender PID/effective UID 覆盖输入字段为真实本进程身份；负向测试仅为本地受控传输。AOSP 复用接口描述/PING、服务名称、session 元数据和 connectivity/tethering boot 路径；未按具体事务编号实现的权限/AMS/窗口/账号/shell 操作明确 unsupported，不采用“所有权限允许/所有窗口回复同一 Point”。core DEX 的手写/嵌套类集合与摘要已验证，生产 Mac 仍用完整 pinned framework，拒绝未登记或可选 AOSP jar。完整 AOSP 系统、多客户端 Binder/对象/String8 ABI 仍开放。
 
-本轮已把 ARM32/Binder/ServiceManager/AOSP/Dalvik native 编入 Mac，生成受控 core DEX 并加入来源校验；ARM32 的输入/线程退出/存储协议尚未完整，因此 loader、扫描器、资料库、Java ABI 与 Store 请求统一保持 arm64 能力。恢复解释器构造函数和显式失败，受控 ARM/Thumb ELF 不作为 32 位 Minecraft 可玩证明。AOSP 占位服务改为明确 unsupported，生产 Mac 拒绝未经 pin 的 AOSP jar，完整现有 Java framework 仍使用。
+Java 前台 JobService 共用 AppMain 队列，覆盖取消/同 ID 替换/extras/jobFinished/onStopJob、host-stop 先停任务再销毁服务及结束后拒绝新增工作；普通/JIT-less DEX 打包会话保存 jobs_closed 并重开。缺声明的服务不伪造；未实现网络/充电/周期/持久化等约束与 work items 返回失败，后台调度/重调度/命名空间保持开放。JIT-less 社区查询和缓存与普通模式分开，缺结果不回退；报告记录 Mac 本地签名，保留维护/排队和 POST 不重试。没有真实登录/报告/上传。
 
-新增前台 JobService 队列与 host-stop 销毁顺序，普通/JIT-less 真实 DEX 会话验证 jobs_closed 保存重开；新 Binder 传输/关闭复用、core DEX/boot 路径和 ARM32 基础夹具第一轮通过。首轮针对性 11/12（14.74 秒），社区缓存旧 GET 次数断言失败后已修正并补无结果不回退检查；P0 第一轮扫描器仍称 ARM32 可用已修正，第二轮 25 项退出成功。新 Parcel 精确签名/句柄/长度/容量/令牌/本进程身份回归与 ABI 功能声明断言正在最终重验。前台任务不宣称 Android 后台/约束/持久化调度完整。
+失败记录保留：初次编译重复 void/bool 关闭声明；ARM32 测试缺公共声明与输出目录重名；社区旧 GET 次数断言；P0 扫描器 ARM32 误标。第一轮相关 11/12 后修复为 16/16（14.92 秒），P0 memory/core 25/25（无 GUI/故障注入）。首轮默认 189/190（325.30 秒）唯一失败为 Documents 合并新增的 encoded-path 提前返回绕过已选文件授权；移除后重建 DEX，专门文件回归 1/1（0.78 秒）通过。第二批合并后的相关回归 **19/19（17.61 秒）**通过。最终共享 **20 C/16 Swift** iOS SDK 语法通过，仅语法，不是 iOS 构建/设备。
 
-首轮全套发现 Documents 合并增加的 encoded-path 提前返回绕过授权集合，java-lifecycle-documents 的伪造 URI 检查失败。已移除该捷径，恢复完整 authority/path/已授权 canonical 路径校验；首轮全套 189/190（325.30 秒），该项是唯一失败；重建 Java framework 后专门回归 1/1（0.78 秒）通过，最终合并候选仍须完整重验。收尾 fetch 另发现上游 10bbbd7/8f65f2f 两条增量，计划在保存本轮适配后正常合并，复用 AOSP descriptor/PING 并拒绝未按事务编号实现的通用权限/窗口回复。
+最终唯一 **3.2.1/build 26** 默认 **190/190（313.65 秒）**，针对性 **19/19（17.61 秒）**；全套中 WebView **48 项（171.86 秒）**、HTTP **5 项（22.89 秒）**、AOT 打包 **12 项（26.03 秒）**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要读回一致。独立 P0 memory/core **25/25**，各测试耗时之和 6.53 秒，不含构建时间；无 GUI/故障注入。日志为 build/logs/current-upstream-nov1-*。
 
-当前 build 26 构建和最终套件尚在执行；上游范围与每个未完成项的证据/下一步已写入 upstream-parity.md，未推送未验分支，也未启动候选。
+初始空闲 Product/PID 21399 经 CUA 正常退出后，最终候选仅启动一次为 **PID 26795**。完整路径、AX/截图确认原图标/TabView、全部 **11 个应用和图标**、选中应用 JIT-less 关闭及独立说明页完整换行，关闭设置并返回首页。未改变偏好或启动用户游戏/VM。设置总页既有语言/导入帮助仍有截断，另列 UI 待办，不把独立说明页通过扩大为全设置页完成。当前本地通过，提交/两分支推送与本批 CI 待收尾。
 
+具体开放项和下一步见 upstream-parity.md：ARM32 完整解释器/线程与窗口生命周期、真实 AOSP 系统及 Binder 事务、真实 JNA/Lua/Unity/Geode/.NET 保存、IL2CPP 异常和转换期间 abrupt host/process loss；WebView 历史/host-stop、导航/destroy、Activity replacement/recreate、加载中/跨来源/第三方 HTTP；实体 IME/手柄/电源、文件面板/持久 URI、账号/Play、VM/P6。未重跑无相关修复的 War Thunder/Egg/Clash，未启动用户游戏/VM或操作 USB。
 
 ## 2026-10-31：3.2 AOT v9 / Unity JNI 偏好，build 25
 

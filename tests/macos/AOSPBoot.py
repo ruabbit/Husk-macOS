@@ -15,4 +15,5 @@ with tempfile.TemporaryDirectory(prefix='AOSP-', dir=sys.argv[2]) as temp:
     check(-1)  # core is required; do not shadow real framework classes with generated stubs
     (root/'husk-framework-core.dex').touch();check(10);check(-1,9)
     (root/'framework.jar').touch();check(10)  # one copy, preferred aosp namespace
+    (root/'aosp/framework-connectivity.jar').touch();(root/'aosp/tethering.jar').touch();check(12);check(-1,11)
     required=root/names[0];required.unlink();required.symlink_to(root/names[1]);check(-1)

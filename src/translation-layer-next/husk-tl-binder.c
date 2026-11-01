@@ -296,6 +296,10 @@ static void rewrite_objects(sess *from, uint8_t *data, size_t dlen, const uint64
 static void deliver_txn(sess *to, uint32_t br, const binder_txn *t, const void *data, const void *offs)
 {
     binder_txn out = *t;
+    /* This transport is local to this host process. Caller-supplied identity
+     * fields must never become an Android root/system identity. */
+    out.sender_pid = (int32_t)getpid();
+    out.sender_euid = (uint32_t)geteuid();
     size_t need = (size_t)t->data_size + (size_t)t->offsets_size;
     void *buf = alloc_buf(to, need ? need : 8);
     if (!buf) { uint32_t failed = BR_FAILED_REPLY; push(to, &failed, sizeof(failed)); return; }

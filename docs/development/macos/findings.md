@@ -2,8 +2,8 @@
 
 ## 2026-11-01：ARM32 / Binder 增量审计
 
-- 两提交 d30e12e..c95c960 涉及 79 路径，新增 ARM32 解释器、进程内 Binder/服务管理、Dalvik Binder native 与可选 AOSP boot 资源；不是仅 Minecraft 启动修复。
-- 上游 AOSP 系统服务 handler 目前返回 64 零字节；这不是真正 AMS/Surface/Play 服务，不能作为认证/密钥服务实现。无 AOSP 资源时仍须使用完整现有 framework。
+- 首批两提交 d30e12e..c95c960 涉及 79 路径；收尾累计四提交到 8f65f2f 仍为 79 路径，新增 ARM32 解释器、进程内 Binder/服务管理、Dalvik Binder native 与可选 AOSP boot 资源；不是仅 Minecraft 启动修复。
+- 首批上游 AOSP 系统服务 handler 返回 64 零字节；这不是真正 AMS/Surface/Play 服务，不能作为认证/密钥服务实现。无 AOSP 资源时仍须使用完整现有 framework。
 - 上游 Java shell 构建包含作者本机路径和删除输出行为，保留 fork Python 安全入口，另迁移 core.dex 的有效生成逻辑。
 - ARM32 NativeActivity 新启动只调用部分回调，尚需核对 Mac ABI 分发、输入/暂停/正常关闭及解释器失败边界；不得直接将标签指针当宿主函数调用。
 
@@ -12,6 +12,10 @@
 - Parcel 原生匹配用 strstr 会混淆 String8/String16、CreateByteArray/Create、SetDataCapacity/DataCapacity。已依据 Android 14 Parcel.java 精确签名（WriteInt/Long 返回 int）修正，原生句柄不是宿主指针。Context7 两次检索未给出对应 native 签名，改读 AOSP android-14.0.0_r1 的公开源码，未落盘来源副本。
 - P0 首轮失败保留 current-upstream-nov1-p0.log；修复扫描器能力后第二轮成功，具体最终测试数/时间随交付记录。此前 current-upstream-targeted.log 是上一轮 25/25，本轮仅使用 current-upstream-nov1-* 的新日志。
 
+- 第二批 10bbbd7/8f65f2f 撤回同进程切换并增加服务描述/PING/方法回复。具体 fill_service 未区分 transaction code，permission/package/appops 一律返回 0，window/display 一律 Point，不能代表真实系统服务；Mac 复用描述/PING/新增 boot 路径，其他方法保留 unsupported。真实 host PID/effective UID 覆盖输入事务中的 sender 字段，负向测试仅本进程 fixture。
+- 首轮默认 Documents 失败定位为合并新增 getEncodedPath 提前返回绕过 sGranted；移除后重新生成 DEX，选中文件/多选/取消/伪造 URI 单项通过。该失败不是 JobService 或 CUA 文件面板验收。
+
+- 最终默认 190/190（313.65 秒）、相关 19/19（17.61 秒）、独立 P0 25/25 和包检查通过；20 C/16 Swift 仅 iOS SDK 语法。CUA 单次 Product/PID 26795 验证 11 应用/图标与完整独立 JIT-less 说明，返回首页；设置总页语言/导入帮助截断保留待办。
 
 ## 2026-10-31：3.2 AOT 数据副本与 Unity JNI 偏好
 

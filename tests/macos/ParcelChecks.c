@@ -60,7 +60,7 @@ bool mac_parcel_checks(void)
     CHECK(!dvm_binder_native("android/os/Parcel", "nativeWriteString8", "(JLjava/lang/String;)V"));
     CHECK(!dvm_binder_native("android/os/Parcel", "nativeReadStrongBinder", "(J)Landroid/os/IBinder;"));
     dvm_native_fn uid = dvm_binder_native("android/os/Binder", "getCallingUid", "()I");
-    CHECK(uid && uid(NULL, NULL, &ret) && ret.i == (int32_t)getuid());
+    CHECK(uid && uid(NULL, NULL, &ret) && ret.i == (int32_t)geteuid());
     CHECK(!dvm_binder_native("android/os/Binder", "getCallingUidOrThrow", "()I"));
     CHECK(!tl_jni_pending());
     puts("PASS native Parcel exact signatures, bounds, token mismatch, stale handles and local caller identity");
