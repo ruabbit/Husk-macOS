@@ -309,7 +309,6 @@ static int prepare(const char *const *apks, int napks, const char *cache_dir, co
                      const char *password, const char *cert_tag, const char *sign_ident, tl_aot_progress_fn progress, void *user,
                      char *err, size_t errlen, bool system)
 {
-    static const char prefix[] = "lib/arm64-v8a/";
     mkdir(cache_dir, 0755);
     tl_zip *z = calloc((size_t)(napks > 0 ? napks : 1), sizeof(tl_zip));
     if (!z) { snprintf(err, errlen, "out of memory"); return -1; }
@@ -331,8 +330,14 @@ static int prepare(const char *const *apks, int napks, const char *cache_dir, co
         for (size_t i = 0; i < z[a].count; i++) {
             const char *n = z[a].entries[i].name;
             size_t l = strlen(n);
-            if (strncmp(n, prefix, sizeof(prefix) - 1) || l < sizeof(prefix) + 3 || strcmp(n + l - 3, ".so") || strchr(n + sizeof(prefix) - 1, '/')) continue;
-            const char *base = n + sizeof(prefix) - 1;
+            static const char *const prefixes[] = { "lib/arm64-v8a/", "lib/arm64/" };
+            const char *base = NULL;
+            for (int p = 0; p < 2 && !base; p++) {
+                size_t pl = strlen(prefixes[p]);
+                if (l > pl + 3 && !strncmp(n, prefixes[p], pl) && !strcmp(n + l - 3, ".so") && !strchr(n + pl, '/'))
+                    base = n + pl;
+            }
+            if (!base) continue;
             bool seen = false;
             for (int k = 0; k < nlibs && !seen; k++) seen = !strcmp(libs[k].name, base);
             if (seen) continue;
@@ -373,7 +378,12 @@ static int prepare(const char *const *apks, int napks, const char *cache_dir, co
             r = 0;
         }
         if (owned) free((void *)data);
-        if (r < 0) { ready = -1; goto out; }
+        if (r < 0) {
+            /* one library that will not convert must not stop the rest: JIT-less still runs on those that did */
+            tl_log_line("aot: %s skipped: %s", libs[k].name, err);
+            if (errlen) err[0] = 0;
+            continue;
+        }
         ready += r;
     }
     if (progress) progress(user, nlibs, nlibs, NULL);

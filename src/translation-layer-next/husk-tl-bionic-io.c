@@ -16,6 +16,7 @@ bool tl_ld_covers(const void *addr, size_t bytes);
 #include "husk-tl-codewrite.h"
 #include "husk-tl-xmem.h"
 #include "husk-tl-ld.h"
+#include "husk-tl-binder.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -609,6 +610,7 @@ static void fill_lib_standin_at(int dirfd, const char *name)
 }
 static int b_open(const char *path, int flags, unsigned mode)
 {
+    if (husk_binder_is_path(path)) return husk_binder_open();
     char buf[1024]; static __thread char content[32768];
     jar_entry jar;
     if (jar_lookup(path, &jar)) {
@@ -659,7 +661,15 @@ static bool net_trace_fd(int fd);
 static int g_evfd_peer[1024];
 void tl_eventfd_register(int rd, int wr) { if (rd >= 0 && rd < 1024) g_evfd_peer[rd] = wr + 1; }
 static int evfd_peer(int fd) { return fd >= 0 && fd < 1024 ? g_evfd_peer[fd] - 1 : -1; }
-static int b_close(int fd) { if (evfd_peer(fd) >= 0) { close(evfd_peer(fd)); g_evfd_peer[fd] = 0; } if (vfd_is(fd)) g_vfd[fd].on = false; bool sock = net_trace_fd(fd); TL_ERRNO_BEGIN(); int r = close(fd); tl_atomic_closed(fd); TL_ERRNO_END(); if (sock) tl_log_line("net: close(fd %d)", fd); return r; }
+static int b_close(int fd) {
+    if (husk_binder_is_fd(fd)) husk_binder_close(fd);
+    if (evfd_peer(fd) >= 0) { close(evfd_peer(fd)); g_evfd_peer[fd] = 0; }
+    if (vfd_is(fd)) g_vfd[fd].on = false;
+    bool sock = net_trace_fd(fd);
+    TL_ERRNO_BEGIN(); int r = close(fd); tl_atomic_closed(fd); TL_ERRNO_END();
+    if (sock) tl_log_line("net: close(fd %d)", fd);
+    return r;
+}
 /* close() as the guest calls it (for other shims that close on its behalf: fdsan's close_with_tag) */
 int tl_guest_close(int fd) { return b_close(fd); }
 static bool net_trace_fd(int fd)
@@ -970,6 +980,12 @@ static int b_fcntl(int fd, int cmd, long arg)
 
 static int b_ioctl(int fd, unsigned long req, long arg)
 {
+    if (husk_binder_is_fd(fd)) {
+        TL_ERRNO_BEGIN();
+        int r = husk_binder_ioctl(fd, req, (void *)arg);
+        TL_ERRNO_END();
+        return r;
+    }
     if (req == 0x541B) { int n = 0; int r = ioctl(fd, FIONREAD, &n); if (r == 0) *(int *)arg = n; else TL_ERRNO_END(); return r; }  /* FIONREAD */
     if (req == 0x5421) { int on = *(int *)arg; int fl = fcntl(fd, F_GETFL); fcntl(fd, F_SETFL, on ? fl | O_NONBLOCK : fl & ~O_NONBLOCK); return 0; }   /* FIONBIO */
     tl_set_guest_errno(25);                                                                                                                    /* ENOTTY */
@@ -1330,6 +1346,7 @@ static void *b_mmap(void *addr, size_t len, int prot, int flags, int fd, long of
     if (!len || len > SIZE_MAX - (TL_XMEM_PAGE - 1) || ((flags & 0x10) && (!addr || (uintptr_t)addr > UINTPTR_MAX - len))) {
         tl_set_guest_errno(22); return MAP_FAILED;
     }
+    if (fd >= 0 && husk_binder_is_fd(fd)) return husk_binder_mmap(fd, len);
     /* A library file mapped executable (libffi's static trampolines): for a library imported from a dylib, its own signed code */
     if ((prot & PROT_EXEC) && !(flags & 0x20) && fd >= 0 && off >= 0) {
         size_t rounded = (len + TL_XMEM_PAGE - 1) & ~(size_t)(TL_XMEM_PAGE - 1);

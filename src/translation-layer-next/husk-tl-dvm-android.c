@@ -10,6 +10,8 @@
 #include "husk-tl-dvm-javaapp.h"
 #include "husk-tl-dvm-gl.h"
 #include "husk-tl-dvm-nativeactivity.h"
+#include "husk-tl-aosp.h"
+#include "husk-tl-dvm.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <fcntl.h>
@@ -396,6 +398,7 @@ NAT(N_setAppClassLoader) { (void)self; (void)ret; dvm_set_app_loader(a[0].l); re
 /* The NDK's ALooper for a Java Looper's thread: native code that asks for its UI thread's looper (ALooper_forThread) and watches
  * file descriptors on it (Unity 6, GameActivity-style code) has its callbacks run between that thread's messages */
 NAT(N_looperPrepare) { (void)self; (void)a; (void)ret; void *(*prep)(int) = tl_bionic_find("ALooper_prepare"); if (prep) prep(0); return true; }
+NAT(N_sessionEnded) { (void)self; (void)a; *ret = I(atomic_load(&A.ended) ? 1 : 0); return true; }
 NAT(N_looperPoll)
 {
     (void)self; (void)a;
@@ -591,6 +594,7 @@ static const struct { const char *name, *sig; dvm_native_fn fn; } k_native[] = {
     { "splitPaths", "()[Ljava/lang/String;", N_splitPaths },
     { "nativeLooperPrepare", "()V", N_looperPrepare },
     { "nativeLooperPoll", "()Z", N_looperPoll },
+    { "sessionEnded", "()Z", N_sessionEnded },
     { "setAppClassLoader", "(Ljava/lang/ClassLoader;)V", N_setAppClassLoader },
     { "apkFileFd", "(ILjava/lang/String;)J", N_apkFileFd },
     { "apkFileLength", "(ILjava/lang/String;)J", N_apkFileLength },
@@ -1235,9 +1239,20 @@ static void *app_main(void *arg)
     (void)arg;
     pthread_setname_np("main");
     A.app_owner = pthread_self();
-    jvalue a[2] = { L(dvm_new_string_utf8(A.activity)), L(A.application[0] ? dvm_new_string_utf8(A.application) : NULL) };
     jvalue r;
-    if (!tl_dvm_call_static("husk/AppRunner", "run", "(Ljava/lang/String;Ljava/lang/String;)V", a, &r)) {
+    bool ok = false;
+    if (tl_dvm_defines_class("husk/AppRunner")) {
+        jvalue a[2] = { L(dvm_new_string_utf8(A.activity)), L(A.application[0] ? dvm_new_string_utf8(A.application) : NULL) };
+        ok = tl_dvm_call_static("husk/AppRunner", "run", "(Ljava/lang/String;Ljava/lang/String;)V", a, &r);
+    } else if (tl_dvm_defines_class("android/app/ActivityThread")) {
+        tl_log_line("javaapp: AOSP ActivityThread on the boot path");
+        jobj *args = tl_jni_new_obj_array(tl_jni_class("java/lang/String"), 0);
+        jvalue a[1] = { L(args) };
+        ok = tl_dvm_call_static("android/app/ActivityThread", "main", "([Ljava/lang/String;)V", a, &r);
+    } else {
+        tl_log_line("javaapp: no AppRunner and no ActivityThread on the boot path");
+    }
+    if (!ok) {
         char buf[800];
         tl_log_line("javaapp: the app's main thread ended with %s", tl_dvm_describe_pending(buf, sizeof(buf)) ? buf : "?");
         log_pending_stack();
@@ -1261,6 +1276,10 @@ static void stub_lib(const char *name, uint64_t size, void *dir)
 
 static bool start_app(const tl_javaapp_config *cfg)
 {
+    atomic_store(&A.ended, false);
+    atomic_store(&A.paused, false);
+    atomic_store(&A.frames, 0);
+    A.qn = 0; A.gl_view = NULL; A.gl_renderer = NULL; A.content = NULL;
     /* stores into a library's executable view (data sharing a page with its code, as Unity's does) go through the writable one */
     { void tl_codewrite_enable(void); tl_codewrite_enable(); }
     A.cfg = *cfg;

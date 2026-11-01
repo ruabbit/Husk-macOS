@@ -29,6 +29,7 @@ final class CompatibilityStore: ObservableObject {
     private let session: URLSession
     private let endpoints: [URL]
     private let cache: URL
+    private let jitlessCache: URL
     private let defaults: UserDefaults
 
     private static func log(_ message: String) {
@@ -51,11 +52,16 @@ final class CompatibilityStore: ObservableObject {
     }
 
     /// The request on each site in turn until one answers with a status below 500 (a 4xx is the site's answer, not an outage).
-    private func call(_ path: String, retry: Bool = true, _ prepare: (inout URLRequest) -> Void = { _ in }) async throws -> (Data, HTTPURLResponse) {
+    private func call(_ path: String, query: [URLQueryItem] = [], retry: Bool = true, _ prepare: (inout URLRequest) -> Void = { _ in }) async throws -> (Data, HTTPURLResponse) {
         var last: Error = URLError(.cannotConnectToHost)
         let candidates = retry ? endpoints : [workingSite ?? endpoints[0]]
         for site in candidates {
-            var request = URLRequest(url: site.appendingPathComponent(path))
+            var url = site.appendingPathComponent(path)
+            if !query.isEmpty, var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                parts.queryItems = query
+                if let built = parts.url { url = built }
+            }
+            var request = URLRequest(url: url)
             request.timeoutInterval = 15
             prepare(&request)
             do {
@@ -133,6 +139,7 @@ final class CompatibilityStore: ObservableObject {
     }
 
     @Published private(set) var entries: [String: Entry] = [:]
+    @Published private(set) var jitlessEntries: [String: Entry] = [:]
     @Published private(set) var updated: Date?
     private var fetching = false
 
@@ -149,14 +156,26 @@ final class CompatibilityStore: ObservableObject {
         self.session = session
         self.endpoints = sites?.isEmpty == false ? sites! : Self.sites
         self.cache = cache ?? Self.cacheFile
+        self.jitlessCache = self.cache.deletingPathExtension().appendingPathExtension("jitless.json")
         self.defaults = defaults
         if let data = try? Data(contentsOf: self.cache), let list = try? JSONDecoder().decode([Entry].self, from: data) {
             entries = Dictionary(list.map { ($0.package, $0) }, uniquingKeysWith: { a, _ in a })
             updated = (try? FileManager.default.attributesOfItem(atPath: self.cache.path)[.modificationDate]) as? Date
         }
+        if let data = try? Data(contentsOf: self.jitlessCache), let list = try? JSONDecoder().decode([Entry].self, from: data) {
+            jitlessEntries = Dictionary(list.map { ($0.package, $0) }, uniquingKeysWith: { a, _ in a })
+        }
     }
 
-    func entry(_ package: String?) -> Entry? { package.flatMap { entries[$0] } }
+    func entry(_ package: String?, jitless: Bool? = nil) -> Entry? {
+        guard let package else { return nil }
+#if canImport(UIKit)
+        let useJitless = jitless ?? JITLess.enabled
+#else
+        let useJitless = jitless ?? false
+#endif
+        return useJitless ? jitlessEntries[package] : entries[package]
+    }
 
     /// The list again when the copy on disk is older than a few hours (or `force`).
     func refresh(force: Bool = false) async {
@@ -175,7 +194,13 @@ final class CompatibilityStore: ObservableObject {
             updated = Date()
             try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? JSONEncoder().encode(list).write(to: cache, options: .atomic)
-            Self.log("list updated: \(list.count) apps")
+            if let (jlData, jlHttp) = try? await call("api/apps", query: [URLQueryItem(name: "jitless", value: "1")]),
+               (200..<300).contains(jlHttp.statusCode) {
+                let jl = try JSONDecoder().decode(Response.self, from: jlData).apps
+                jitlessEntries = Dictionary(jl.map { ($0.package, $0) }, uniquingKeysWith: { a, _ in a })
+                try? JSONEncoder().encode(jl).write(to: jitlessCache, options: .atomic)
+            }
+            Self.log("list updated: \(list.count) apps, \(jitlessEntries.count) JIT-less")
         } catch {
             if !Task.isCancelled { self.error = error.localizedDescription }
             Self.log("list not updated: \(error.localizedDescription)")
@@ -195,8 +220,11 @@ final class CompatibilityStore: ObservableObject {
         return "Mac (\(machine))"
 #endif
     }
+    /// How this report ran: Play without JIT, or which debugger turned JIT on. The JIT-less list on the site is the
+    /// team's own results; player reports all go to the same list, tagged with this.
     static var jitMethod: String {
 #if canImport(UIKit)
+        if JITLess.enabled { return "None (Play without JIT)" }
         switch JITCoordinator.shared.resolvedMethod {
         case .builtIn: return "StikJIT (built in)"
         case .stikDebug: return "StikDebug"
@@ -444,7 +472,7 @@ struct CompatReportSheet: View {
                 } header: {
                     Text("Your Name")
                 } footer: {
-                    Text("Sent with it: \(CompatibilityStore.device), iOS \(UIDevice.current.systemVersion), Husk build \(CompatibilityStore.build), JIT from \(CompatibilityStore.jitMethod). It shows on itslevii.dev for everyone.")
+                    Text("Sent with it: \(CompatibilityStore.device), iOS \(UIDevice.current.systemVersion), Husk build \(CompatibilityStore.build), \(JITLess.enabled ? "Play without JIT" : "JIT from \(CompatibilityStore.jitMethod)"). It shows on itslevii.dev for everyone.")
                 }
                 Section {
                     Toggle("Attach my log", isOn: $attachLog)
