@@ -1,14 +1,14 @@
 # Husk macOS 迁移实施
 
-## 当前执行：2026-11-01 ARM32 / Binder / 3.2.1，进行中
+## 当前执行：2026-11-01 ARM32 / Binder / 3.2.1，已交付当前实现，完整接入继续开放
 
 - [x] 干净 e069286 起步；两远端 fetch，origin 无新增；前轮 CI 41157776203 success 复核。空闲 Product/PID 21399 经 CUA 正常退出，无本项目 Runner/VM/构建。
 - [x] upstream d30e12e..8f65f2f 四提交/79路径分两批普通合并；main 6eabc3d→4acac6a，macOS df2973a→754d189，中间适配 dd3f844；Java Vulkan 配置与会话初值均保留。
 - [x] macOS 首批 15 文件和后批 AOSP/Java 两文件语义冲突逐处解决；保留安全构建入口、POST 不重复、缓存隔离、失败生命周期/存储关闭。
 - [x] 接入共享编译、前台任务/服务关闭、core DEX、Binder 与 JIT-less 社区缓存；ARM32 完整生命周期和真实 AOSP 服务保留开放，具体证据/下一步见 parity。
 - [x] 唯一 build/macos/build 26：相关 19/19、独立 P0 25/25、默认 190/190（313.65 秒）和 18 Mach-O/407 Java 资源/两语言各 784 条通过。CUA 单次启动 PID 26795，11 应用/图标及 JIT-less 说明确认，返回首页。
-- [ ] 更新来源锁/parity/记录，正常推送两分支并读 SHA，核对 CI 与每日续跑状态。
-- [ ] 真实应用/游戏、WebView 顺序/跨源、实体设备/Play/VM/P6 保持开放。
+- [x] 更新来源锁/parity/记录；main 4acac6a、源码 f75c1e6 正常推送并读回。CI 41262157084 success（54 hosted 核心/52.25 秒，25 P0；hardware skipped）；每日续跑提示、原时间/线程/约束精确读回。
+- [ ] ARM32 完整 ISA/JNI/线程与 NativeActivity 生命周期、真实 AOSP 系统/Binder ABI、后台 JobScheduler；真实应用/游戏、WebView 顺序/跨源、实体设备/Play/VM/P6 保持开放。设置总页语言/导入帮助截断另列 UI 待办。
 
 
 ## 当前执行：2026-10-31 AOT v9 / Unity 偏好，已交付

@@ -1,6 +1,6 @@
 # 上游功能与 macOS 接入现况
 
-## 2026-11-01：3.2.1 ARM32 / Binder / 前台任务，build 26 本地验证完成
+## 2026-11-01：3.2.1 ARM32 / Binder / 前台任务，build 26 本地通过并已推送
 
 `d30e12e..8f65f2f` 累计 **4 提交/79 路径**分两批普通合并：main=`6eabc3d`→`4acac6a`，macOS=`df2973a`→`754d189`；中间适配保存为 `dd3f844`，origin 无外来提交。main 一处 Java 冲突保留 Vulkan 配置与初始会话状态；macOS 十五文件逐处保留安全构建入口、POST 不重试/缓存隔离、Documents 授权、签名命名空间、内存边界、线程所有权及失败关闭判定。上游 3.2.1 不能等同本轮所有新运行能力已完成。
 
@@ -14,7 +14,7 @@
 | Java 前台 JobService | 复用 AppMain 和服务生命周期；共享队列、同 ID 替换/取消、extras、jobFinished、异步 onStopJob 及宿主结束时先停任务再销毁服务；结束后拒绝新增服务/任务 | 真实 DEX 普通与 JIT-less 打包会话保存 jobs_closed 并重开，最终全套通过。缺少声明的服务不伪造，充电/网络/周期/持久化/最小延迟等未实现约束返回失败；后台调度、重调度、命名空间和 work items 继续开放 |
 | JIT-less 社区列表 | 每游戏设置选择独立查询/磁盘缓存，无结果不回退普通列表；报告区分 Mac 本地签名，保留维护/排队提示和 POST 不重试；中英文新增文案 | 隔离 HTTP 缓存/请求与模式选择回归。没有真实报告、登录或上传；iPhone 社区结果不作为 Mac 兼容结论 |
 
-追加两处 AOSP/Java 冲突保留完整 boot path/安装路径映射和新 session 元数据。最终 build 26 已单次 CUA 启动为 PID 26795；原图标/TabView、11 应用和图标、JIT-less 关闭及独立说明页完整可见，返回首页。首轮构建 void/bool 关闭声明冲突、ARM32 测试缺公共声明/输出目录冲突、社区 GET 次数旧断言与 P0 扫描器 ARM32 误标均保留失败日志并修正；Documents encoded-path 提前返回绕过授权的问题已修复并保留首次失败证据。最终默认 190/190（313.65 秒）、针对性 19/19（17.61 秒）、18 Mach-O/407 Java 资源/中英文各 784 条通过。独立 P0 25/25 使用 build/macos/P0Validation，无 GUI/故障注入；共享 20 C/16 Swift 仅 iOS SDK 语法检查。两分支推送与本批 CI 待收尾。设置总页既有语言/导入帮助截断保留 UI 待办，独立 JIT-less 页不受影响。
+追加两处 AOSP/Java 冲突保留完整 boot path/安装路径映射和新 session 元数据。最终 build 26 已单次 CUA 启动为 PID 26795；原图标/TabView、11 应用和图标、JIT-less 关闭及独立说明页完整可见，返回首页。首轮构建 void/bool 关闭声明冲突、ARM32 测试缺公共声明/输出目录冲突、社区 GET 次数旧断言与 P0 扫描器 ARM32 误标均保留失败日志并修正；Documents encoded-path 提前返回绕过授权的问题已修复并保留首次失败证据。最终默认 190/190（313.65 秒）、针对性 19/19（17.61 秒）、18 Mach-O/407 Java 资源/中英文各 784 条通过。独立 P0 25/25 使用 build/macos/P0Validation，无 GUI/故障注入；共享 20 C/16 Swift 仅 iOS SDK 语法检查。源码 f75c1e6/main 4acac6a 已正常推送并读回；本批 CI 41262157084 success（54 hosted 核心测试、52.25 秒，25 P0 检查；hardware skipped）。每日续跑提示和原时间/线程/边界精确读回。设置总页既有语言/导入帮助截断保留 UI 待办，独立 JIT-less 页不受影响。
 
 既有真实应用/游戏、WebView 历史与 host-stop/导航与 destroy/Activity replacement-recreate/加载中和跨来源、真实第三方 HTTP 插件、实体 IME/手柄/电源、账号/认证 Play、VM/P6 待办继续开放。未重跑无相关修复的 War Thunder、Egg、Clash，未启动用户游戏/VM或操作 USB。
 

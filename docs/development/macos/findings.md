@@ -16,6 +16,7 @@
 - 首轮默认 Documents 失败定位为合并新增 getEncodedPath 提前返回绕过 sGranted；移除后重新生成 DEX，选中文件/多选/取消/伪造 URI 单项通过。该失败不是 JobService 或 CUA 文件面板验收。
 
 - 最终默认 190/190（313.65 秒）、相关 19/19（17.61 秒）、独立 P0 25/25 和包检查通过；20 C/16 Swift 仅 iOS SDK 语法。CUA 单次 Product/PID 26795 验证 11 应用/图标与完整独立 JIT-less 说明，返回首页；设置总页语言/导入帮助截断保留待办。
+- 最终源码 f75c1e6/main 4acac6a 正常推送并读回；CI 41262157084 success：构建/包检查、54 hosted 核心回归（52.25 秒）及 25 P0，hardware skipped。每日续跑状态已精确读回。
 
 ## 2026-10-31：3.2 AOT 数据副本与 Unity JNI 偏好
 

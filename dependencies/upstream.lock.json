@@ -5,10 +5,10 @@
   "integratedRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
   "checkedOn": "2026-11-01",
   "commitCount": 4,
-  "integration": "Four upstream commits merged normally in two fetch batches: main 6eabc3d then 4acac6a, macOS df2973a then 754d189; adaptation checkpoint dd3f844. AOSP descriptors/PING and optional paths reused; unimplemented version-specific service methods fail explicitly. Final local build, default suite, bundle and one CUA launch passed. ARM32 lifecycle and full AOSP remain open; push and CI pending.",
+  "integration": "Four upstream commits merged normally in two fetch batches: main 6eabc3d then 4acac6a, macOS df2973a then 754d189; adaptation checkpoint dd3f844. AOSP descriptors/PING and optional paths reused; unimplemented version-specific service methods fail explicitly. Final local build, default suite, bundle and one CUA launch passed. ARM32 lifecycle and full AOSP remain open; both fork branches pushed and remote SHAs read back; current CI 41262157084 completed successfully (54 hosted core tests and 25 P0 checks; hardware skipped).",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-push-pending",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.2.1",
     "revision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
@@ -17,7 +17,7 @@
   "candidate": {
     "version": "3.2.1",
     "build": "26",
-    "deliveryStatus": "locally-verified-push-pending",
+    "deliveryStatus": "verified-and-pushed",
     "bundleMachO": 18,
     "javaResources": 407,
     "localizations": {
@@ -38,7 +38,23 @@
     "defaultTests": 190,
     "defaultTestSeconds": 313.65,
     "pid": 26795,
-    "gui": "Final build 26 Product launched once through CUA as PID 26795. Full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, selected app JIT-less off, and the complete Play without JIT Settings sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Existing Settings overview language/import help truncation remains an open UI issue; the separate JIT-less sheet is fully visible."
+    "gui": "Final build 26 Product launched once through CUA as PID 26795. Full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, selected app JIT-less off, and the complete Play without JIT Settings sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Existing Settings overview language/import help truncation remains an open UI issue; the separate JIT-less sheet is fully visible.",
+    "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
+    "productSourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
+    "ci": {
+      "run": 41262157084,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084",
+      "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 52.25,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 458
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 4,
@@ -50,8 +66,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "previousCI": 41157776203,
     "blocker": null,
     "targetedTests": 19,
@@ -79,8 +95,26 @@
     "aotPackagedSessions": 12,
     "aotPackagedSessionSeconds": 26.03,
     "bundleBinaryDigestsMatched": 18,
-    "automationUpdatedAndReadBack": false,
-    "p0RecheckSecondsNote": "Sum of 25 individual test durations; excludes the independent build time. gui=false and faults=false."
+    "automationUpdatedAndReadBack": true,
+    "p0RecheckSecondsNote": "Sum of 25 individual test durations; excludes the independent build time. gui=false and faults=false.",
+    "ci": {
+      "run": 41262157084,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084",
+      "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 52.25,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 458
+    },
+    "sourcePushRemoteHeads": {
+      "refs/heads/main": "4acac6aebc61ce867c86cdf23bf2ce41673763c3",
+      "refs/heads/codex/macos-p0": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb"
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -303,6 +337,20 @@
       "hostedCoreTestSeconds": 51.34,
       "p0Checks": 25,
       "buildAndCoreSeconds": 414
+    },
+    {
+      "run": 41262157084,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084",
+      "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 52.25,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 458
     }
   ],
   "jniPreferencesIntegration": {

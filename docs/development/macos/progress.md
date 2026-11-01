@@ -1,6 +1,6 @@
 # 审计进度
 
-## 2026-11-01：3.2.1 ARM32 / Binder，build 26 本地验证完成，推送待收尾
+## 2026-11-01：3.2.1 ARM32 / Binder，build 26 已交付，ARM32/AOSP 完整接入继续开放
 
 从干净 e069286 起步，origin 无外来提交，前轮 CI 41157776203 success 已复核。两次 fetch 累计上游 `d30e12e..8f65f2f` **4 提交/79 路径**：首批普通合并 main=`6eabc3d`、macOS=`df2973a`，适配保存为 `dd3f844`；收尾发现 10bbbd7/8f65f2f，再普通合并 main=`4acac6a`、macOS=`754d189`。main 首批一处 Java 冲突保留 Vulkan 配置与初始状态；Mac 首批十五文件及后批 AOSP/Java 两文件逐处保留 POST 不重试/缓存隔离、安全构建、授权、签名命名空间、安装路径、内存边界与失败关闭协议。没有批量 ours/theirs。远端 3.2.1 tag 实际指向 d30e12e，合入的是其后的 main 四提交。
 
@@ -14,7 +14,7 @@ Java 前台 JobService 共用 AppMain 队列，覆盖取消/同 ID 替换/extras
 
 最终唯一 **3.2.1/build 26** 默认 **190/190（313.65 秒）**，针对性 **19/19（17.61 秒）**；全套中 WebView **48 项（171.86 秒）**、HTTP **5 项（22.89 秒）**、AOT 打包 **12 项（26.03 秒）**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要读回一致。独立 P0 memory/core **25/25**，各测试耗时之和 6.53 秒，不含构建时间；无 GUI/故障注入。日志为 build/logs/current-upstream-nov1-*。
 
-初始空闲 Product/PID 21399 经 CUA 正常退出后，最终候选仅启动一次为 **PID 26795**。完整路径、AX/截图确认原图标/TabView、全部 **11 个应用和图标**、选中应用 JIT-less 关闭及独立说明页完整换行，关闭设置并返回首页。未改变偏好或启动用户游戏/VM。设置总页既有语言/导入帮助仍有截断，另列 UI 待办，不把独立说明页通过扩大为全设置页完成。当前本地通过，提交/两分支推送与本批 CI 待收尾。
+初始空闲 Product/PID 21399 经 CUA 正常退出后，最终候选仅启动一次为 **PID 26795**。完整路径、AX/截图确认原图标/TabView、全部 **11 个应用和图标**、选中应用 JIT-less 关闭及独立说明页完整换行，关闭设置并返回首页。未改变偏好或启动用户游戏/VM。设置总页既有语言/导入帮助仍有截断，另列 UI 待办，不把独立说明页通过扩大为全设置页完成。源码 [f75c1e6](https://github.com/ruabbit/Husk-macOS/commit/f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb) 与 main [4acac6a](https://github.com/ruabbit/Husk-macOS/commit/4acac6aebc61ce867c86cdf23bf2ce41673763c3) 已正常原子推送，两分支远端 SHA 读回一致。本批 [CI 41262157084](https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084)（head=f75c1e6）已 **completed/success**：构建、包检查、**54 项 hosted 核心回归（52.25 秒）**及 **25 项 P0 memory/core** 通过；build-and-core **7 分 38 秒**，hardware skipped。每日续跑提示已更新并精确读回，原每日 09:00、线程、贡献范围与会话保护规则保持。当前源码已交付，ARM32 完整生命周期与 AOSP 系统接入仍按具体待办继续。
 
 具体开放项和下一步见 upstream-parity.md：ARM32 完整解释器/线程与窗口生命周期、真实 AOSP 系统及 Binder 事务、真实 JNA/Lua/Unity/Geode/.NET 保存、IL2CPP 异常和转换期间 abrupt host/process loss；WebView 历史/host-stop、导航/destroy、Activity replacement/recreate、加载中/跨来源/第三方 HTTP；实体 IME/手柄/电源、文件面板/持久 URI、账号/Play、VM/P6。未重跑无相关修复的 War Thunder/Egg/Clash，未启动用户游戏/VM或操作 USB。
 
