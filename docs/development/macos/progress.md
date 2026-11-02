@@ -1,6 +1,6 @@
 # 审计进度
 
-## 2026-11-02：3.3 / WebView 顺序与设置文字，build 27 本地验证完成
+## 2026-11-02：3.3 / WebView 顺序与设置文字，build 27 已交付
 
 从干净 74e7b71 起步，无 Husk/Runner/本项目 VM/构建或进行中的 Git 操作；前轮 CI 41262157084 success 复核。origin 无新增，upstream `8f65f2f..89b0f87` **2 提交/8 路径**，3.3 tag=`9345aab`。普通合并 main=`eeef229`、macOS=`ed7c948`，均无冲突；收尾 fetch 没有新增。逐项核对 TLReport.nativeEngine、TLUnityView、project.yml、Mac CMake/能力/Runner 输入暂停关闭、Store/登录和图形构建；新增为 iOS 15 页面、StikDebug 容器与 SideStore 源，没有共享引擎/Play/图形 pin 增量。ARM32 产品入口、完整 AOSP 等既有边界保留。
 
@@ -10,7 +10,7 @@
 
 唯一 **3.3.0/build 27** 构建完成；新增 **6/6（27.00 秒）**、默认 **196/196（308.42 秒）**通过，其中 WebView **54 项（165.93 秒）**、HTTP **6 项（22.19 秒）**、AOT 打包 **12 项（28.23 秒）**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要读回一致；NativeRunner 摘要与 build 26 一致。本轮无需新增运行时补丁，没有测试失败。日志复用 `build/logs/current-upstream-nov2-*`。
 
-最终 Product 通过 CUA **仅启动一次，PID 20372**；完整路径、AX/截图确认原图标/TabView、全部 11 个应用及图标、选中应用 JIT-less 关闭、设置总页两段帮助完整换行及独立 JIT-less 说明完整可见，关闭设置并返回首页。观察使用既有英文界面，没有改变偏好、认证/上传、启动用户游戏或 VM，也没有重跑无相关修复的失败商业样本。提交推送及本批 CI 收尾尚待完成。
+最终 Product 通过 CUA **仅启动一次，PID 20372**；完整路径、AX/截图确认原图标/TabView、全部 11 个应用及图标、选中应用 JIT-less 关闭、设置总页两段帮助完整换行及独立 JIT-less 说明完整可见，关闭设置并返回首页。观察使用既有英文界面，没有改变偏好、认证/上传、启动用户游戏或 VM，也没有重跑无相关修复的失败商业样本。源码 [d121f6e](https://github.com/ruabbit/Husk-macOS/commit/d121f6e10bdd3614110547b3b2511d9339aebed3) 与 main [eeef229](https://github.com/ruabbit/Husk-macOS/commit/eeef229eae49a7136b71b67b4f7120e3d5c29eec) 已正常原子推送，两分支远端 SHA 读回一致；本批 [CI 41390256558](https://github.com/ruabbit/Husk-macOS/actions/runs/41390256558)（head=d121f6e）已 **completed/success**：构建、包检查、**54 项 hosted 核心回归（53.24 秒）**和 **25 项 P0 memory/core** 通过；build-and-core **6 分 5 秒**，hardware skipped。每日续跑提示已更新并精确读回，原每日 09:00、聊天、贡献范围及会话保护规则保持。最终来源锁和文档以单独 skip-ci 交付提交保存，不改变已经验证的候选二进制。
 
 下一步先推进已提交历史页异步恢复检查/host-stop 的确定性交叠，以及 Activity replacement/recreate 更多顺序；加载中/跨源/真实第三方 HTTP、ARM32 完整生命周期/AOSP、真实游戏存档/IL2CPP、实体 IME/手柄/电源、账号/Play、VM/P6 保持具体开放。导航/destroy 与未提交历史响应/停止的本轮回归、设置总页截断不再列为完全未做。
 

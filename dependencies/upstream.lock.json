@@ -5,10 +5,10 @@
   "integratedRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
   "checkedOn": "2026-11-02",
   "commitCount": 2,
-  "integration": "Two upstream commits merged normally to fork main eeef229 and macOS ed7c948 without conflicts. iOS 15 navigation/StikDebug and SideStore source updates add no Mac engine or graphics/Play pin. Mac 3.3.0/build 27 fixes Settings help wrapping, limits the source generator to this checkout, and verifies five navigation/destroy and one pending HTTP history-load/host-stop scenarios using the existing production runtime. All 196 default tests and bundle verification passed. Final CUA launch confirmed full text, original 11 apps/icons and Home; push and CI pending.",
+  "integration": "Two upstream commits merged normally to fork main eeef229 and macOS ed7c948 without conflicts. iOS 15 navigation/StikDebug and SideStore source updates add no Mac engine or graphics/Play pin. Mac 3.3.0/build 27 fixes Settings help wrapping, limits the source generator to this checkout, and verifies five navigation/destroy and one pending HTTP history-load/host-stop scenarios using the existing production runtime. All 196 default tests and bundle verification passed. Final CUA launch confirmed full text, original 11 apps/icons and Home; Both fork branches pushed normally and remote SHAs read back. CI 41390256558 succeeded: build/package, 54 hosted core tests and 25 P0 checks; hardware skipped. Daily automation prompt, original schedule and thread updated and read back exactly.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-awaiting-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.3",
     "revision": "9345aab21286735b5ba7acc9bf1c6b5fb864e075",
@@ -17,7 +17,7 @@
   "candidate": {
     "version": "3.3.0",
     "build": "27",
-    "deliveryStatus": "locally-verified-awaiting-push",
+    "deliveryStatus": "verified-and-pushed",
     "bundleMachO": 18,
     "javaResources": 407,
     "localizations": {
@@ -38,7 +38,23 @@
     "appSHA256": "51c4b33370f46084bc76d94cecf0a91b27f7491ce8e5d19e5bd033c3378cd194",
     "nativeRunnerSHA256": "1be5de3fb985ccd11eaf5c4c8d3c1f3d54fcc2524099be0f4f44f205b9811992",
     "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a"
+    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
+    "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+    "productSourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+    "ci": {
+      "run": 41390256558,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41390256558",
+      "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 53.24,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 365
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 2,
@@ -50,8 +66,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "previousCI": 41262157084,
     "blocker": null,
     "sharedIOSSyntax": {
@@ -60,7 +76,7 @@
       "fullBuild": false,
       "device": false
     },
-    "automationUpdatedAndReadBack": false,
+    "automationUpdatedAndReadBack": true,
     "targetedTests": 6,
     "targetedTestSeconds": 27.0,
     "defaultTests": 196,
@@ -73,7 +89,22 @@
     "aotPackagedSessionSeconds": 28.23,
     "bundleBinaryDigestsMatched": 18,
     "conflicts": 0,
-    "finalFetchChanged": false
+    "finalFetchChanged": false,
+    "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+    "ci": {
+      "run": 41390256558,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41390256558",
+      "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 53.24,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 365
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -323,6 +354,20 @@
       "hostedCoreTestSeconds": 52.25,
       "p0Checks": 25,
       "buildAndCoreSeconds": 458
+    },
+    {
+      "run": 41390256558,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41390256558",
+      "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 53.24,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 365
     }
   ],
   "jniPreferencesIntegration": {

@@ -1,6 +1,6 @@
 # 上游功能与 macOS 接入现况
 
-## 2026-11-02：3.3 / WebView 导航销毁顺序，build 27 本地验证完成
+## 2026-11-02：3.3 / WebView 导航销毁顺序，build 27 已交付
 
 `8f65f2f..89b0f87` **2 提交/8 路径**普通合并到 main=`eeef229`，再合回 macOS=`ed7c948`，均无冲突；origin 无外来提交。3.3 tag 指向 `9345aab`，本轮 main 多含一条 SideStore 源更新。逐项对照 TranslationLayer.swift 中的 `TLReport.nativeEngine`、TLUnityView、project.yml、Mac CMake/资料库能力/独立 Runner 分发与输入/暂停/关闭、Store 登录和图形构建，本批没有新引擎、Play 策略或图形 pin。既有 AppKit 固定画布、默认失焦继续、独立进程与失败关闭协议保留；ARM32 产品启动和完整 AOSP 系统继续开放。
 
@@ -12,7 +12,7 @@
 | 历史加载 / host-stop | 回环 HTTP 闸门确认历史请求已到服务器但文档未提交；进入 stopping 后释放响应，确认没有新提交或重复保存/网络请求，两个旧文档各保存一次并跨进程读回 | 只覆盖已准入、未提交的历史响应；didCommit 后异步历史恢复检查与 host-stop 交叠仍需专门验证 |
 | 设置总页说明 | 语言和导入/存档帮助采用多行理想高度，保留原宽度、偏好和独立 JIT-less 说明页 | CUA 单次启动 PID 20372，AX/截图确认两段说明完整换行，独立 JIT-less 说明页也完整；保持既有英文界面，没有改语言、游戏配置或账号 |
 
-唯一 **3.3.0/build 27**：新增 **6/6（27.00 秒）**、默认 **196/196（308.42 秒）**通过，其中 WebView **54 项（165.93 秒）**、HTTP **6 项（22.19 秒）**、AOT 打包 **12 项（28.23 秒）**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要一致，NativeRunner 与 build 26 相同。CUA 单次启动 PID 20372 确认原图标/TabView、11 应用和图标、JIT-less 关闭及完整设置说明，已返回首页；未改偏好或启动用户游戏/VM。推送和 CI 待收尾。证据复用 `build/logs/current-upstream-nov2-*`。
+唯一 **3.3.0/build 27**：新增 **6/6（27.00 秒）**、默认 **196/196（308.42 秒）**通过，其中 WebView **54 项（165.93 秒）**、HTTP **6 项（22.19 秒）**、AOT 打包 **12 项（28.23 秒）**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要一致，NativeRunner 与 build 26 相同。CUA 单次启动 PID 20372 确认原图标/TabView、11 应用和图标、JIT-less 关闭及完整设置说明，已返回首页；未改偏好或启动用户游戏/VM。源码 d121f6e/main eeef229 已正常推送并读回；CI 41390256558 completed/success，构建/包检查、54 hosted 核心回归（53.24 秒）及 25 P0 memory/core 通过，build-and-core 6 分 5 秒、hardware skipped。每日续跑提示及原时间/聊天/约束已更新并精确读回。证据复用 `build/logs/current-upstream-nov2-*`。
 
 后续继续已提交历史页的异步恢复检查与 host-stop、Activity replacement/recreate 更多顺序、加载中/跨源/真实第三方 HTTP 插件，以及 ARM32 完整生命周期、AOSP/Binder 系统接入、真实游戏存档/IL2CPP 异常、实体输入/设备、账号/认证 Play 和 VM/P6。导航/destroy 五项确定性顺序与未提交历史加载/停止已取得本轮证据，不能再整项列为未实现。
 
