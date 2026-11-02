@@ -1,5 +1,15 @@
 # Husk macOS 迁移实施
 
+## 当前执行：2026-11-02 上游 3.3 / WebView 顺序与设置文字，进行中
+
+- [x] 干净 74e7b71 起步；实际 origin/upstream 正确，无 Husk/Runner/VM/构建/合并；前轮 CI 41262157084 success 复核。
+- [x] 两远端 fetch，origin 无外来提交；upstream 8f65f2f..89b0f87 两提交/8路径普通合并 main=eeef229，再合回 macOS=ed7c948；均无冲突，3.3 tag=9345aab。
+- [x] 核对引擎/Store/图形依赖与 Mac 分发、保留平台边界；修复设置说明截断，五项导航/destroy 与一项未提交 HTTP 历史加载/host-stop 回归通过。
+- [x] 唯一 build/macos/build 27：新增 6/6、默认 196/196（308.42 秒）、18 Mach-O/407 Java 资源/两语言各 784 条通过；五个共享 Swift 仅 iOS SDK parse。
+- [x] CUA 单次启动 PID 20372，11 应用/图标、JIT-less 关闭、设置总页和独立说明完整换行确认，返回首页。
+- [ ] 更新交付记录，正常推送两分支并读回；CI 与每日续跑提示收尾。
+- [ ] ARM32 完整生命周期、AOSP 系统、真实应用/游戏、实体设备/Play/VM/P6 仍开放，具体证据见 parity。
+
 ## 当前执行：2026-11-01 ARM32 / Binder / 3.2.1，已交付当前实现，完整接入继续开放
 
 - [x] 干净 e069286 起步；两远端 fetch，origin 无新增；前轮 CI 41157776203 success 复核。空闲 Product/PID 21399 经 CUA 正常退出，无本项目 Runner/VM/构建。

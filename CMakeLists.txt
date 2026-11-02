@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Supported native architecture")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Provisional deployment floor; requires separate machine validation")
-project(HuskMac VERSION 3.2.1 LANGUAGES C OBJC Swift)
+project(HuskMac VERSION 3.3.0 LANGUAGES C OBJC Swift)
 if(NOT APPLE OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "HuskMac currently targets native macOS arm64")
 endif()
@@ -564,12 +564,13 @@ add_dependencies(MacJavaWebSessionTests PackageMac JavaWebFixture)
 foreach(case persistence legacy destroy-failed identity late-bridge save-bridge save-paused save-rejected save-promise-rejected save-script-failed save-timeout child-save cross-origin-save
     guest-finish guest-affinity guest-affinity-stack guest-duplicate guest-paused guest-rejected guest-timeout guest-destroy-failed guest-replace-first guest-replace-last guest-child
     view-destroy view-only view-duplicate view-paused view-rejected view-plugin-failed view-timeout view-stop-race view-message view-message-failed
-    navigation-save navigation-rejected navigation-plugin-failed navigation-policy-blocked navigation-policy-allowed navigation-fragment navigation-sequential navigation-history navigation-post-history)
+    navigation-save navigation-rejected navigation-plugin-failed navigation-policy-blocked navigation-policy-allowed navigation-fragment navigation-sequential navigation-history navigation-post-history
+    navigation-destroy navigation-destroy-duplicate navigation-destroy-stop navigation-destroy-rejected navigation-destroy-timeout)
     add_test(NAME macos-java-web-${case} COMMAND MacJavaWebSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk" "${CMAKE_BINARY_DIR}/TestResults" ${case})
     set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)
 endforeach()
 add_test(NAME macos-package-guard COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/PackageGuard.py)
-foreach(case http-save http-history http-stop http-stop-rejected http-stop-timeout)
+foreach(case http-save http-history http-stop http-stop-rejected http-stop-timeout http-history-stop)
     add_test(NAME macos-java-web-${case} COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/JavaWebHTTP.py
         "$<TARGET_FILE:MacJavaWebSessionTests>" "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk" "${CMAKE_BINARY_DIR}/TestResults" ${case})
     set_tests_properties(macos-java-web-${case} PROPERTIES TIMEOUT 180)

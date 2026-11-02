@@ -8,7 +8,7 @@ routing and controlled lifecycle tests do not establish compatibility with every
 game. See the [macOS feature and evidence matrix](docs/development/macos/upstream-parity.md)
 for implemented behavior, real-application evidence and open work.
 
-Upstream main through `8f65f2f`, four commits after the `3.2.1` tag, is merged with its Git history. The new
+Upstream main through `89b0f87`, including the `3.3` tag, is merged with its Git history. The
 ARM32 interpreter is compiled and exercised with controlled ARM/Thumb ELF files,
 but macOS launch remains unavailable until input, worker shutdown and save
 handling are connected. AOSP boot-path/core-DEX preparation and partial local

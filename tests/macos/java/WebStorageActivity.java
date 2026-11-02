@@ -31,6 +31,9 @@ public final class WebStorageActivity extends Activity {
         private final int generation = webGeneration;
         @JavascriptInterface public int viewGeneration() { return generation; }
         @JavascriptInterface public void retire(String mode) {
+            retireAfter(mode, 100);
+        }
+        @JavascriptInterface public void retireAfter(String mode, int delay) {
             main.postDelayed(() -> {
                 WebView old = web;
                 old.destroy();
@@ -39,7 +42,7 @@ public final class WebStorageActivity extends Activity {
                 if ("only".equals(mode)) setContentView(new android.widget.FrameLayout(WebStorageActivity.this));
                 else installWeb();
                 getSharedPreferences("web", 0).edit().putBoolean("view_retired", true).apply();
-            }, 100);
+            }, delay);
         }
         @JavascriptInterface public boolean installListener(boolean fail) {
             try {
@@ -149,6 +152,18 @@ public final class WebStorageActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true);
         web.addJavascriptInterface(new SaveBridge(), "nativeSave");
         web.setWebViewClient(new WebViewClient() {
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                if (url.contains("?next"))
+                    getSharedPreferences("web", 0).edit().putBoolean("next_started", true).apply();
+            }
+            @Override public void onPageCommitVisible(WebView view, String url) {
+                if (url.contains("?next"))
+                    getSharedPreferences("web", 0).edit().putBoolean("next_committed", true).apply();
+                if (url.startsWith("http://127.0.0.1:") && url.endsWith("/start")) {
+                    android.content.SharedPreferences preferences = getSharedPreferences("web", 0);
+                    preferences.edit().putInt("http_start_commits", preferences.getInt("http_start_commits", 0) + 1).apply();
+                }
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if ("POST".equals(request.getMethod())) {
                     android.content.SharedPreferences preferences = getSharedPreferences("web", 0);

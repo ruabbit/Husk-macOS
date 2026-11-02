@@ -1,5 +1,17 @@
 # 审计发现
 
+## 2026-11-02：3.3 增量与待办选择
+
+- 对照 TLReport.nativeEngine（TranslationLayer.swift）、TLUnityView、project.yml、Mac CMake/Models/MacNativeDrivers/SessionController、PlayDevice/Store 和图形 pin，本轮没有新引擎/依赖增量；ARM32 仍保持产品入口关闭。
+- SideStore 生成器新增作者 ~/husk-work/site 的隐式写入；fork 删除该副作用，仅写本 checkout 的 altsource.json。离线五应用 metadata 生成验证通过，未请求真实发布接口或写外部站点。
+- 设置帮助采用 Context7 官方 SwiftUI fixedSize(horizontal:false,vertical:true) 文档的理想多行高度，保持 520 宽度与原偏好。最终 CUA 单次启动已确认两段完整换行。
+- 导航/destroy 五场景已覆盖正常/重复销毁/host-stop/拒绝/超时；HTTP history-stop 使用响应闸门验证已入站但未提交的历史加载，不能宣称覆盖已提交历史页的异步判定回调。
+
+- 上游 8f65f2f..89b0f87 两提交仅 8 路径；Compat15/ItemPages 修复 iOS 15 navigation 环境与行样式，StikDebug 增加真实进程 PID 与异步等待。Mac 独立 Runner/本地签名不依赖 iOS attach，不将它迁为 Mac 证书要求。
+- src/app/Husk/WhatsNew.swift 的版本为 3.3，tag 在 9345aab。SideStore 源改 itslevii.dev/repo.json，包含作者其他应用；不把源列表等同 Mac 新引擎/安装支持。
+- 当前 SettingsView 两段帮助 Text 未请求多行理想高度；上轮 CUA 已有截断证据。本轮已修复并用最终候选 AX/截图确认。
+- 初次路径搜索用了不存在的 TLReport.swift（实现需从 TranslationLayer.swift 定位），另一次 glob 未匹配而停止；均为只读命令，不影响工作区。docs-generator 实际在 reverse-skill 目录，按技能目录修正读取。
+
 ## 2026-11-01：ARM32 / Binder 增量审计
 
 - 首批两提交 d30e12e..c95c960 涉及 79 路径；收尾累计四提交到 8f65f2f 仍为 79 路径，新增 ARM32 解释器、进程内 Binder/服务管理、Dalvik Binder native 与可选 AOSP boot 资源；不是仅 Minecraft 启动修复。

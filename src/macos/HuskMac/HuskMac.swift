@@ -456,14 +456,16 @@ struct SettingsView: View {
                 Text("System default").tag("system"); Text("English").tag("en"); Text("简体中文").tag("zh-Hans")
             }.onChange(of: language) { _, value in AppLanguage.set(value) }
             Text("Restart Husk to apply the language to every screen. Applications use it on their next launch.").font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Picker("外观", selection: $appearance) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") }
             Toggle("圣诞装饰", isOn: $holiday)
             LabeledContent("资料目录") { Text(model.paths.root.path).font(.caption).textSelection(.enabled) }
             Button("在访达中打开资料目录") { NSWorkspace.shared.open(model.paths.root) }
             Text("导入会复制游戏到资料库。移除游戏保留存档；清除存档需在游戏详情中单独操作。").foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Toggle("游戏结束后询问运行情况", isOn: $askCompatibility)
             Link("上游社区兼容性列表", destination: CompatibilityStore.site)
-        }.padding(24).frame(width: 520)
+        }.lineLimit(nil).padding(24).frame(width: 520)
         .sheet(isPresented: $showJITLess) { MacJITLessSettings() }
     }
 }

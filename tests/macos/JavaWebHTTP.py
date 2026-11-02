@@ -15,6 +15,8 @@ def main():
     page = (Path(__file__).parent / "java/storage.html").read_bytes()
     requests = []
     lock = threading.Lock()
+    history_held = threading.Event()
+    history_release = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -33,16 +35,28 @@ def main():
                 self.send_error(413)
                 return
             body = self.rfile.read(length).decode("utf-8") if length else ""
+            if path == "/hold-history":
+                history_held.set()
+            elif path == "/release-history":
+                history_release.set()
             with lock:
                 if path != "/report":
                     requests.append({"path": path, "method": self.command,
                                      "cookie": self.headers.get("Cookie", ""), "body": body})
                 snapshot = list(requests)
+            if path == "/start" and history_held.is_set():
+                # The host harness observes the admitted request before it
+                # asks Husk to stop, then releases this response while closing.
+                if not history_release.wait(timeout=15):
+                    self.send_error(504, "History response was not released")
+                    return
             status, payload, content_type = 200, page, "text/html; charset=utf-8"
             if path == "/report":
                 payload, content_type = json.dumps(snapshot).encode(), "application/json"
             elif path == "/saved":
                 payload, content_type = b"saved", "text/plain"
+            elif path in ("/hold-history", "/release-history"):
+                payload, content_type = b"ok", "text/plain"
             elif path == "/redirect":
                 status, payload = 302, b""
             elif path not in ("/start", "/second"):
@@ -70,6 +84,7 @@ def main():
         print("HTTP fixture requests:", json.dumps(requests), flush=True)
         return result.returncode
     finally:
+        history_release.set()
         server.shutdown()
         server.server_close()
         worker.join()

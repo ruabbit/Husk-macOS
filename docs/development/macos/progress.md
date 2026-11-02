@@ -1,5 +1,19 @@
 # 审计进度
 
+## 2026-11-02：3.3 / WebView 顺序与设置文字，build 27 本地验证完成
+
+从干净 74e7b71 起步，无 Husk/Runner/本项目 VM/构建或进行中的 Git 操作；前轮 CI 41262157084 success 复核。origin 无新增，upstream `8f65f2f..89b0f87` **2 提交/8 路径**，3.3 tag=`9345aab`。普通合并 main=`eeef229`、macOS=`ed7c948`，均无冲突；收尾 fetch 没有新增。逐项核对 TLReport.nativeEngine、TLUnityView、project.yml、Mac CMake/能力/Runner 输入暂停关闭、Store/登录和图形构建；新增为 iOS 15 页面、StikDebug 容器与 SideStore 源，没有共享引擎/Play/图形 pin 增量。ARM32 产品入口、完整 AOSP 等既有边界保留。
+
+本轮复用已有生产 WebView 保存实现，补五个导航/destroy 真实 DEX/WebKit 场景：正常、重复销毁、host-stop、拒绝、超时。验证销毁发生于未完成的导航保存中，目标页没有 start/commit，旧页只交付一次生命周期，replacement 可运行，Java 插件和即时 UI 写入排空；成功时 localStorage/IndexedDB/Java 状态跨独立进程重开，失败无 storage-closed，晚到销毁/停止不重置原六秒期限。另用回环 HTTP 闸门验证历史请求已准入但尚未提交时 host-stop，释放响应不会新提交或重复保存/请求，后续进程读回两个文档的数据。**没有覆盖 didCommit 后异步历史恢复检查与 host-stop 的交叠**，该项继续开放；这些不是第三方真实应用验收。
+
+设置总页语言与导入/存档帮助修复多行高度，保留偏好和原窗口宽度。SideStore 生成器取消作者 home 下其他 checkout 的隐式写入，只写当前仓库；离线五应用 metadata 验证通过，未发布站点或调用真实发行接口。五个改动的 iOS Swift 文件仅 SDK parse 通过，不是类型检查、链接、签名或真机验证。
+
+唯一 **3.3.0/build 27** 构建完成；新增 **6/6（27.00 秒）**、默认 **196/196（308.42 秒）**通过，其中 WebView **54 项（165.93 秒）**、HTTP **6 项（22.19 秒）**、AOT 打包 **12 项（28.23 秒）**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要读回一致；NativeRunner 摘要与 build 26 一致。本轮无需新增运行时补丁，没有测试失败。日志复用 `build/logs/current-upstream-nov2-*`。
+
+最终 Product 通过 CUA **仅启动一次，PID 20372**；完整路径、AX/截图确认原图标/TabView、全部 11 个应用及图标、选中应用 JIT-less 关闭、设置总页两段帮助完整换行及独立 JIT-less 说明完整可见，关闭设置并返回首页。观察使用既有英文界面，没有改变偏好、认证/上传、启动用户游戏或 VM，也没有重跑无相关修复的失败商业样本。提交推送及本批 CI 收尾尚待完成。
+
+下一步先推进已提交历史页异步恢复检查/host-stop 的确定性交叠，以及 Activity replacement/recreate 更多顺序；加载中/跨源/真实第三方 HTTP、ARM32 完整生命周期/AOSP、真实游戏存档/IL2CPP、实体 IME/手柄/电源、账号/Play、VM/P6 保持具体开放。导航/destroy 与未提交历史响应/停止的本轮回归、设置总页截断不再列为完全未做。
+
 ## 2026-11-01：3.2.1 ARM32 / Binder，build 26 已交付，ARM32/AOSP 完整接入继续开放
 
 从干净 e069286 起步，origin 无外来提交，前轮 CI 41157776203 success 已复核。两次 fetch 累计上游 `d30e12e..8f65f2f` **4 提交/79 路径**：首批普通合并 main=`6eabc3d`、macOS=`df2973a`，适配保存为 `dd3f844`；收尾发现 10bbbd7/8f65f2f，再普通合并 main=`4acac6a`、macOS=`754d189`。main 首批一处 Java 冲突保留 Vulkan 配置与初始状态；Mac 首批十五文件及后批 AOSP/Java 两文件逐处保留 POST 不重试/缓存隔离、安全构建、授权、签名命名空间、安装路径、内存边界与失败关闭协议。没有批量 ours/theirs。远端 3.2.1 tag 实际指向 d30e12e，合入的是其后的 main 四提交。

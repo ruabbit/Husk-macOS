@@ -5,8 +5,8 @@ Regenerate the AltStore/SideStore source from GitHub releases.
 
     python3 tools/update-altsource.py
 
-Writes altsource.json here (old address still works) and, when present,
-../husk-work/site/web/public/repo.json — that file is https://itslevii.dev/repo.json.
+Writes altsource.json in this checkout. Publishing the upstream website source
+is a separate operation; this fork never writes to an author's home-directory checkout.
 """
 import json
 import os
@@ -14,7 +14,6 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "altsource.json")
-SITE = os.path.expanduser("~/husk-work/site/web/public/repo.json")
 
 HUSK_RAW = "https://raw.githubusercontent.com/Leviidev/Husk/main"
 KEEP = 10
@@ -179,12 +178,6 @@ def main():
     with open(OUT, "w") as f:
         f.write(text)
     print(f"wrote {os.path.relpath(OUT, ROOT)}: {len(apps)} apps")
-    if os.path.isdir(os.path.dirname(SITE)):
-        with open(SITE, "w") as f:
-            f.write(text)
-        print(f"wrote {SITE}")
-    else:
-        print(f"site repo.json not written ({SITE} missing)")
 
 
 if __name__ == "__main__":

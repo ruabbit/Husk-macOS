@@ -116,7 +116,38 @@ import SharedLibrary
                 }
                 try await loadHTTP()
                 _ = try await javascriptAsync("return await persist('http-initial');")
-                if scenario == "http-history" {
+                if scenario == "http-history-stop" {
+                    func control(_ path: String) async throws {
+                        var request = URLRequest(url: originURL.appendingPathComponent(path)); request.httpMethod = "POST"
+                        let (_, response) = try await URLSession.shared.data(for: request)
+                        try check((response as? HTTPURLResponse)?.statusCode == 200, "loopback history barrier \(path)")
+                    }
+                    try await saveHTTP("history-first")
+                    _ = try await evaluate("location.href='/second';true")
+                    try await awaitHTTP("/second")
+                    try await saveHTTP("history-before-stop")
+                    try await control("hold-history")
+                    _ = try await evaluate("nativeSave.history('back');true")
+                    var held = false
+                    for _ in 0..<120 {
+                        if try await requests().filter({ $0["path"] as? String == "/start" }).count == 2 { held = true; break }
+                        try await Task.sleep(for: .milliseconds(30))
+                    }
+                    try check(held && session.state == "running" && preferences(save).contains("i http_start_commits 1"), "history request is admitted but its replacement document has not committed")
+                    session.stop()
+                    try await session.wait(until: { session.events.contains { $0["state"] as? String == "stopping" } || !session.active }, timeout: 5)
+                    try await control("release-history")
+                    try await waitForStop()
+                    try await assertCount("/start", 2); try await assertCount("/second", 1); try await assertCount("/saved", 2)
+                    try check(preferences(save).contains("i http_start_commits 1") && preferences(save).contains("i bridge_calls 4"), "late history response cannot publish a new page or duplicate the saved document's work after stop")
+                    try await start(repository, imported, paths)
+                    try await loadHTTP()
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(restored["local"] as? String == "history-before-stop" && restored["indexed"] as? String == "history-before-stop", "history/stop overlap preserves both Web stores across process reopen")
+                    try check(try await evaluate("nativeSave.previous()===4 && localStorage.getItem('pagehideCount')==='2' && localStorage.getItem('unloadCount')==='2'") as? Bool == true, "two retired HTTP documents and Java plugin writes are saved once each")
+                    try await assertCount("/start", 3)
+                    try await stop()
+                } else if scenario == "http-history" {
                     try await saveHTTP("before-redirect")
                     _ = try await evaluate("location.href='/redirect';true")
                     try await awaitHTTP("/second")
@@ -162,6 +193,48 @@ import SharedLibrary
                         try check(starts.count == 2 && (starts.last?["cookie"] as? String ?? "").contains("final_cookie=retained"), "reopened HTTP request sends its persisted cookie")
                         try await stop()
                     }
+                }
+            } else if scenario.hasPrefix("navigation-destroy") {
+                let failed = scenario == "navigation-destroy-rejected" || scenario == "navigation-destroy-timeout"
+                let timedOut = scenario == "navigation-destroy-timeout"
+                let retireMode = scenario == "navigation-destroy-duplicate" ? "duplicate" : "normal"
+                let wait = timedOut ? "new Promise(()=>{})" : failed ?
+                    "new Promise((r,j)=>setTimeout(()=>j(new Error('Navigation save rejected')),1800))" :
+                    "new Promise(r=>setTimeout(r,1800))"
+                _ = try await evaluate("addEventListener('pagehide',e=>{nativeSave.store();nativeSave.retireAfter('\(retireMode)',\(timedOut ? 3500 : 100));e.waitUntil(\(wait).then(()=>persist('navigation-destroy-save')).then(()=>{nativeSave.store();nativeSave.recordUI();}));});nativeSave.navigate();true")
+                try await session.wait(until: { preferences(save).contains("b view_retired true") || !session.active }, timeout: 10)
+                try check(session.state == "running" && preferences(save).contains("i bridge_calls 1") && !preferences(save).contains("b view_ui_saved true"), "per-view destroy joins an unfinished navigation save")
+                var replacement = false
+                for _ in 0..<120 {
+                    if try await evaluate("window.fixtureReady===true && nativeSave.viewGeneration()===1 && location.search===''", optional: true) as? Bool == true { replacement = true; break }
+                    try await Task.sleep(for: .milliseconds(30))
+                }
+                try check(replacement && session.state == "running", "replacement WebView runs while the old navigation save finishes")
+                try check(!preferences(save).contains("b next_started true") && !preferences(save).contains("b next_committed true"), "destroy cancels the pending navigation before loading its destination")
+                let hostRace = scenario == "navigation-destroy-stop" || timedOut
+                if hostRace {
+                    let stoppedAt = Date()
+                    try await stop(success: !failed)
+                    if timedOut { try check(Date().timeIntervalSince(stoppedAt) < 4.5, "destroy and host stop preserve the original six-second navigation deadline") }
+                } else {
+                    if !failed {
+                        try await session.wait(until: { preferences(save).contains("b view_ui_saved true") || !session.active }, timeout: 10)
+                        let saved = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                        try check(saved["local"] as? String == "navigation-destroy-save" && saved["indexed"] as? String == "navigation-destroy-save", "navigation save reaches both stores before retired-view detach")
+                        try check(try await evaluate("localStorage.getItem('pagehideCount')==='1' && localStorage.getItem('unloadCount')==='1'") as? Bool == true, "navigation and repeated destroy deliver one lifecycle to the old document")
+                    }
+                    try await stop(success: !failed)
+                }
+                try check(!preferences(save).contains("b next_started true") && !preferences(save).contains("b next_committed true"), "cancelled navigation stays cancelled through final close")
+                if failed {
+                    try check(!session.events.contains { $0["event"] as? String == "storage-closed" } && !preferences(save).contains("b view_ui_saved true"), "navigation failure remains sticky after view replacement and host stop")
+                } else {
+                    try check(preferences(save).contains("i bridge_calls 2") && preferences(save).contains("b view_ui_saved true"), "retiring Java plugin and queued UI writes drain before close")
+                    try await start(repository, imported, paths)
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(restored["local"] as? String == "navigation-destroy-save" && restored["indexed"] as? String == "navigation-destroy-save", "navigation/destroy save survives independent process reopen")
+                    try check(try await evaluate("nativeSave.previous()===2 && localStorage.getItem('pagehideCount')==='2' && localStorage.getItem('unloadCount')==='2'") as? Bool == true, "each old and replacement document closes once with persisted Java state")
+                    try await stop()
                 }
             } else if scenario.hasPrefix("view-") {
                 let failed = ["view-rejected", "view-plugin-failed", "view-timeout", "view-message-failed"].contains(scenario)

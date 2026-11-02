@@ -1,23 +1,23 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
-  "integratedRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
-  "checkedOn": "2026-11-01",
-  "commitCount": 4,
-  "integration": "Four upstream commits merged normally in two fetch batches: main 6eabc3d then 4acac6a, macOS df2973a then 754d189; adaptation checkpoint dd3f844. AOSP descriptors/PING and optional paths reused; unimplemented version-specific service methods fail explicitly. Final local build, default suite, bundle and one CUA launch passed. ARM32 lifecycle and full AOSP remain open; both fork branches pushed and remote SHAs read back; current CI 41262157084 completed successfully (54 hosted core tests and 25 P0 checks; hardware skipped).",
+  "previousRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
+  "integratedRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
+  "checkedOn": "2026-11-02",
+  "commitCount": 2,
+  "integration": "Two upstream commits merged normally to fork main eeef229 and macOS ed7c948 without conflicts. iOS 15 navigation/StikDebug and SideStore source updates add no Mac engine or graphics/Play pin. Mac 3.3.0/build 27 fixes Settings help wrapping, limits the source generator to this checkout, and verifies five navigation/destroy and one pending HTTP history-load/host-stop scenarios using the existing production runtime. All 196 default tests and bundle verification passed. Final CUA launch confirmed full text, original 11 apps/icons and Home; push and CI pending.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-awaiting-push",
   "release": {
-    "tag": "3.2.1",
-    "revision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
-    "note": "Remote tag 3.2.1 points to d30e12e; integrated main 8f65f2f includes four later commits."
+    "tag": "3.3",
+    "revision": "9345aab21286735b5ba7acc9bf1c6b5fb864e075",
+    "note": "Integrated main 89b0f87 follows the 3.3 tag at 9345aab with the SideStore source update."
   },
   "candidate": {
-    "version": "3.2.1",
-    "build": "26",
-    "deliveryStatus": "verified-and-pushed",
+    "version": "3.3.0",
+    "build": "27",
+    "deliveryStatus": "locally-verified-awaiting-push",
     "bundleMachO": 18,
     "javaResources": 407,
     "localizations": {
@@ -31,90 +31,49 @@
       }
     },
     "frameworkSHA256": "a3670652d53b629942684e0a411589ce5d0c7d09496258da4be40e73b0ca36bc",
-    "appSHA256": "c0d2c241395eb42e9224f03b78dcadc529e1bef370daf839bbc1989dbc0a6650",
+    "defaultTests": 196,
+    "defaultTestSeconds": 308.42,
+    "pid": 20372,
+    "gui": "Final build 27 Product launched once through CUA as PID 20372. Full executable path, AX and screenshots confirmed original icon/TabView, all 11 library entries and icons, selected app JIT-less off, fully wrapped language/import-save help in general Settings, and the complete separate Play without JIT sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Visible inspection used the existing English interface; other locale/device acceptance remains separate.",
+    "appSHA256": "51c4b33370f46084bc76d94cecf0a91b27f7491ce8e5d19e5bd033c3378cd194",
     "nativeRunnerSHA256": "1be5de3fb985ccd11eaf5c4c8d3c1f3d54fcc2524099be0f4f44f205b9811992",
     "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "defaultTests": 190,
-    "defaultTestSeconds": 313.65,
-    "pid": 26795,
-    "gui": "Final build 26 Product launched once through CUA as PID 26795. Full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, selected app JIT-less off, and the complete Play without JIT Settings sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Existing Settings overview language/import help truncation remains an open UI issue; the separate JIT-less sheet is fully visible.",
-    "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
-    "productSourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
-    "ci": {
-      "run": 41262157084,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084",
-      "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 54,
-      "hostedCoreTestSeconds": 52.25,
-      "p0Checks": 25,
-      "buildAndCoreSeconds": 458
-    }
+    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a"
   },
   "lastCheck": {
-    "upstreamNewCommits": 4,
-    "upstreamChangedPaths": 79,
+    "upstreamNewCommits": 2,
+    "upstreamChangedPaths": 8,
     "originNewCommits": 0,
-    "mainRevision": "4acac6aebc61ce867c86cdf23bf2ce41673763c3",
-    "macOSBaseRevision": "e069286722f2596cb766b85007643926682a7749",
-    "macOSMergeRevision": "754d189aad420f8caf04eccc745bf37f75afed54",
+    "mainRevision": "eeef229eae49a7136b71b67b4f7120e3d5c29eec",
+    "macOSBaseRevision": "74e7b71939fbbf3ff9583dc79d3158f22d407906",
+    "macOSMergeRevision": "ed7c948c22cd8db36de05af20a6f3281afca2320",
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
-    "previousCI": 41157776203,
+    "pushed": false,
+    "remoteSHAsVerified": false,
+    "previousCI": 41262157084,
     "blocker": null,
-    "targetedTests": 19,
-    "targetedTestSeconds": 17.61,
-    "p0RecheckTests": 25,
-    "p0RecheckSeconds": 6.53,
     "sharedIOSSyntax": {
-      "cFiles": 20,
-      "swiftFiles": 16,
+      "swiftFiles": 5,
+      "parseOnly": true,
       "fullBuild": false,
       "device": false
     },
-    "firstDefaultSuite": {
-      "passed": 189,
-      "total": 190,
-      "seconds": 325.3,
-      "failure": "java-lifecycle-documents: upstream early encoded-path return bypassed the selected-file grant check; removed and single-case recheck passed in 0.78 seconds."
-    },
-    "defaultTests": 190,
-    "defaultTestSeconds": 313.65,
-    "javaWebTests": 48,
-    "javaWebTestSeconds": 171.86,
-    "httpTests": 5,
-    "httpTestSeconds": 22.89,
+    "automationUpdatedAndReadBack": false,
+    "targetedTests": 6,
+    "targetedTestSeconds": 27.0,
+    "defaultTests": 196,
+    "defaultTestSeconds": 308.42,
+    "javaWebTests": 54,
+    "javaWebTestSeconds": 165.93,
+    "httpTests": 6,
+    "httpTestSeconds": 22.19,
     "aotPackagedSessions": 12,
-    "aotPackagedSessionSeconds": 26.03,
+    "aotPackagedSessionSeconds": 28.23,
     "bundleBinaryDigestsMatched": 18,
-    "automationUpdatedAndReadBack": true,
-    "p0RecheckSecondsNote": "Sum of 25 individual test durations; excludes the independent build time. gui=false and faults=false.",
-    "ci": {
-      "run": 41262157084,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084",
-      "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 54,
-      "hostedCoreTestSeconds": 52.25,
-      "p0Checks": 25,
-      "buildAndCoreSeconds": 458
-    },
-    "sourcePushRemoteHeads": {
-      "refs/heads/main": "4acac6aebc61ce867c86cdf23bf2ce41673763c3",
-      "refs/heads/codex/macos-p0": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb"
-    }
+    "conflicts": 0,
+    "finalFetchChanged": false
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -141,12 +100,12 @@
     "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
   },
   "javaWebIntegration": {
-    "status": "host-guest-view-navigation-and-loopback-http-fixture-verified",
+    "status": "host-guest-view-navigation-destroy-and-loopback-history-stop-fixture-verified",
     "marker": "Saves/<id>/java-web-store.json",
     "receipt": "Native lifecycle=destroyed plus web.lifecycle=detached, web.storage=webkit-managed and host/guest-stop web.saveStage=prepared; explicit unused when no WebKit data store was opened. Failed preparation remains sticky through final detach.",
     "legacyPolicy": "Existing native data without a marker retains the old package UUID. Clearing that save drops its binding and uses a fresh UUID on next launch; shared legacy WebKit bytes are retained to protect other libraries.",
     "remaining": [
-      "Real HTTP application/third-party plugin persistence; history-restoration checks racing host stop; navigation-save/per-view-destroy overlap regression; broader Activity replacement/recreate ordering; page-script direct file URLs; file subframe remapping; loading documents. No fsync claim for system WebKit databases.",
+      "Real HTTP application/third-party plugin persistence; post-didCommit asynchronous history-restoration checks racing host stop; broader Activity replacement/recreate ordering; page-script direct file URLs; file subframe remapping; loading documents. No fsync claim for system WebKit databases.",
       "Cross-origin child frame saving is unsupported and fails closed. Synthetic lifecycle has isTrusted=false; event.waitUntil is a Husk extension. Unregistered asynchronous work and trusted browser unload are not guaranteed. Saved non-GET history requires explicit application recovery.",
       "Generic Thread.interrupt and blocking-wait semantics, macOS 14 hardware, WebKit process failure recovery and network-cancellation timeouts remain unverified."
     ],
@@ -154,9 +113,22 @@
     "guestFinish": "Opt-in AppMain callback defers final Activity/whole-stack affinity destruction to host saving and existing phase 10 teardown. Recheck after already-queued launches; preserve child results, deduplicate requests and reject Activity launches/recreate after handoff. NULL callback keeps old host behavior. Process.killProcess still fails lifecycle acknowledgement. A valid stopping event starts the existing 30-second deadline without heartbeat extensions.",
     "perViewDestroy": "Direct WebView.destroy closes normal APIs but retains Java plugin/resource dispatch until a bounded save, JavaBridge/AppMain acknowledgement and WebKit detach. Other views continue. Whole-session preparation waits retiring views; all observed failures stay sticky. AndroidX listeners execute on AppMain before reply, and ReplyProxy can reply during preparation. Empty detach documents do not rerun application user scripts.",
     "navigation": "App-initiated loadUrl and allowed main-frame navigation wait for the prior document save. WebViewClient policy runs before irreversible saving; vetoes, custom URLs and same-document fragments preserve the live document. Save timeouts/callbacks belong to a document generation; caught Java plugin errors cancel navigation and fail final storage acknowledgement. Confirmed sealed GET history documents reload in their original list position without duplicate lifecycle; ordinary history loads are not repeated. Saved non-GET history is rejected before leaving the current page, without automatic POST resubmission. Unsupported file subframe remaps are rejected instead of replacing the main page. Nine packaged DEX navigation tests and the full suite pass. Host stop during navigation preparation joins the existing save, cancels the pending decision immediately and preserves its six-second deadline; success, rejection and a late-stop timeout are covered by real loopback HTTP DEX tests.",
-    "httpValidation": "Five packaged real-DEX tests use a disposable loopback HTTP server: async save POST, redirect/history request counts, localStorage/IndexedDB/Java plugin process reopen, persisted outgoing cookie, HttpOnly visibility and stop/save overlap. This is controlled-fixture evidence, not third-party HTTP application compatibility."
+    "httpValidation": "Six packaged real-DEX tests use a disposable loopback HTTP server: async save POST, redirect/history request counts, localStorage/IndexedDB/Java plugin process reopen, persisted outgoing cookie, HttpOnly visibility, stop/save overlap, and an admitted but uncommitted history response released after host stop. The last case rejects new page commits and duplicate saves/requests, then reopens both Web stores and Java state. Post-didCommit asynchronous history-restoration checks racing stop remain open. Controlled-fixture evidence, not third-party HTTP application compatibility.",
+    "navigationDestroyValidation": {
+      "date": "2026-11-02",
+      "cases": 5,
+      "scenarios": [
+        "normal",
+        "duplicate-destroy",
+        "host-stop",
+        "save-rejected",
+        "original-deadline-timeout"
+      ],
+      "evidence": "Real DEX/WebKit sessions overlap pending navigation saving with per-view destroy. Destination never starts or commits; lifecycle is delivered once; the replacement view runs; Java plugin and queued UI writes drain. Successful localStorage/IndexedDB/Java state is read back after independent process reopen. Failures never emit storage-closed. A late destroy plus host stop preserves the original six-second deadline. Existing production implementation passed without a runtime patch.",
+      "realThirdPartyApp": false
+    }
   },
-  "sourceVersion": "3.2.1",
+  "sourceVersion": "3.3",
   "legacyUnityTextInput": {
     "status": "packaged-driver-fixture-verified",
     "remaining": [
@@ -192,11 +164,11 @@
     ]
   },
   "lastUpstreamMerge": {
-    "date": "2026-11-01",
-    "previousRevision": "d30e12ec8184182ef2adccd5ee86290dcfe47312",
-    "integratedRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
-    "commitCount": 4,
-    "mainRevision": "4acac6aebc61ce867c86cdf23bf2ce41673763c3"
+    "date": "2026-11-02",
+    "previousRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
+    "integratedRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
+    "commitCount": 2,
+    "mainRevision": "eeef229eae49a7136b71b67b4f7120e3d5c29eec"
   },
   "runtime31Integration": {
     "status": "macos-packaged-and-fixture-verified",
@@ -364,46 +336,46 @@
     ]
   },
   "previousCandidate": {
-    "version": "3.2.0",
-    "build": "25",
-    "defaultTests": 184,
-    "defaultTestSeconds": 299.05,
+    "version": "3.2.1",
+    "build": "26",
+    "deliveryStatus": "verified-and-pushed",
     "bundleMachO": 18,
-    "javaResources": 406,
+    "javaResources": 407,
     "localizations": {
       "en": {
-        "entries": 782,
-        "sha256": "4cb40316634d081b4c834af93011286699eca10c88819c87b171298285e6d322"
+        "entries": 784,
+        "sha256": "d395cbfbafc63ecde4ff621367764fe6694e9aa583867dcccea2f6075e707bca"
       },
       "zh-Hans": {
-        "entries": 782,
-        "sha256": "51103d3296172e9c52f6090d0a4c23b9d789f5d4fce083ddc2a6fe3b8dd99136"
+        "entries": 784,
+        "sha256": "2a0634fe72ef70a437f832a7ef862b3bc910d129078cd993b1214b31ae35e56a"
       }
     },
-    "sourceRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
-    "productSourceRevision": "f9360d235971631ede02f21c26e03b899a81ea00",
-    "deliveryStatus": "verified-and-pushed",
-    "gui": "Initial CUA inspection (PID 3231) found truncated Settings instructions; that idle app was quit normally, wrapping was fixed and revalidated. Final build 25 Product launched once through CUA as PID 21399. Full executable path, AX and screenshots confirmed the original icon/TabView, all original 11 library entries and icons, and the separate Play without JIT Settings sheet. Its default-off per-game guidance and local signing explanation are visible. Closed Settings and returned Home without changing preferences, logging in or starting user games or VMs.",
-    "pid": 21399,
+    "frameworkSHA256": "a3670652d53b629942684e0a411589ce5d0c7d09496258da4be40e73b0ca36bc",
+    "appSHA256": "c0d2c241395eb42e9224f03b78dcadc529e1bef370daf839bbc1989dbc0a6650",
+    "nativeRunnerSHA256": "1be5de3fb985ccd11eaf5c4c8d3c1f3d54fcc2524099be0f4f44f205b9811992",
+    "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
+    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
+    "defaultTests": 190,
+    "defaultTestSeconds": 313.65,
+    "pid": 26795,
+    "gui": "Final build 26 Product launched once through CUA as PID 26795. Full executable path, AX and screenshots confirmed original icon/TabView, all original 11 library entries and icons, selected app JIT-less off, and the complete Play without JIT Settings sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Existing Settings overview language/import help truncation remains an open UI issue; the separate JIT-less sheet is fully visible.",
+    "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
+    "productSourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
     "ci": {
-      "run": 41157776203,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41157776203",
-      "sourceRevision": "b9d7ad01570246f49eb33e79bdf140eba5891084",
+      "run": 41262157084,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41262157084",
+      "sourceRevision": "f75c1e6f2619fb8dab0b5151c283cb2e150d1bfb",
       "statusAtLastCheck": "completed",
       "conclusionAtLastCheck": "success",
       "statusAtDelivery": "completed",
       "conclusionAtDelivery": "success",
       "hardware": "skipped",
-      "hostedCoreTests": 48,
-      "hostedCoreTestSeconds": 51.34,
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 52.25,
       "p0Checks": 25,
-      "buildAndCoreSeconds": 414
-    },
-    "appSHA256": "143ac8edf195157541b156eb1e280f5b3012272eda542f400725f95f2704f206",
-    "nativeRunnerSHA256": "0fffeb23700d6dab1339b41848b56ee403776249246b6c460d4b6cdafdd881d5",
-    "webRunnerSHA256": "cb57b531b0ee69864d037e6512e25e796e70401ea8ff9477d76c0996934fbc84",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "frameworkSHA256": "26bdf1b0fd09781ca15935955c1cc2a373627695091f072f64103f36a59030b1"
+      "buildAndCoreSeconds": 458
+    }
   },
   "arm32Integration": {
     "status": "compiled-controlled-interpreter-only-product-launch-gated",
@@ -431,5 +403,23 @@
       "Background, periodic, constraint-aware or persistent scheduling, rescheduling, namespaces and work items."
     ],
     "validation": "Final default suite includes ordinary and JIT-less Java packaged process reopen, reading jobs_closed after job stop and service destruction."
+  },
+  "settingsTextWrapping": {
+    "status": "visibly-verified",
+    "fields": [
+      "language-help",
+      "import-and-save-help"
+    ],
+    "preferencesChanged": false,
+    "guiPID": 20372,
+    "locale": "existing English interface",
+    "jitlessSheetPreserved": true
+  },
+  "sourceGeneratorScope": {
+    "date": "2026-11-02",
+    "output": "altsource.json in this checkout only",
+    "removedImplicitExternalCheckoutWrite": true,
+    "offlineAppsVerified": 5,
+    "networkPublishingPerformed": false
   }
 }
