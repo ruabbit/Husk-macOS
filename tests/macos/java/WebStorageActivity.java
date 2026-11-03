@@ -25,11 +25,22 @@ public final class WebStorageActivity extends Activity {
     public interface BoundaryFactory { java.lang.reflect.InvocationHandler createWebView(WebView view); }
     public interface BoundaryProvider {
         void addWebMessageListener(String name, String[] origins, java.lang.reflect.InvocationHandler listener);
+        java.lang.reflect.InvocationHandler addDocumentStartJavaScript(String script, String[] origins);
     }
     public final class SaveBridge {
         private int calls;
         private final int generation = webGeneration;
         @JavascriptInterface public int viewGeneration() { return generation; }
+        @JavascriptInterface public void installHistoryProbe(String script, String origin) {
+            try {
+                java.lang.reflect.InvocationHandler factory = (java.lang.reflect.InvocationHandler)
+                    Class.forName("android.webkit.HuskSupportLib").getMethod("factory").invoke(null);
+                java.lang.reflect.InvocationHandler provider = (java.lang.reflect.InvocationHandler)
+                    factory.invoke(null, BoundaryFactory.class.getMethod("createWebView", WebView.class), new Object[] {web});
+                provider.invoke(null, BoundaryProvider.class.getMethod("addDocumentStartJavaScript", String.class, String[].class),
+                    new Object[] {script, new String[] {origin}});
+            } catch (Throwable error) { throw new IllegalStateException("Cannot install history probe", error); }
+        }
         @JavascriptInterface public void retire(String mode) {
             retireAfter(mode, 100);
         }
@@ -188,6 +199,17 @@ public final class WebStorageActivity extends Activity {
         });
         web.setWebChromeClient(new WebChromeClient() {
             @Override public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+                if (message.startsWith("husk-history-check:")) {
+                    getSharedPreferences("web", 0).edit().putString("history_check", message)
+                        .putString("history_check_url", url).apply();
+                    if (message.endsWith(":destroy")) main.postDelayed(() -> {
+                        view.destroy();
+                        ++webGeneration;
+                        installWeb();
+                        getSharedPreferences("web", 0).edit().putBoolean("history_view_retired", true).apply();
+                    }, 100);
+                    return true; // Host stop must settle this evaluation's dialog.
+                }
                 // Deliberately keep a *test* decision pending. Host shutdown
                 // must settle it; dropping its block is not a valid teardown.
                 getSharedPreferences("web", 0).edit().putBoolean("pending_dialog", true).apply();

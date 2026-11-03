@@ -1,5 +1,15 @@
 # 审计发现
 
+## 2026-11-03：历史恢复检查的确定性交叠
+
+- 上游与 origin 无新增，既有 3.3 与受控 ARM32/AOSP 状态不变。本轮选择已提交历史页的恢复检查/host-stop 待办，使用隔离 APK、回环 HTTP 与现有 AndroidX document-start 接口建立可观察的脚本闸门；不以计时碰运气或未提交响应测试代替。
+- 实际 NativeRunner 路径为 main.m；Play 登录源在 src/macos/Play，AndroidX support facade 位于 android/webkit/HuskSupportLib.java。初次不存在路径的只读搜索已修正。
+
+- 首轮新夹具错误预期 fresh history，实际 WebKit 恢复的是 sealed 缓存页（history_check=true/fixtureReady=true、第二次 /start 请求为 0）；已修正断言，保留 history-check-first 日志。
+- 修正后的原生产代码基线确定性失败：历史检查在 Java confirm 决策内暂停，host stop 将其取消后立即再次调用 __huskPrepareClose，已保存的文档报 JavaScript exception，最终 failed 且无 storage-closed。证据为 current-upstream-nov3-history-check-baseline.log 与 JavaWeb-4EF6B99E-214E-4809-B762-0DA4A3946191 会话。
+- 修复加入 historyCheckPending，host/view prepare 等待同一个检查，sealed 文档复用先前成功记录，fresh 文档仍调用保存；检查失败保持失败，原六秒计时包含等待，不加新宽限期。相关 15/15（57.63 秒）及超时单项 1/1（12.21 秒）通过；最终默认 200/200（329.88 秒），58 项 WebView/10 项 HTTP，18 Mach-O/407 Java 资源及两语言各 784 条通过。未封闭的新历史文档分支仍缺专门交叠回归。
+- 最终 build 28 经 CUA 单次启动为 PID 76748；完整路径、原图标/TabView、11 应用及图标、JIT-less 关闭和完整设置说明确认，已返回首页。没有改变用户偏好或启动游戏/VM；其他项目 UTM 保持。本轮 NativeRunner 因共享 WebView 修复而改变，不沿用 build 27 摘要。共享 Objective-C 仅 1 文件 iOS SDK syntax 通过。
+
 ## 2026-11-02：3.3 增量与待办选择
 
 - 对照 TLReport.nativeEngine（TranslationLayer.swift）、TLUnityView、project.yml、Mac CMake/Models/MacNativeDrivers/SessionController、PlayDevice/Store 和图形 pin，本轮没有新引擎/依赖增量；ARM32 仍保持产品入口关闭。

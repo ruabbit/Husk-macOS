@@ -116,7 +116,67 @@ import SharedLibrary
                 }
                 try await loadHTTP()
                 _ = try await javascriptAsync("return await persist('http-initial');")
-                if scenario == "http-history-stop" {
+                if scenario.hasPrefix("http-history-check-") {
+                    let timedOut = scenario == "http-history-check-timeout"
+                    let rejected = scenario == "http-history-check-error" || timedOut
+                    let retire = scenario == "http-history-check-destroy"
+                    // A document-start accessor blocks the actual didCommit
+                    // history check inside a Java-owned confirm decision. The
+                    // fixture does not replace the host's evaluation callback.
+                    let script = """
+                    (()=>{if(window.fixtureHistoryProbe)return;window.fixtureHistoryProbe=true;
+                    let closing=window.__huskClosing===true,entered=false;
+                    Object.defineProperty(window,'__huskClosing',{configurable:true,
+                      get(){if(!entered&&location.pathname==='/start'&&sessionStorage.getItem('historyCheckArmed')==='1'){
+                        entered=true;sessionStorage.removeItem('historyCheckArmed');
+                        confirm('husk-history-check:'+closing+':'+(window.fixtureReady===true)+':\(retire ? "destroy" : rejected ? "error" : "stop")');
+                        \(timedOut ? "const r=new XMLHttpRequest();r.open('GET','/history-check-wait',false);r.send();" : rejected ? "throw new Error('Expected history check failure');" : "")
+                      }return closing;},set(value){closing=value;}});})();
+                    """
+                    let encoded = String(data: try JSONEncoder().encode(script), encoding: .utf8)!
+                    _ = try await evaluate("nativeSave.installHistoryProbe(\(encoded),'\(origin)');true")
+                    try await saveHTTP("history-first")
+                    _ = try await evaluate("location.href='/second';true")
+                    try await awaitHTTP("/second")
+                    try await saveHTTP("history-check-saved")
+                    _ = try await evaluate("sessionStorage.setItem('historyCheckArmed','1');nativeSave.history('back');true")
+                    try await session.wait(until: { preferences(save).contains("s history_check ") || !session.active }, timeout: 10)
+                    try check(session.state == "running" && preferences(save).contains("husk-history-check:true:true") && preferences(save).contains("i http_start_commits 1"), "committed cached history document waits inside its real asynchronous check, before Java commit delivery")
+                    if retire {
+                        try await session.wait(until: { preferences(save).contains("b history_view_retired true") || !session.active }, timeout: 10)
+                        var replacement = false
+                        for _ in 0..<120 {
+                            if try await evaluate("window.fixtureReady===true && nativeSave.viewGeneration()===1", optional: true) as? Bool == true { replacement = true; break }
+                            try await Task.sleep(for: .milliseconds(30))
+                        }
+                        try check(replacement && session.state == "running", "per-view destruction joins the pending history check while a replacement runs")
+                    }
+                    if timedOut {
+                        session.stop()
+                        try await session.wait(until: { session.events.contains { $0["state"] as? String == "stopping" } || !session.active }, timeout: 5)
+                        var waiting = false
+                        for _ in 0..<100 {
+                            if try await requests().contains(where: { $0["path"] as? String == "/history-check-wait" }) { waiting = true; break }
+                            try await Task.sleep(for: .milliseconds(30))
+                        }
+                        try check(waiting && session.active, "history evaluation remains pending after stop has started")
+                        try await Task.sleep(for: .seconds(7))
+                        var release = URLRequest(url: originURL.appendingPathComponent("release-history-check")); release.httpMethod = "POST"
+                        let (_, response) = try await URLSession.shared.data(for: release)
+                        try check((response as? HTTPURLResponse)?.statusCode == 200, "late history check released after the original six-second deadline")
+                        try await waitForStop(success: false)
+                    } else { try await stop(success: !rejected) }
+                    try await assertCount("/start", 1); try await assertCount("/second", 1); try await assertCount("/saved", 2)
+                    try check(preferences(save).contains("i http_start_commits 1") && preferences(save).contains("i bridge_calls 4"), "history check completion after host stop emits no late commit or duplicate Java save")
+                    if rejected { try check(!session.events.contains { $0["event"] as? String == "storage-closed" }, "failed or late history evaluation cannot acknowledge storage even when the old page was saved") }
+                    try await start(repository, imported, paths)
+                    try await loadHTTP()
+                    let restored = try await javascriptAsync("return await readSave();") as? [String: Any] ?? [:]
+                    try check(restored["local"] as? String == "history-check-saved" && restored["indexed"] as? String == "history-check-saved", "history-check/stop preserves both Web stores across independent process reopen")
+                    try check(try await evaluate("nativeSave.previous()===4 && localStorage.getItem('pagehideCount')==='2' && localStorage.getItem('unloadCount')==='2'") as? Bool == true, "restored sealed history does not repeat either departed document lifecycle")
+                    try await assertCount("/start", 2)
+                    try await stop()
+                } else if scenario == "http-history-stop" {
                     func control(_ path: String) async throws {
                         var request = URLRequest(url: originURL.appendingPathComponent(path)); request.httpMethod = "POST"
                         let (_, response) = try await URLSession.shared.data(for: request)

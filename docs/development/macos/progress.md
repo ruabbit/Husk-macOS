@@ -1,5 +1,17 @@
 # 审计进度
 
+## 2026-11-03：上游无新增，历史页恢复检查修复，build 28 本机验证完成
+
+从干净 6089a9d 起步，两远端 fetch 无新增，main eeef229/macOS 6089a9d，upstream 89b0f87 与来源锁、祖先一致；前轮 CI 41390256558 success 复核。实际空闲 Product/PID 20372 经 CUA 首页确认后正常退出，无本项目 Runner/VM/构建；其他项目 UTM 不处理。核对 TLReport.nativeEngine、TLUnityView/project.yml、Mac CMake/能力与分发/输入暂停关闭、Play 和图形依赖后，继续 WebView didCommit 后异步历史恢复检查的具体开放项。
+
+本轮已复现并修复生产问题：已提交的缓存历史页仍在异步判断 sealed 状态时，host-stop 或 view-destroy 原先会再次调用保存而失败。现在先等待同一个检查，已保存页面复用既有成功结果，fresh 页面仍执行保存，错误保持失败；等待包含在原六秒期限内。原始失败日志与会话保留。首轮 fixture 将缓存页误当 fresh 的断言也保留并更正，未修改 WebKit 缓存行为来迎合测试。
+
+相关 **15/15（57.63 秒）**及追加超时 **1/1（12.21 秒）**通过。最终唯一 **3.3.0/build 28** 默认 **200/200（329.88 秒）**通过，其中 WebView **58 项（189.44 秒）**、HTTP **10 项（41.59 秒）**、AOT 打包 **12 项（28.85 秒）**；四个新历史检查用例合计 **19.06 秒**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要读回一致；本轮修改共享 WebView 运行时代码，NativeRunner 摘要随之更新。共享 WebView Objective-C **1 文件 iOS SDK syntax** 通过，不是完整 iOS 构建/签名或设备证据。本轮没有重跑独立本机 P0；loader/AOT/解释器源列表没有新依赖。日志复用 `build/logs/current-upstream-nov3-*`。
+
+最终 Product 通过 CUA **仅启动一次，PID 76748**；完整路径、AX/截图确认原图标/TabView、全部 11 个应用及图标、选中应用 JIT-less 关闭、设置总页语言/导入存档帮助及独立 JIT-less 说明完整换行，关闭设置并返回首页。沿用既有英文界面，未修改偏好、登录上传或启动用户游戏/VM。收尾再次 fetch 两远端仍无新增，无合并或冲突；main 保持 eeef229。源码与交付记录待正常推送和本批 CI 核对。
+
+剩余边界：未封闭的新历史文档在相同检查/关闭交叠中的专门保存验证、Activity replacement/recreate 更多顺序、加载中/跨源及真实第三方 HTTP 插件。受控 DEX/WebKit 与回环 HTTP 结果不代表真实游戏兼容；ARM32 完整生命周期/AOSP、真实游戏保存/IL2CPP、实体 IME/手柄/电源、账号/Play、VM/P6 继续开放。
+
 ## 2026-11-02：3.3 / WebView 顺序与设置文字，build 27 已交付
 
 从干净 74e7b71 起步，无 Husk/Runner/本项目 VM/构建或进行中的 Git 操作；前轮 CI 41262157084 success 复核。origin 无新增，upstream `8f65f2f..89b0f87` **2 提交/8 路径**，3.3 tag=`9345aab`。普通合并 main=`eeef229`、macOS=`ed7c948`，均无冲突；收尾 fetch 没有新增。逐项核对 TLReport.nativeEngine、TLUnityView、project.yml、Mac CMake/能力/Runner 输入暂停关闭、Store/登录和图形构建；新增为 iOS 15 页面、StikDebug 容器与 SideStore 源，没有共享引擎/Play/图形 pin 增量。ARM32 产品入口、完整 AOSP 等既有边界保留。

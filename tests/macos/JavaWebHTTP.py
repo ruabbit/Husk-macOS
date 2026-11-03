@@ -17,6 +17,7 @@ def main():
     lock = threading.Lock()
     history_held = threading.Event()
     history_release = threading.Event()
+    history_check_release = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -39,6 +40,8 @@ def main():
                 history_held.set()
             elif path == "/release-history":
                 history_release.set()
+            elif path == "/release-history-check":
+                history_check_release.set()
             with lock:
                 if path != "/report":
                     requests.append({"path": path, "method": self.command,
@@ -50,12 +53,15 @@ def main():
                 if not history_release.wait(timeout=15):
                     self.send_error(504, "History response was not released")
                     return
+            if path == "/history-check-wait" and not history_check_release.wait(timeout=15):
+                self.send_error(504, "History check was not released")
+                return
             status, payload, content_type = 200, page, "text/html; charset=utf-8"
             if path == "/report":
                 payload, content_type = json.dumps(snapshot).encode(), "application/json"
             elif path == "/saved":
                 payload, content_type = b"saved", "text/plain"
-            elif path in ("/hold-history", "/release-history"):
+            elif path in ("/hold-history", "/release-history", "/history-check-wait", "/release-history-check"):
                 payload, content_type = b"ok", "text/plain"
             elif path == "/redirect":
                 status, payload = 302, b""
@@ -85,6 +91,7 @@ def main():
         return result.returncode
     finally:
         history_release.set()
+        history_check_release.set()
         server.shutdown()
         server.server_close()
         worker.join()

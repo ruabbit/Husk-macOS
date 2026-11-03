@@ -352,6 +352,7 @@ static NSString *bridge_js(void)
 @property (nonatomic) BOOL navigationIsHistory;
 @property (nonatomic, strong) WKNavigation *restoredHistoryNavigation;
 @property (nonatomic) BOOL restoredHistoryFinished;
+@property (nonatomic) BOOL historyCheckPending;
 @property (nonatomic) BOOL waitingForDestroyAck;
 @property (nonatomic, copy) void (^prepareCompletion)(BOOL);
 @property (nonatomic, copy) void (^navigationPrepareCompletion)(BOOL);
@@ -361,6 +362,7 @@ static NSString *bridge_js(void)
 - (void)closeForHost:(void (^)(BOOL))completion;
 - (void)completeClose:(BOOL)ok;
 - (void)prepareForHost:(void (^)(BOOL))completion;
+- (void)saveForHost;
 - (void)completePrepare:(BOOL)ok;
 - (void)prepareForNavigation:(void (^)(BOOL))completion;
 - (void)completeNavigationPrepare:(BOOL)ok;
@@ -517,6 +519,7 @@ static NSString *bridge_js(void)
 - (void)resetNavigationPreparation
 {
     ++_navigationPrepareGeneration;
+    _historyCheckPending = NO;
     _navigationReplayURL = nil;
     _navigationPrepareStarted = NO;
     _navigationPrepareFinished = NO;
@@ -590,6 +593,15 @@ static NSString *bridge_js(void)
         HuskWeb *h = weak;
         if (h.prepareCompletion) { tl_log_line("javaapp: WebView save stage timed out"); [h completePrepare:NO]; }
     });
+    // didCommit can still be deciding whether a history document is already
+    // sealed. Join that check before saving: a second prepare would reject an
+    // already saved page, while blindly reusing its receipt loses fresh data.
+    // The timer above includes this wait and is not restarted by the callback.
+    if (!_historyCheckPending) [self saveForHost];
+}
+- (void)saveForHost
+{
+    __weak HuskWeb *weak = self;
     [_web setAllMediaPlaybackSuspended:YES completionHandler:^{
         HuskWeb *h = weak;
         if (!h.prepareCompletion) return;
@@ -731,11 +743,21 @@ static NSString *bridge_js(void)
         // fetch already created a fresh document and must not be loaded twice.
         _restoredHistoryNavigation = n;
         _restoredHistoryFinished = NO;
+        _historyCheckPending = YES;
         NSUInteger generation = _navigationPrepareGeneration;
         __weak HuskWeb *weak = self;
         [w evaluateJavaScript:@"window.__huskClosing===true" completionHandler:^(id value, NSError *error) {
             HuskWeb *h = weak;
-            if (!h.web || h.closing || h.prepareStarted || g_host_preparing || h.navigationPrepareGeneration != generation) return;
+            if (!h.web || h.closing || h.navigationPrepareGeneration != generation) return;
+            h.historyCheckPending = NO;
+            if (h.prepareStarted) {
+                if (!h.prepareCompletion) return; // already timed out or detached
+                if (error || ![value isKindOfClass:NSNumber.class]) [h completePrepare:NO];
+                else if ([value boolValue]) [h completePrepare:YES]; // this exact history item was saved before it left
+                else [h saveForHost]; // a fresh history fetch still needs its own save
+                return;
+            }
+            if (g_host_preparing) return;
             if (error) { g_detach_failed = YES; [h failed:error]; return; }
             if ([value boolValue]) {
                 // The host saved this exact history item before it left. Reuse
