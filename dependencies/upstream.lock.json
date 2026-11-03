@@ -5,10 +5,10 @@
   "integratedRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
   "checkedOn": "2026-11-03",
   "commitCount": 0,
-  "integration": "No upstream or origin changes after fetching both remotes. Existing 89b0f87 ancestry and fork main eeef229 remain intact. Fixed host/view preparation racing a committed cached history check: wait for that exact evaluation, reuse only a verified sealed-document save, otherwise run fresh saving, and keep failures/deadlines sticky. Controlled WebView regressions, default 200 tests, bundle verification and single-launch CUA passed for build 28; source push and current CI are pending.",
+  "integration": "No upstream or origin changes after fetching both remotes. Existing 89b0f87 ancestry and fork main eeef229 remain intact. Fixed host/view preparation racing a committed cached history check: wait for that exact evaluation, reuse only a verified sealed-document save, otherwise run fresh saving, and keep failures/deadlines sticky. Controlled WebView regressions, default 200 tests, bundle verification and single-launch CUA passed for build 28; source 9ee971d pushed normally with both remote branch SHAs read back; CI 41561530389 passed build/package, 54 hosted core regressions and 25 P0 checks; hardware skipped. Daily automation prompt, original schedule and thread updated and read back exactly.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "local-verified-awaiting-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.3",
     "revision": "9345aab21286735b5ba7acc9bf1c6b5fb864e075",
@@ -17,7 +17,7 @@
   "candidate": {
     "version": "3.3.0",
     "build": "28",
-    "deliveryStatus": "local-verified-awaiting-push",
+    "deliveryStatus": "verified-and-pushed",
     "bundleMachO": 18,
     "javaResources": 407,
     "localizations": {
@@ -38,7 +38,23 @@
     "appSHA256": "865d22b3a03b9d8053e8d57ffe599ab7ac74e2d5a42a379ddcb347adb89bdd8a",
     "nativeRunnerSHA256": "409a38c8a326d7d29b821725cfbe461e9abe28304b26e8835f4104075bda9287",
     "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a"
+    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
+    "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+    "productSourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+    "ci": {
+      "run": 41561530389,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389",
+      "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 50.06,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 255
+    }
   },
   "lastCheck": {
     "upstreamNewCommits": 0,
@@ -49,8 +65,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "previousCI": 41390256558,
     "blocker": null,
     "sharedIOSSyntax": {
@@ -59,7 +75,7 @@
       "fullBuild": false,
       "device": false
     },
-    "automationUpdatedAndReadBack": false,
+    "automationUpdatedAndReadBack": true,
     "targetedTests": 15,
     "targetedTestSeconds": 57.63,
     "additionalTimeoutTest": {
@@ -78,7 +94,23 @@
     "newHistoryCheckTests": 4,
     "newHistoryCheckTestSeconds": 19.06,
     "bundleBinaryDigestsMatched": 18,
-    "localStandaloneP0Rerun": false
+    "localStandaloneP0Rerun": false,
+    "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+    "finalFetchChanged": false,
+    "ci": {
+      "run": 41561530389,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389",
+      "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 50.06,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 255
+    }
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -134,7 +166,7 @@
     },
     "historyCheckCloseValidation": {
       "date": "2026-11-03",
-      "status": "local-verified-awaiting-push-and-ci",
+      "status": "verified-and-pushed",
       "cases": 4,
       "implementation": "Host/view preparation joins the pending didCommit history check. Reuse the prior successful save only for that exact sealed history item; fresh documents still save. Evaluation error or the original six-second deadline stays failed even when a later result says sealed.",
       "evidence": "Actual cached history check held through a document-start accessor and Java confirm, without a runtime test delay. Covers host stop, per-view destruction/replacement, evaluation error and a loopback response released after seven seconds. No reload, late commit, duplicate lifecycle or false storage-closed; independent process reopen reads localStorage, IndexedDB and Java state.",
@@ -351,6 +383,20 @@
       "hostedCoreTestSeconds": 53.24,
       "p0Checks": 25,
       "buildAndCoreSeconds": 365
+    },
+    {
+      "run": 41561530389,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389",
+      "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 54,
+      "hostedCoreTestSeconds": 50.06,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 255
     }
   ],
   "jniPreferencesIntegration": {

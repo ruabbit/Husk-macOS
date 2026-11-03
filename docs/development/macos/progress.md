@@ -1,6 +1,6 @@
 # 审计进度
 
-## 2026-11-03：上游无新增，历史页恢复检查修复，build 28 本机验证完成
+## 2026-11-03：上游无新增，历史页恢复检查修复，build 28 已交付
 
 从干净 6089a9d 起步，两远端 fetch 无新增，main eeef229/macOS 6089a9d，upstream 89b0f87 与来源锁、祖先一致；前轮 CI 41390256558 success 复核。实际空闲 Product/PID 20372 经 CUA 首页确认后正常退出，无本项目 Runner/VM/构建；其他项目 UTM 不处理。核对 TLReport.nativeEngine、TLUnityView/project.yml、Mac CMake/能力与分发/输入暂停关闭、Play 和图形依赖后，继续 WebView didCommit 后异步历史恢复检查的具体开放项。
 
@@ -8,7 +8,9 @@
 
 相关 **15/15（57.63 秒）**及追加超时 **1/1（12.21 秒）**通过。最终唯一 **3.3.0/build 28** 默认 **200/200（329.88 秒）**通过，其中 WebView **58 项（189.44 秒）**、HTTP **10 项（41.59 秒）**、AOT 打包 **12 项（28.85 秒）**；四个新历史检查用例合计 **19.06 秒**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，18 个二进制摘要读回一致；本轮修改共享 WebView 运行时代码，NativeRunner 摘要随之更新。共享 WebView Objective-C **1 文件 iOS SDK syntax** 通过，不是完整 iOS 构建/签名或设备证据。本轮没有重跑独立本机 P0；loader/AOT/解释器源列表没有新依赖。日志复用 `build/logs/current-upstream-nov3-*`。
 
-最终 Product 通过 CUA **仅启动一次，PID 76748**；完整路径、AX/截图确认原图标/TabView、全部 11 个应用及图标、选中应用 JIT-less 关闭、设置总页语言/导入存档帮助及独立 JIT-less 说明完整换行，关闭设置并返回首页。沿用既有英文界面，未修改偏好、登录上传或启动用户游戏/VM。收尾再次 fetch 两远端仍无新增，无合并或冲突；main 保持 eeef229。源码与交付记录待正常推送和本批 CI 核对。
+最终 Product 通过 CUA **仅启动一次，PID 76748**；完整路径、AX/截图确认原图标/TabView、全部 11 个应用及图标、选中应用 JIT-less 关闭、设置总页语言/导入存档帮助及独立 JIT-less 说明完整换行，关闭设置并返回首页。沿用既有英文界面，未修改偏好、登录上传或启动用户游戏/VM。收尾再次 fetch 两远端仍无新增，无合并或冲突；main 保持 eeef229。
+
+源码 [9ee971d](https://github.com/ruabbit/Husk-macOS/commit/9ee971d919618cb55d2e229404470ebd5aa3be24) 已正常原子推送，main [eeef229](https://github.com/ruabbit/Husk-macOS/commit/eeef229eae49a7136b71b67b4f7120e3d5c29eec) 无需新提交，两分支远端 SHA 读回一致。[CI 41561530389](https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389)（head=9ee971d）已 **completed/success**：构建、包检查、**54 项 hosted 核心回归（50.06 秒）**与 **25 项 P0 memory/core** 通过；build-and-core **4 分 15 秒**，hardware skipped，不是实体设备验收。每日续跑提示已通过工具更新并全文精确读回，原每日 09:00、聊天、贡献范围与会话保护约束保持。最终来源锁与交付文档用单独 skip-ci 提交保存，不改变已验证的候选二进制。
 
 剩余边界：未封闭的新历史文档在相同检查/关闭交叠中的专门保存验证、Activity replacement/recreate 更多顺序、加载中/跨源及真实第三方 HTTP 插件。受控 DEX/WebKit 与回环 HTTP 结果不代表真实游戏兼容；ARM32 完整生命周期/AOSP、真实游戏保存/IL2CPP、实体 IME/手柄/电源、账号/Play、VM/P6 继续开放。
 

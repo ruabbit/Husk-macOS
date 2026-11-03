@@ -1,6 +1,6 @@
 # Husk macOS 迁移实施
 
-## 当前执行：2026-11-03 历史页恢复检查与停止顺序，本机验证完成
+## 当前执行：2026-11-03 历史页恢复检查与停止顺序，build 28 已交付
 
 - [x] 干净 6089a9d；origin/upstream fetch 无新增，祖先与来源锁一致；前轮 CI 41390256558 success。
 - [x] 实际 PID 20372 为唯一空闲 Product，CUA 首页核对后正常退出；无本项目 Runner/VM/构建，其他项目 UTM 保持。
@@ -8,7 +8,8 @@
 - [x] 复现并修复 didCommit 后缓存历史页检查与关闭的竞态，补 host-stop/destroy/error/原期限超时四项确定性回归；保留 fresh-history/真实 HTTP/跨源/Activity 等边界。
 - [x] 唯一 build/macos/build 28：相关 15/15、追加超时 1/1、默认 200/200（329.88 秒）、18 Mach-O/407 Java 资源/两语言各 784 条通过；共享 Objective-C 仅 iOS SDK syntax。
 - [x] CUA 单次启动 PID 76748，完整路径、11 应用/图标、JIT-less 关闭与完整设置说明确认，返回首页；无用户游戏/VM/偏好变化。
-- [ ] 来源锁/parity/progress、正常推送/远端 SHA/CI 与每日续跑提示收尾。
+- [x] 源码 9ee971d 正常原子推送，main eeef229 无变化，两分支 SHA 读回；CI 41561530389 success（54 hosted 核心/50.06 秒、25 P0，hardware skipped）。来源锁/parity/progress 与每日续跑提示已更新，原时间/聊天/全部约束精确读回。
+- [ ] 继续 fresh-history 检查/关闭交叠的专门保存回归、Activity replacement/recreate、加载中/跨源/真实 HTTP；ARM32/AOSP、真实游戏、实体设备/Play/VM/P6 保持开放。
 
 ## 当前执行：2026-11-02 上游 3.3 / WebView 顺序与设置文字，已交付，其他平台待办继续开放
 

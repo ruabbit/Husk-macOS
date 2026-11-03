@@ -1,6 +1,6 @@
 # 上游功能与 macOS 接入现况
 
-## 2026-11-03：历史恢复检查与关闭交叠，build 28 本机验证完成
+## 2026-11-03：历史恢复检查与关闭交叠，build 28 已交付
 
 两远端 fetch 无新增；upstream/main=`89b0f87`、fork main=`eeef229`，Git 祖先与来源锁一致，从干净 macOS=`6089a9d` 起步。重新对照 TLReport.nativeEngine、TLUnityView/project.yml、CMake 源文件、资料库能力、独立 Runner 分发/输入/暂停/关闭、Store 登录与图形 pin。没有上游功能增量，ARM32 产品入口和完整 AOSP、真实游戏/服务/设备等既有边界保留。
 
@@ -15,7 +15,7 @@
 
 首轮 fixture 将缓存页误认为 fresh，已纠正且保留失败日志；纠正后原生产代码仍确定性失败，证据见 `current-upstream-nov3-history-check-baseline.log`。修复后相关 **15/15（57.63 秒）**，追加超时单项 **1/1（12.21 秒）**通过。最终唯一 **3.3.0/build 28** 默认 **200/200（329.88 秒）**通过，其中 WebView **58 项（189.44 秒）**、HTTP **10 项（41.59 秒）**、AOT 打包 **12 项（28.85 秒）**；四个新历史检查用例合计 **19.06 秒**。包检查 **18 arm64 Mach-O / 407 Java 资源 / 中英文各 784 条**通过，全部二进制摘要读回一致。共享 WebView Objective-C **1 文件 iOS SDK syntax** 通过，没有完整 iOS 构建/签名/设备结论。
 
-CUA 单次启动最终候选 **PID 76748**；完整路径、原图标/TabView、11 个应用及图标、选中应用 JIT-less 关闭、设置总页和独立说明完整换行确认，已返回首页。未更改偏好或启动用户游戏/VM。收尾 fetch 无新增，main 仍为 eeef229；源码推送和本批 CI 待收尾。
+CUA 单次启动最终候选 **PID 76748**；完整路径、原图标/TabView、11 个应用及图标、选中应用 JIT-less 关闭、设置总页和独立说明完整换行确认，已返回首页。未更改偏好或启动用户游戏/VM。收尾 fetch 无新增，main 仍为 eeef229。源码 [9ee971d](https://github.com/ruabbit/Husk-macOS/commit/9ee971d919618cb55d2e229404470ebd5aa3be24) 已正常推送，两分支 SHA 读回一致；[CI 41561530389](https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389) completed/success，构建/包检查、54 hosted 核心回归（50.06 秒）与 25 P0 memory/core 通过，build-and-core 4 分 15 秒，hardware skipped。每日续跑提示与原时间/聊天/约束已更新并精确读回。
 
 下一步继续未封闭的新历史文档在同一检查/关闭交叠中的专门保存回归、Activity replacement/recreate 更多顺序、加载中/跨源与真实 HTTP 第三方插件。已验证的缓存历史页 host-stop/destroy/error/timeout 不再整项列为未做；ARM32/AOSP、真实游戏保存/IL2CPP、物理 IME/手柄/电源、账号/Play、VM/P6 保持开放。
 

@@ -9,6 +9,7 @@
 - 修正后的原生产代码基线确定性失败：历史检查在 Java confirm 决策内暂停，host stop 将其取消后立即再次调用 __huskPrepareClose，已保存的文档报 JavaScript exception，最终 failed 且无 storage-closed。证据为 current-upstream-nov3-history-check-baseline.log 与 JavaWeb-4EF6B99E-214E-4809-B762-0DA4A3946191 会话。
 - 修复加入 historyCheckPending，host/view prepare 等待同一个检查，sealed 文档复用先前成功记录，fresh 文档仍调用保存；检查失败保持失败，原六秒计时包含等待，不加新宽限期。相关 15/15（57.63 秒）及超时单项 1/1（12.21 秒）通过；最终默认 200/200（329.88 秒），58 项 WebView/10 项 HTTP，18 Mach-O/407 Java 资源及两语言各 784 条通过。未封闭的新历史文档分支仍缺专门交叠回归。
 - 最终 build 28 经 CUA 单次启动为 PID 76748；完整路径、原图标/TabView、11 应用及图标、JIT-less 关闭和完整设置说明确认，已返回首页。没有改变用户偏好或启动游戏/VM；其他项目 UTM 保持。本轮 NativeRunner 因共享 WebView 修复而改变，不沿用 build 27 摘要。共享 Objective-C 仅 1 文件 iOS SDK syntax 通过。
+- 源码 9ee971d 与 main eeef229 正常推送并读回；CI 41561530389 completed/success，54 hosted 核心回归（50.06 秒）及 25 P0 memory/core，build-and-core 4 分 15 秒，hardware skipped。自动化原每日 09:00/聊天/约束保持，新提示已精确读回。
 
 ## 2026-11-02：3.3 增量与待办选择
 
