@@ -1279,7 +1279,7 @@ static bool start_app(const tl_javaapp_config *cfg)
     atomic_store(&A.ended, false);
     atomic_store(&A.paused, false);
     atomic_store(&A.frames, 0);
-    A.qn = 0; A.gl_view = NULL; A.gl_renderer = NULL; A.content = NULL;
+    A.qn = 0; A.gl_view = NULL; A.gl_renderer = NULL; A.content = NULL; A.gl_started = false;
     /* stores into a library's executable view (data sharing a page with its code, as Unity's does) go through the writable one */
     { void tl_codewrite_enable(void); tl_codewrite_enable(); }
     A.cfg = *cfg;
@@ -1290,14 +1290,27 @@ static bool start_app(const tl_javaapp_config *cfg)
        its 310/320 es shaders down), as it would otherwise refuse to start */
     { int tl_manifest_gles(const char *); void tl_egl_es3_claim(int); int gv = tl_manifest_gles(cfg->apk_path);
       if (gv >= 0x30001) { tl_egl_es3_claim(gv & 0xffff); tl_log_line("egl: the manifest asks for OpenGL ES 3.%d: the driver is described so", gv & 0xffff); } }
-    snprintf(A.data, sizeof(A.data), "%s", cfg->data_dir);
-    snprintf(A.ext, sizeof(A.ext), "%s/sdcard", cfg->data_dir);
+    /* the data folder as its canonical path: apps check where a file lands with getCanonicalPath() against getFilesDir() or
+       getExternalFilesDir() (Sims FreePlay's zip-slip guard refused all its game data), and on iOS the container is /var/...,
+       which is /private/var/... once resolved */
+    mkdir(cfg->data_dir, 0755);
+    /* ...unless that path has a space, which an Android data path never has: Qt splits its library list on them (a Mac volume
+       name has one) */
+    { char canon[PATH_MAX]; snprintf(A.data, sizeof(A.data), "%s", realpath(cfg->data_dir, canon) && !strchr(canon, ' ') ? canon : cfg->data_dir); }
+    snprintf(A.ext, sizeof(A.ext), "%s/sdcard", A.data);
     snprintf(A.fwres, sizeof(A.fwres), "%s", cfg->framework_res ? cfg->framework_res : "");
     for (int i = 0; i < 4; i++) A.insets[i] = cfg->insets[i];
     mkdir(A.data, 0755); mkdir(A.ext, 0755);
     if (!tl_javaapp_manifest(cfg->apk_path, A.pkg, sizeof(A.pkg), A.activity, sizeof(A.activity), A.application, sizeof(A.application))) {
-        tl_log_line("javaapp: the manifest names no launcher activity");
-        return false;
+        /* a feature split can declare the launcher (Chromium's: the "chrome" split has the Main alias) */
+        const char *tl_ld_queued_split(int i);
+        bool got = false;
+        for (int i = 0; !got && tl_ld_queued_split(i); i++) {
+            char spkg[260] = "";
+            got = tl_javaapp_manifest(tl_ld_queued_split(i), spkg, sizeof(spkg), A.activity, sizeof(A.activity), NULL, 0);
+            if (got && !A.pkg[0]) snprintf(A.pkg, sizeof(A.pkg), "%s", spkg);
+        }
+        if (!got) { tl_log_line("javaapp: the manifest names no launcher activity"); return false; }
     }
     if (cfg->package_name && cfg->package_name[0]) snprintf(A.pkg, sizeof(A.pkg), "%s", cfg->package_name);
     if (!tl_path_install_apks(cfg->apk_path, A.pkg)) return false;
@@ -1305,7 +1318,7 @@ static bool start_app(const tl_javaapp_config *cfg)
     tl_log_line("javaapp: %s, launcher %s, application %s", A.pkg, A.activity, A.application[0] ? A.application : "(none)");
     tl_nwindow_configure(cfg->width, cfg->height, cfg->metal_layer);
     if (cfg->angle_egl && !tl_egl_init(cfg->angle_egl, cfg->angle_gles, cfg->frame_dir, cfg->frame_every)) return false;
-    { void tl_set_data_dir(const char *dir); tl_set_data_dir(cfg->data_dir); }
+    { void tl_set_data_dir(const char *dir); tl_set_data_dir(A.data); }
     /* the environment every Android process starts with (TrustedCertificateStore builds paths from ANDROID_DATA) */
     setenv("ANDROID_DATA", "/data", 0); setenv("ANDROID_ROOT", "/system", 0); setenv("ANDROID_STORAGE", "/storage", 0);
     setenv("EXTERNAL_STORAGE", "/sdcard", 0); setenv("ANDROID_ASSETS", "/system/app", 0); setenv("BOOTCLASSPATH", "", 0);
