@@ -8,7 +8,7 @@
   "integration": "Ordinary merges main=add16673 and macOS=dd96a0ab preserve both histories; four macOS conflicts resolved by behavior. Candidate 3.4/build30 is locally verified; PS4 product lifecycle remains open.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "validated-gui-pending-push",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.4",
     "revision": "acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a",
@@ -17,7 +17,7 @@
   "candidate": {
     "version": "3.4.0",
     "build": "30",
-    "deliveryStatus": "validated-gui-pending-push",
+    "deliveryStatus": "verified-and-pushed",
     "gui": "Single CUA launch of Product; original icon/TabView, 11 apps and all library icons, JIT-less off on selected library entry, wrapped general Settings help and Japanese menu verified. No preferences changed or games/VM launched. Returned Home. Japanese screen rendering and real device input remain separate.",
     "bundleMachO": 18,
     "javaResources": 407,
@@ -40,7 +40,8 @@
     "defaultTestSeconds": 391.48,
     "pid": 2083,
     "appSHA256": "2740b4a844baa1ee951e4744bbb4d2dc3d5fd13bdf87015d5bdcb95729014448",
-    "nativeRunnerSHA256": "4588b503436a812bf5f61baa0c9128fc27c4f74484c399175d0545990cb13259"
+    "nativeRunnerSHA256": "4588b503436a812bf5f61baa0c9128fc27c4f74484c399175d0545990cb13259",
+    "sourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95"
   },
   "lastCheck": {
     "upstreamNewCommits": 8,
@@ -54,8 +55,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "previousCI": 41561530389,
     "blocker": "No blocker to delivering the validated 3.4 candidate. Full migration remains open: PS4 guest worker/storage lifecycle and product routing, ARM32/AOSP, VM, and real sample/device acceptance.",
     "conflicts": {
@@ -152,7 +153,10 @@
         "Godot 3 touch natives and empty MIDI list",
         "3.4 release/project regeneration and altsource metadata"
       ]
-    }
+    },
+    "sourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95",
+    "remoteMainRevision": "add16673d3d0775968a115fc004efafed75c4517",
+    "remoteMacOSSourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95"
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -456,6 +460,21 @@
       "hostedCoreTestSeconds": 50.06,
       "p0Checks": 25,
       "buildAndCoreSeconds": 255
+    },
+    {
+      "run": 42276517688,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/42276517688",
+      "sourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95",
+      "statusAtLastCheck": "completed",
+      "conclusionAtLastCheck": "success",
+      "scope": "3.4 native macOS hosted build/core and P0; optional hardware job not requested; real PS4 dependency checks were local.",
+      "statusAtDelivery": "completed",
+      "conclusionAtDelivery": "success",
+      "hardware": "skipped",
+      "hostedCoreTests": 55,
+      "hostedCoreTestSeconds": 50.93,
+      "p0Tests": 25,
+      "buildAndCoreSeconds": 392
     }
   ],
   "jniPreferencesIntegration": {
@@ -544,7 +563,7 @@
       "import-and-save-help"
     ],
     "preferencesChanged": false,
-    "guiPID": 20372,
+    "guiPID": 2083,
     "locale": "existing English interface",
     "jitlessSheetPreserved": true
   },
@@ -572,5 +591,22 @@
     "unity": "Intent/Bundle extras and Display vsync deadline checks; existing normal/JIT-less lifecycle retained.",
     "godot3": "Three long JNI touch signatures each verified with real Android ELF in normal/JIT-less packaged sessions, device/coordinate/button/scroll arguments, owner thread, input/pause/resume/normal destroy and storage receipt.",
     "scope": "Controlled ELF/DEX, not commercial game compatibility."
+  },
+  "migrationScope": {
+    "authorizedOn": "2026-11-07",
+    "iosOnlyExcluded": [
+      "StikDebug/JIT pairing and PID attach",
+      "TrollStore/SideStore/IPA distribution",
+      "Personal p12 certificate import",
+      "iPhone/iPad-specific UI adaptation",
+      "iOS signing and physical-device release"
+    ],
+    "productGapsRemainOpen": [
+      "PS4 guest/storage lifecycle and ConsoleRunner/library/PKG transaction",
+      "ARM32 complete ISA/JNI/thread/lifecycle product integration",
+      "Complete AOSP system/services and Binder transaction ABI",
+      "VM Minecraft/continuous PCM/save/release acceptance"
+    ],
+    "complete": false
   }
 }

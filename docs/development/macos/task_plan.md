@@ -12,7 +12,7 @@
 - [x] 固定并实际构建PS4/FEX/45子模块，实现宿主JIT钩子；真实核心加载/范围/上限/执行、备份排空/失败与跨进程读回通过。
 - [ ] PS4 guest线程停止/回收与完整存储回执仍是产品入口门槛；继续ConsoleRunner/资料库/PKG事务/窗口输入与存档重开。
 - [ ] 推进ARM32/AOSP/VM及WebView具体开放项；逐项区分可实现修复、外部依赖和真实样本/设备验收。
-- [ ] 完成默认CTest、包检查、单次GUI验收、fork推送/远端与CI读回，更新来源锁/功能矩阵/定时任务。
+- [x] build30默认212/212、包检查、单次GUI/Home与日语菜单、fork源码8d6c1eef/main add16673推送与SHA读回；CI 42276517688 success（55 hosted核心/25 P0，hardware skipped）。来源锁/矩阵/定时任务已更新并读回；完整迁移保留上述开放项。
 
 明确排除macOS无用的iOS专属工作：StikDebug/JIT配对与PID attach、TrollStore/SideStore/IPA分发、个人p12证书导入、iPhone/iPad专用适配和iOS签名/真机发行。保留共享源码，不为排除项另做Mac UI或把它们当迁移阻塞。PS4、Android运行与存档、ARM32/AOSP/VM不是这些排除项。真实账号认证和实体设备/合法样本验收保持原权限边界。
 

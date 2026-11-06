@@ -6,7 +6,7 @@
 
 上游d92d0a1..afe83d45的8提交/37路径普通合并到main=add16673，再合macOS=dd96a0ab。main无冲突，Mac四处保留精确映射拆分/代码失效、线程所有权、真实偏好快照和Mac范围查询，同时接入VA统计、栈重试和Intent extras。收尾fetch两远端无新增。3.4 tag=acfd7bcb，从3.0到上游main共104提交是历史数量，不是功能完成率。
 
-最终唯一3.4.0/build30已完成日语784条、JNI AllocObject初始化/MIDI、VA统计、Unity extras/vsync和Godot3三种触摸签名。普通/JIT-less Godot3六条打包会话覆盖输入/暂停/恢复/销毁/存储回执。默认 **212/212（391.48秒）**，相关Java/语言/Unity **7/7（4.98秒）**、Godot/MIDI **7/7（9.19秒）**，独立P0 **25/25**（单项耗时合计6.337秒）。包验证18 arm64 Mach-O / 407 Java资源 / 英简中日各784条且格式占位符匹配。最终套件146份真实Runner监督记录为119次exit0和27次预期exit70，无signal/128+signal、无故障latch。最终经CUA单次启动为PID 2083，核对原图标/TabView、11条目/全部图标、选中条目JIT-less关闭、设置说明完整换行和日语菜单；没有改语言偏好或启动游戏/VM，已返回首页。18个二进制摘要与包检查一致。推送/CI正在收尾。
+最终唯一3.4.0/build30已完成日语784条、JNI AllocObject初始化/MIDI、VA统计、Unity extras/vsync和Godot3三种触摸签名。普通/JIT-less Godot3六条打包会话覆盖输入/暂停/恢复/销毁/存储回执。默认 **212/212（391.48秒）**，相关Java/语言/Unity **7/7（4.98秒）**、Godot/MIDI **7/7（9.19秒）**，独立P0 **25/25**（单项耗时合计6.337秒）。包验证18 arm64 Mach-O / 407 Java资源 / 英简中日各784条且格式占位符匹配。最终套件146份真实Runner监督记录为119次exit0和27次预期exit70，无signal/128+signal、无故障latch。最终经CUA单次启动为PID 2083，核对原图标/TabView、11条目/全部图标、选中条目JIT-less关闭、设置说明完整换行和日语菜单；没有改语言偏好或启动游戏/VM，已返回首页。18个二进制摘要与包检查一致。源码 [8d6c1eef](https://github.com/ruabbit/Husk-macOS/commit/8d6c1eefadf7af8cde433987277a02d48d84ff95) 与main [add16673](https://github.com/ruabbit/Husk-macOS/commit/add16673d3d0775968a115fc004efafed75c4517) 已正常原子推送，两分支SHA读回一致；[CI 42276517688](https://github.com/ruabbit/Husk-macOS/actions/runs/42276517688)（head=8d6c1eef）已completed/success：55项hosted核心回归（50.93秒）、25项P0、构建和包检查通过；build-and-core 6分32秒，hardware skipped。真实PS4依赖/备份检查是本机单独验证，不混入hosted数量。
 
 首次日语回归因fixture参数白名单遗漏在Runner启动前退出64；Godot fixture对cancel坐标应清零的假设错误曾失败，已更正并保留日志，未改生产输入去迎合fixture。本批没有制造崩溃、音频、用户游戏/VM或系统保护修改；iOS专属功能明确不迁移，不声称iOS签名/设备验证。
 
@@ -14,7 +14,7 @@ PS4真实core=03c2deba、FEX=220ab1e6及45个子模块已固定，配方和两�
 
 继续修复真实PS4备份worker停止丢弃队列与IO失败假成功：关闭准入、排空/join、有界复制/同步、旧备份保留和错误回执，实际核心的write/read/failure三个进程检查通过（含12个title、1MiB跨块数据、同名slot隔离、后续批次与sticky失败）。playtime周期线程也改为先停止/join再关闭数据库，仅有编译证据。完整guest worker和SaveMemory/存储回执仍未打通，module尚未打包进Product；不把这些依赖检查写成PS4游戏兼容。下一步明确保留在parity开放项9。
 
-证据复用 `build/logs/current-migration34-*`、`current-ps4-*`、`build/macos/bundle-verification.json`、`build/macos/Console/dependency-verification.json`。本轮最终交付状态追加于本节，历史冻结/暂停记录保留为历史。
+证据复用 `build/logs/current-migration34-*`、`current-ps4-*`、`build/macos/bundle-verification.json`、`build/macos/Console/dependency-verification.json`。每日husk任务已通过工具实际更新并全文读回，原09:00/ACTIVE/名称/聊天保持；记录本次交付、异常即停、iOS专属排除和PS4下一步。候选源码已交付，完整迁移保持开放；本节之后的冻结/暂停记录仅为历史。
 
 ## 2026-11-07：按用户直接指令恢复迁移
 
