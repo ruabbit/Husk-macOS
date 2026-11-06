@@ -1,5 +1,40 @@
 # 审计发现
 
+## 2026-11-07：恢复迁移，后台启动与异常退出保护
+
+- 用户直接要求填补空缺、完成迁移，已更新executionHold和每日任务并全文读回；不再沿用暂停状态。明确排除macOS无用的iOS签名/分发/配对/attach和移动设备专用界面。
+- AppKit官方文档确认prohibited策略不显示Dock图标、不得激活。NativeRunner原普通headless路径没有设置该策略，而WebKit会用到AppKit；现改为所有路径在guest启动前显式设policy，Native/Web helper以LSUIElement启动。可见游戏路径仍显式选择regular。
+- SessionController原fail()对无效关闭回执直接SIGTERM，这与旧日志里Java store mismatch后的SIGTERM一致。改为关闭私有控制写端请求正常退出，保留错误及原有限关闭期限，不接受后续回执为成功。
+- 测试入口增加stop-on-failure；HUSK_TEST_FAILURE_LATCH在真实Native/Web Runner信号或128+signal退出后记录并阻止后续启动，隔离诊断mock的预期停止。新增静态故障记录阻止启动检查，不注入信号；Java/WebKit与隐藏窗口会话验证实际activationPolicy/active/windowVisible。
+- 当前这些修改尚未构建/运行验证，不能先称为已解决反复退出根因。
+
+## 2026-11-07：上游 3.4 远端观察与“已合并功能”边界
+
+- 只读 `git ls-remote` 读取到 upstream `main=afe83d45`、`3.4=acfd7bcb`、`3.3=6e7f3257`、`3.0=cffaf8b7`。没有更新本地 remote-tracking ref，也没有 fetch 或合并。
+- 当前本地来源锁已合入 `d92d0a1`。`d92d0a1..3.4` 为 7 提交/36 路径，`d92d0a1..main` 为 8 提交/37 路径；待合并主题是 JNI/构建、日文资源、短地址空间/Unity system allocator、Unity Swappy 60 FPS、Godot 3 touch/MIDI 以及 3.4 release/project regeneration。它们不能写成已经进入 Mac。
+- 本机git rev-list/diff确认3.0到d92d0a1为96提交/851个净变更路径，到89b0f87为80提交/167路径。最初GitHub compare返回300文件是截断，不是总量，已经修正。3.0祖先在两条origin分支中；实际Mac接入仍按CMake、能力、Runner/窗口输入暂停关闭与验证区分，不能把提交覆盖当成用户功能完成率。origin读回main=eeef229、macOS=be7c1dd；本地build29未完成、未推送。
+- PS4不是已完成或无须迁移的iOS专属功能。当前ConsoleHostRuntime/MacConsoleProbe只有宿主契约，实际核心未打包，导入/资料库/Runner及存档关闭还未交付。上游3.4兼容率来自其Mac样本，不能套用本fork；该release的Godot3触摸仍列Known Issues，新增native入口不等于已可用。
+- 用户要求更新的定时任务已保留每日 09:00/ACTIVE/原线程和 fork-only 规则，并把停止 Runner 的冻结放到所有自动同步步骤之前。用户明确恢复前仍禁止测试、构建、启动和推送。
+
+## 2026-11-04：反复退出反馈与停止后的只读核对
+
+- 用户要求先停止后，CTest/PID66661、MacJavaWebSessionTests/PID73954、NativeRunner/PID73956均已结束，CTest退出143；没有强杀、重启或继续下一项，其他项目UTM保留。
+- 默认205项只完成149项，第150项中断；本轮未推送、未启动最终主程序。最后scanner/vm_region_64修改尚未构建，不能宣称已完成同步。
+- amfid记录ad-hoc/未知证书链；当前codesign深度严格校验通过、检查的主包/Runner包/可执行文件无quarantine属性。无新系统诊断报告不能排除故障：MacDiagnostics.c捕获SIGSEGV/BUS/ILL/ABRT/TRAP后记录寄存器并_exit(128+sig)，所以还必须看已有stderr及会话退出状态。
+- main.m普通headless分支不显式设置AppKit禁止激活，而hidden-window和Web存储维护分支会设置；这只是可能造成Dock反复出现的静态线索，未再次启动验证，也没有据此否认用户反馈。
+- 今日09:00后110份现存supervisor记录为93份exit 0、16份exit 70和1份SIGTERM/15（存储托管标识不匹配）；111组stderr未见原始故障标记。该有限范围未证实SIGSEGV等崩溃，也不能覆盖所有用户所见退出。汇总已保存，不通过重新启动补采证据。
+- 保持停止直到用户明确恢复执行；每日自动化先只读诊断，不自动恢复全套CTest、打包或候选启动。停止和只读证据统一保留在build/logs/current-upstream-nov4-*。
+
+## 2026-11-04：上游重写与增量审计
+
+- 上游 6 个既有提交重写只移除两份作者本地规则/说明文件；另外 16 提交为 JNI 类初始化、loader/SVC/AOT v10、Java/Bionic/SQL/KeyStore/NDK 字体/NativeActivity 分发等增量。原 .cursor 规则不属于本任务授权，未执行其 iOS 打包要求。
+- main 与 Mac 均各四文件冲突。Mac 已有 gl_created/app_created 与 gl_started 分离及 app_owner，保留既有失败清理与 storage-closed 协议，不能用上游更简单 stop 替换。LD 采用 nlibs_acq/publish_lib，同时保留 signed map code 的完整摘要、范围与调用方命名空间。
+- 待核对自动合并：KeyInfo 不得把现有受限软件密钥报告为全部用途或允许导出；Documents 的新增路径解析不得绕过所选文件授权。新的 NativeActivity 子类 Java 分发需要产品和真实 DEX/生命周期回归，不能只改 playable。
+- CUA 正常退出后观察返回 procNotFound；系统确认 Product/PID 76748 消失，不构成退出阻塞。
+
+- Context7 官方 Android KeyInfo 要求 immutable、准确 origin/purpose/security-level；SQLite 官方文档区分 query_only 与真实 readonly，并确认 authorizer 在 prepare/reprepare 生效。本机试验证明不能直接移除上游 WAL 回退，保留精确 CANTOPEN 与可写绕过证据。
+- 正式接线核对：TLReport/nativeEngine 与 Mac Models 都复用新扫描分类，Mac 继续 arm64-only；MacJavaRuntime 接受 Java/NativeActivity，main.m 的 Java 窗口输入、暂停、正常销毁及 Web 存储回执链已连通。TLUnityView/project.yml、Store/登录、macOS graphics pin 相对旧上游无增量，生产 pinned framework/独立 Runner 不变。Generated CREATOR 为 stand-in 构造/类型数组，不是完整 Parcel 序列化；NDK FontMatcher 目前固定 Roboto，family/text/locales/variable axes 尚非完整匹配。
+
 ## 2026-11-03：历史恢复检查的确定性交叠
 
 - 上游与 origin 无新增，既有 3.3 与受控 ARM32/AOSP 状态不变。本轮选择已提交历史页的恢复检查/host-stop 待办，使用隔离 APK、回环 HTTP 与现有 AndroidX document-start 接口建立可观察的脚本闸门；不以计时碰运气或未提交响应测试代替。

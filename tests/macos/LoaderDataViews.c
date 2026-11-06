@@ -50,6 +50,8 @@ int main(int argc,char **argv) {
     CHECK(address&&relocation&&code&&syscall_registers);
     Unwind unwind={.pc=code()};tl_ld_iterate(unwind_header,&unwind);CHECK(unwind.found);
     CHECK(address()==relocation());CHECK(address()==tl_ld_sym(lib,"view_value"));
+    const uint64_t *(*many_adrs)(void)=tl_ld_sym(lib,"many_rodata_adrs");
+    CHECK(many_adrs && many_adrs()==address());
     CHECK(*address()==UINT64_C(0x123456789abcdef));
     const uint64_t *(*indirect)(void)=(void *)code();CHECK(indirect&&indirect()==address());
     const uint64_t *(*literal)(void)=tl_ld_sym(lib,"literal_pointer");

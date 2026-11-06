@@ -30,6 +30,8 @@ def verify(app):
     icons={}
     for bundle in [app,*sorted((app/'Contents/Helpers').glob('*.app'))]:
         info=plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
+        if bundle.name in ('NativeRunner.app', 'WebRunner.app'):
+            assert info.get('LSUIElement') is True, ('Runner must start without a Dock icon', bundle)
         name=info.get('CFBundleIconFile')
         assert name and Path(name).name==name, ('Missing bundle icon declaration',bundle)
         icon=bundle/'Contents/Resources'/name

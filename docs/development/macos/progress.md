@@ -1,5 +1,51 @@
 # 审计进度
 
+## 2026-11-07：按用户直接指令恢复迁移
+
+用户要求填补空缺、完成迁移，并放弃macOS无用的iOS专属功能，作为本次恢复执行的明确授权。起点codex/macos-p0=c5282f89/main=59c38af8，33个已有修改路径保留，未发生stash/reset/清理；进程核对无本项目Husk/Runner/构建，Git无进行中操作。先审查旧退出证据及headless激活策略，最小验证通过并建立异常退出停止机制后再恢复全套。iOS专属范围与其余迁移阶段已写入task_plan.md。
+
+旧110条supervisor记录为93次exit0、16次exit70和1次SIGTERM；原审计没有信号处理器标记。这些只是已保存会话记录，不能排除用户观察的故障。普通headless分支没有创建NSApplication并显式禁止激活，后续WebKit/AppKit可能初始化应用；这是可修复的静态缺口，不先推定崩溃根因。
+
+已完成普通构建和包检查；日志保护1/1（0.86秒）、真实Java/WebKit保存重开与身份拒绝2/2（13.60秒）通过，运行状态断言prohibited/非active/无可见窗口。默认205项正在以stop-on-failure与共享异常退出latch运行。每日任务已更新并全文读回，原09:00/ACTIVE/名称/聊天保持；明确恢复执行、异常即停和iOS专属排除项。fetch确认origin无新增，上游仍为afe83d45（8提交待合）。PS4公开husk核心现为03c2deba，已在既有third_party/build/macos依赖缓存读取，FEX仍为220ab1e6；开始实际依赖配置，全部构建输出限build/macos/Console。
+
+随后默认 **205/205（469.56秒）**通过，151个真实Runner监督记录为121次exit0、29次预期exit70、1次正常退出失败夹具exit74，无signal或128+signal，无故障latch；这只说明本轮受控测试，不能反推11月4日全部现象。bundle验证通过，原scanner顺序与vm_region_64最终修改已覆盖重建。GUI仍留待最终候选完成后单次启动，当前未推送。证据：current-migration-ctest.log、current-migration-session-audit.json、current-migration-bundle.log。PS4 FEX首次编译因fmt的std::byte格式声明缺失失败，开始固定vendored依赖并补必要头文件；不涉及运行或故障注入。
+
+## 2026-11-07：定时任务更新与上游 3.4 只读核对，执行仍暂停
+
+按用户要求通过 automation_update 实际更新每日 `husk` 任务并全文精确读回。原每日 09:00、ACTIVE、名称、目标线程和 fork-only 范围保持；将原12221字符提示重写为3825字符，清楚区分暂停期间只读跟踪与用户恢复后的同步流程。暂停期间继续核对上游release/main与功能差距，保存新的观察，不再只重复进程为空；不fetch/合并、构建、CTest、打包、启动、签名、提交或推送。用户询问功能或更新任务不构成恢复执行。
+
+本次只读读取远端引用：upstream `main=afe83d45b31194c4cc9f7b3db7ec2c757db8346e`，标签 `3.4=acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a`、`3.3=6e7f32572f19e7085686d5dd71ca58c02b725177`、`3.0=cffaf8b7b8eec773b4c69838e04c04b3d56b8139`。从当前本地已合入的 `d92d0a1` 到最新 `main` 是 **8 个提交/37 个文件**；到 `3.4` 标签是 **7 个提交/36 个文件**，均尚未合并到 fork，也没有 Mac 构建或运行证据。新增主题包括 JNI 类初始化与 iOS 27 构建修复、日文资源、短地址空间下的线程栈/Unity `-systemallocator`、Unity Swappy 60 FPS、Godot 3 触摸/MIDI 空列表、3.4 项目生成和 release metadata；其中多项是 iOS 或共享运行时改动，不能直接算作 Mac 功能。
+
+“Husk 3.0”本身不是尚未同步的版本：本机Git祖先检查确认3.0标签已在origin/main、origin/codex/macos-p0及HEAD历史中。从3.0到已交付来源89b0f87为80个上游提交/167个净变更路径，到本地d92d0a1为96个提交/851个净变更路径；路径数由本机git diff取得，修正GitHub compare最多返回300个文件造成的初始误计。3.0、3.1、3.2、3.2.1和3.3时代的Mac适配按既有记录逐项交付，但不代表每个宣传功能已实现。origin最新读回main=eeef229、macOS=be7c1dd；d92d0a1及未提交适配仍停留在本地、未完成build29验证。提交数是源码历史范围，不等于独立用户功能数或真实商业游戏兼容率。
+
+3.0的重要缺口是PS4：ConsoleHostRuntime/MacConsoleProbe宿主契约已实现，但真实核心/FEX host hooks、产品打包、资料库导入与独立ConsoleRunner、窗口输入和存档关闭尚未交付，不能以“iOS专属”从Mac待办排除。已交付的Android驱动、Godot4/NativeBridge、OBB/48APK导入、键盘/字体/报告等保留其证据边界。3.4发布说明中的大量Java兼容修复属于已在build29源码的前16提交；此次剩余8提交只是相对本地d92d0a1的增量。上游3.4公布的Mac测试样本成功率不代表本fork验收，且该发布说明仍明确列Godot3触摸等限制。
+
+本轮没有改变暂停状态、候选、分支或远端；证据和待合并范围写入 `dependencies/upstream.lock.json`、`upstream-parity.md` 与 `findings.md`。
+
+## 2026-11-04：用户要求停止反复退出的 NativeRunner，执行已停止，未交付
+
+用户指出 NativeRunner 一直闪退并明确要求先停止。先 SIGSTOP 冻结本轮 CTest/PID 66661，阻止启动下一项，再 SIGTERM 结束其 MacJavaWebSessionTests/PID 73954 与完整 Product 路径下 NativeRunner/PID 73956，最后终止并恢复 CTest 使其退出；未使用 SIGKILL。随后复查无本项目 Husk/Runner/CTest/构建进程，其他项目 UTM/QEMU 保留。本轮默认 205 项仅完成前 149 项，全部通过；第 150 项 navigation-rejected 被用户中止，不能记为全套通过。CTest 最终退出 143。
+
+**保持停止：在用户明确恢复执行前，不运行 CTest、构建/打包或启动 Husk/任何 Runner。后续每日任务先只读核对停止状态、已有诊断和源代码，不自动恢复原验证计划。** 本轮本地普通合并和未提交适配全部保留，未推送；build 29 未做最终 GUI 启动。最后扫描顺序与 vm_region_64 修改尚未重建，已有包检查和针对性结果不代表这些最后修改已通过。
+
+停止后只读检查：系统日志有 amfid 对 NativeRunner/依赖的 ad-hoc 或未知证书链记录；当前 HuskMac.app、NativeRunner.app 及其可执行文件未见 com.apple.quarantine 属性，主包和 Runner 的 codesign --verify --deep --strict 均通过。递归检查用户/系统 DiagnosticReports 最近 24 小时未发现匹配名称的新报告；**这不能排除崩溃**，既有 MacDiagnostics.c 会记录原始信号后 _exit(128+sig)，系统未必产生崩溃报告，也不能仅凭签名完整或无 quarantine 属性断定 Gatekeeper 从未阻止执行。
+
+静态线索：普通 headless 路径没有像 hidden-window/存储维护路径一样显式设置 NSApplicationActivationPolicyProhibited；WebKit/AppKit 后续初始化可能导致测试进程显示在 Dock，但这尚未证实是用户所见现象，更不能据此否认异常退出。保留为待查项，本次没有再次启动复现或修改候选签名/系统保护设置。停止与诊断证据：build/logs/current-upstream-nov4-user-stop.json、current-upstream-nov4-system-stop-diagnostics.log、current-upstream-nov4-stop-readonly-check.json、current-upstream-nov4-stopped-session-audit.json。
+
+进一步只读汇总今日09:00后留下的110份supervisor记录：93份exit 0、16份exit 70、1份SIGTERM/15；该SIGTERM会话记录为存储托管标识不匹配，不能把它认作SIGSEGV等崩溃。111组已有stderr日志未见MacDiagnostics原始故障标记。这是现存日志范围的结果，仍不覆盖用户所见全部退出，原因未定。汇总见current-upstream-nov4-stopped-supervisor-audit.json。09:38再次确认本项目进程为空，其他项目QEMU保持。每日自动化husk已加入置顶停止约束并精确读回；原每日09:00、ACTIVE状态、目标聊天与原提示均保留，ACTIVE只允许只读核对，不自动恢复执行。
+
+## 2026-11-04：上游历史重写与兼容性增量，以下工作因用户要求停止而未完成
+
+从干净 be7c1dd 起步，origin 无新增，前轮 CI 41561530389 success 复核，build 28 的 18 个二进制摘要一致。fetch 检出 upstream/main 由 89b0f87 强制更新到 d92d0a11；共同祖先 d30e12e。range-diff 确认原 6 提交对应重写只删除 .cursor/rules/ipa-to-desktop.mdc 与 Husk_3.3.MD，运行时内容相同，其后新增 16 提交；相对原锁共 712 路径，576 为生成类。保持 fork 历史，普通合并 main=59c38af8，再合回 macOS=c5282f89，没有 force/reset/ours 合并。
+
+main 四文件冲突保留 Vulkan 配置并接入 GL 线程状态分离、库表 acquire/release 与共享 AOSP 工具；Mac 四文件冲突保留 Python 构建入口、原有独立线程所有权和关闭确认、AOT 跨页/溢出/完整 ELF 摘要与命名空间检查，并采用新原子库发布。AOT 共享布局升至 10，fork ABI 升 65546，后续更新 Mac 缓存版本并验证。初次 build 29 全构建成功；当前 mac-aot-4 / ABI 65546。后续兼容适配和新回归进行中，尚未最终验证/启动/推送。
+
+CUA 确认实际唯一 Product/PID 76748 在首页、无游戏/Runner/本项目 VM 后正常退出。随后的 AX 请求返回 procNotFound，系统复核 PID 与本项目进程已消失；未重新启动或强杀。其他项目 UTM 保留。证据复用 build/logs/current-upstream-nov4-*。
+
+KeyInfo 已适配现有 opaque imported handle、当前 Entry 身份、真实用途/日期、软件 origin 与工厂算法检查；扩展真实 DEX 跨进程密钥回归通过。SQLite 新回归先遇到 Darwin 正常关闭仍留空 WAL 的 fixture 假设，修正后明确复现 query_only 可关闭而允许 INSERT；移除回退后本机系统 SQLite 又报 CANTOPEN。保留三次失败日志，持续 authorizer + query_only + NO_CKPT_ON_CLOSE 的窄范围回退已通过针对性检查。针对性21/21（18.97秒）、包验证和首轮P0 25项通过；默认205项在第150项按用户要求中止。随后iOS语法检查发现上游mach_vm.h在iOS不受支持，已改为vm_region_64并补port释放/范围差值检查，14个共享C语法通过。扫描器另发现ZIP/split顺序会改变manifest优先级；旧二进制新增顺序回归2项失败的基线已保存，源码修复尚未重建验证。所有后续执行保持停止。
+
+新增大 DEX NativeActivity subclass 普通/JIT-less 打包保存重开、2048 ADR 只读数据布局、JNI 类初始化/URI/bitmap、NDK 字体/网络 ioctl/多播参数及 SVC saved-context 回归。SVC 限制已登记 guest 代码页并安全读取 PC，清除登记随取消执行/释放，浮点 trap 无 enable 时不假重试；测试不实际触发非法指令或崩溃。初次适配构建缺 Mach API 声明和测试日志链接依赖已修正，原失败日志保留。
+
 ## 2026-11-03：上游无新增，历史页恢复检查修复，build 28 已交付
 
 从干净 6089a9d 起步，两远端 fetch 无新增，main eeef229/macOS 6089a9d，upstream 89b0f87 与来源锁、祖先一致；前轮 CI 41390256558 success 复核。实际空闲 Product/PID 20372 经 CUA 首页确认后正常退出，无本项目 Runner/VM/构建；其他项目 UTM 不处理。核对 TLReport.nativeEngine、TLUnityView/project.yml、Mac CMake/能力与分发/输入暂停关闭、Play 和图形依赖后，继续 WebView didCommit 后异步历史恢复检查的具体开放项。

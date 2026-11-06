@@ -8,6 +8,7 @@ public class Game extends android.app.NativeActivity {
     public static native void finishNative();
     @Override protected void onCreate(android.os.Bundle state) {
         super.onCreate(state);
+        System.out.println("HUSK_NATIVEBOOT_REOPEN " + getSharedPreferences("nativeboot",0).getInt("destroyed",0));
         if (!getApplication().getClass().equals(Bootstrap.class)) throw new AssertionError("synthetic application");
         if ("java-create-failed".equals(System.getenv("HUSK_NATIVE_ACTIVITY_CASE"))) throw new IllegalStateException("fixture Java onCreate");
     }

@@ -74,6 +74,31 @@ static int coll_binary(void *u, int la, const void *a, int lb, const void *b)
     return r ? r : la - lb;
 }
 
+/* query_only alone can be disabled by guest SQL. A read-only WAL fallback
+   must also reject writes, ATTACH, schema changes and mutating file pragmas at
+   preparation time; this remains installed for the lifetime of the handle. */
+static int readonly_authorizer(void *ctx, int action, const char *one, const char *two,
+                               const char *database, const char *trigger)
+{
+    (void)ctx; (void)database; (void)trigger;
+    switch (action) {
+    case SQLITE_SELECT: case SQLITE_READ: case SQLITE_FUNCTION:
+    case SQLITE_TRANSACTION: case SQLITE_SAVEPOINT: case SQLITE_RECURSIVE:
+        return SQLITE_OK;
+    case SQLITE_PRAGMA:
+        if (!one) return SQLITE_DENY;
+        if (!strcasecmp(one, "query_only")) return two ? SQLITE_DENY : SQLITE_OK;
+        if (!strcasecmp(one, "wal_checkpoint") || !strcasecmp(one, "optimize") ||
+            !strcasecmp(one, "incremental_vacuum")) return SQLITE_DENY;
+        if (!two) return SQLITE_OK;
+        if (!strcasecmp(one, "table_info") || !strcasecmp(one, "table_xinfo") ||
+            !strcasecmp(one, "index_info") || !strcasecmp(one, "index_xinfo") ||
+            !strcasecmp(one, "index_list") || !strcasecmp(one, "foreign_key_list")) return SQLITE_OK;
+        return SQLITE_DENY;
+    default: return SQLITE_DENY;
+    }
+}
+
 /* open(path, flags): Android's OPEN_READONLY (1) / CREATE_IF_NECESSARY (0x10000000); the handle, or 0 (errorOf(0) says why) */
 static char g_open_error[512];
 NAT(S_open)
@@ -87,9 +112,9 @@ NAT(S_open)
     char resolved[1024];
     extern const char *tl_path_resolve(const char *path, char *buf, size_t n);
     if (path && strcmp(path, ":memory:")) path = tl_path_resolve(path, resolved, sizeof(resolved));
-    /* a WAL-mode file opened read-only: this SQLite cannot without its -shm file (CANTOPEN on the first statement), Android's can.
-       It is opened for writing and set query_only, which refuses every write as a read-only connection does (Defide's bundled
-       133 MB WAL database). */
+    /* Darwin's system SQLite still returns CANTOPEN for some WAL files without
+       sidecars. Retain the narrowly scoped upstream fallback, but enforce its
+       read-only contract below independently of mutable PRAGMA state. */
     bool wal_ro = false;
     if ((flags & SQLITE_OPEN_READONLY) && path && strcmp(path, ":memory:")) {
         FILE *f = fopen(path, "rb"); unsigned char h[20];
@@ -103,7 +128,11 @@ NAT(S_open)
     }
     sqlite3 *db = NULL;
     int rc = sqlite3_open_v2(path ? path : ":memory:", &db, flags, NULL);
-    if (rc == SQLITE_OK && wal_ro) sqlite3_exec(db, "PRAGMA query_only=1", NULL, NULL, NULL);
+    if (rc == SQLITE_OK && wal_ro) {
+        rc = sqlite3_db_config(db, SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, 1, NULL);
+        if (rc == SQLITE_OK) rc = sqlite3_exec(db, "PRAGMA query_only=1", NULL, NULL, NULL);
+        if (rc == SQLITE_OK) rc = sqlite3_set_authorizer(db, readonly_authorizer, NULL);
+    }
     if (rc != SQLITE_OK) {
         snprintf(g_open_error, sizeof(g_open_error), "%s (code %d)", db ? sqlite3_errmsg(db) : sqlite3_errstr(rc), rc);
         if (db) sqlite3_close(db);

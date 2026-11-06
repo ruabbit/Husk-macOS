@@ -15,6 +15,14 @@ int main(int argc,char **argv) {@autoreleasepool{
     __block int reports=0;NSError *error=nil;
     NSString *cache=mac_aot_prepare(@[source],nil,^(NSString *s){reports++;},&error);
     CHECK(cache&&reports>0&&!error);
+    NSString *manifest=[cache stringByAppendingPathComponent:@"manifest.json"];
+    NSData *manifestBytes=[NSData dataWithContentsOfFile:manifest];
+    NSMutableDictionary *record=[[NSJSONSerialization JSONObjectWithData:manifestBytes options:NSJSONReadingMutableContainers error:NULL] mutableCopy];
+    CHECK([record[@"source"][@"revision"] isEqual:@"mac-aot-4"] && [record[@"source"][@"format"] isEqual:@65546]);
+    record[@"source"][@"revision"]=@"mac-aot-3";
+    CHECK([[NSJSONSerialization dataWithJSONObject:record options:NSJSONWritingSortedKeys error:NULL] writeToFile:manifest atomically:YES]);
+    CHECK(!mac_aot_prepare(@[source],nil,nil,&error) && error); // Old layout identity cannot be reused.
+    CHECK([manifestBytes writeToFile:manifest atomically:YES]);error=nil;
     NSString *file=nil;
     for(NSString *name in [fm contentsOfDirectoryAtPath:cache error:NULL])if([name hasSuffix:@".dylib"]){file=[cache stringByAppendingPathComponent:name];break;}
     CHECK(file);

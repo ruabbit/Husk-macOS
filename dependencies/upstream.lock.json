@@ -2,114 +2,119 @@
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
   "previousRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
-  "integratedRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
-  "checkedOn": "2026-11-03",
-  "commitCount": 0,
-  "integration": "No upstream or origin changes after fetching both remotes. Existing 89b0f87 ancestry and fork main eeef229 remain intact. Fixed host/view preparation racing a committed cached history check: wait for that exact evaluation, reuse only a verified sealed-document save, otherwise run fresh saving, and keep failures/deadlines sticky. Controlled WebView regressions, default 200 tests, bundle verification and single-launch CUA passed for build 28; source 9ee971d pushed normally with both remote branch SHAs read back; CI 41561530389 passed build/package, 54 hosted core regressions and 25 P0 checks; hardware skipped. Daily automation prompt, original schedule and thread updated and read back exactly.",
+  "integratedRevision": "d92d0a112a391833584ac61f21296e566e404cb8",
+  "checkedOn": "2026-11-07",
+  "commitCount": 22,
+  "integration": "Upstream rewrote six previously integrated commits and added sixteen new commits. Range-diff and trees checked; ordinary fork merges preserve both histories. Mac compatibility adaptation and validation in progress; nothing pushed this round.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "resumed-migration-unverified",
   "release": {
     "tag": "3.3",
-    "revision": "9345aab21286735b5ba7acc9bf1c6b5fb864e075",
-    "note": "Integrated main 89b0f87 follows the 3.3 tag at 9345aab with the SideStore source update."
+    "revision": "6e7f32572f19e7085686d5dd71ca58c02b725177",
+    "previousRevision": "9345aab21286735b5ba7acc9bf1c6b5fb864e075",
+    "note": "Remote 3.3 tag was rewritten with the equivalent upstream history; read back directly on 2026-11-04. Integrated d92d0a1 contains later compatibility commits."
   },
   "candidate": {
     "version": "3.3.0",
-    "build": "28",
-    "deliveryStatus": "verified-and-pushed",
-    "bundleMachO": 18,
-    "javaResources": 407,
-    "localizations": {
-      "en": {
-        "entries": 784,
-        "sha256": "d395cbfbafc63ecde4ff621367764fe6694e9aa583867dcccea2f6075e707bca"
-      },
-      "zh-Hans": {
-        "entries": 784,
-        "sha256": "2a0634fe72ef70a437f832a7ef862b3bc910d129078cd993b1214b31ae35e56a"
-      }
-    },
-    "frameworkSHA256": "a3670652d53b629942684e0a411589ce5d0c7d09496258da4be40e73b0ca36bc",
-    "defaultTests": 200,
-    "defaultTestSeconds": 329.88,
-    "pid": 76748,
-    "gui": "Final build 28 Product launched once through CUA as PID 76748. Full executable path, AX and screenshots confirmed original icon/TabView, all 11 library entries and icons, selected app JIT-less off, fully wrapped language/import-save help in general Settings, and the complete separate Play without JIT sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Visible inspection used the existing English interface; other locale/device acceptance remains separate.",
-    "appSHA256": "865d22b3a03b9d8053e8d57ffe599ab7ac74e2d5a42a379ddcb347adb89bdd8a",
-    "nativeRunnerSHA256": "409a38c8a326d7d29b821725cfbe461e9abe28304b26e8835f4104075bda9287",
-    "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
-    "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
-    "productSourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
-    "ci": {
-      "run": 41561530389,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389",
-      "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 54,
-      "hostedCoreTestSeconds": 50.06,
-      "p0Checks": 25,
-      "buildAndCoreSeconds": 255
-    }
+    "build": "29",
+    "deliveryStatus": "validated-checkpoint-not-final-delivery",
+    "gui": "Not launched; final GUI verification will follow the latest upstream integration."
   },
   "lastCheck": {
-    "upstreamNewCommits": 0,
-    "upstreamChangedPaths": 0,
+    "upstreamNewCommits": 16,
+    "upstreamRewrittenCommits": 6,
+    "upstreamChangedPaths": 712,
+    "generatedClassPaths": 576,
     "originNewCommits": 0,
-    "mainRevision": "eeef229eae49a7136b71b67b4f7120e3d5c29eec",
-    "macOSBaseRevision": "6089a9dfeef26cc450f0dc30cec1a830c2ed85ec",
+    "mainRevision": "59c38af8bedd2e5adf1d5de4e33f4bc3dda5a7ef",
+    "macOSBaseRevision": "be7c1dd3b1a2358cefeb0486cb484cc2372d7b6f",
+    "mergeRevision": "c5282f89f3d002a85abe60d8f7d0b8b888652e8e",
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
-    "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
-    "previousCI": 41390256558,
-    "blocker": null,
-    "sharedIOSSyntax": {
-      "objcFiles": 1,
-      "syntaxOnly": true,
-      "fullBuild": false,
-      "device": false
+    "newCandidateRestarted": false,
+    "pushed": false,
+    "remoteSHAsVerified": false,
+    "previousCI": 41561530389,
+    "blocker": "User resumed migration on 2026-11-07. Complete Runner background activation and fault-stop protection, then revalidate the unfinished candidate before delivery.",
+    "conflicts": {
+      "main": 4,
+      "macOS": 4
     },
-    "automationUpdatedAndReadBack": true,
-    "targetedTests": 15,
-    "targetedTestSeconds": 57.63,
-    "additionalTimeoutTest": {
-      "tests": 1,
-      "seconds": 12.21
+    "interruptedDefaultSuite": {
+      "total": 205,
+      "completedPassed": 149,
+      "interruptedTest": 150,
+      "interruptedTestName": "macos-java-web-navigation-rejected",
+      "schedulerExitStatus": 143,
+      "reason": "user-requested-stop"
     },
-    "conflicts": 0,
-    "defaultTests": 200,
-    "defaultTestSeconds": 329.88,
-    "javaWebTests": 58,
-    "javaWebTestSeconds": 189.44,
-    "httpTests": 10,
-    "httpTestSeconds": 41.59,
-    "aotPackagedSessions": 12,
-    "aotPackagedSessionSeconds": 28.85,
-    "newHistoryCheckTests": 4,
-    "newHistoryCheckTestSeconds": 19.06,
-    "bundleBinaryDigestsMatched": 18,
-    "localStandaloneP0Rerun": false,
-    "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
-    "finalFetchChanged": false,
-    "ci": {
-      "run": 41561530389,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389",
-      "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
-      "statusAtLastCheck": "completed",
-      "conclusionAtLastCheck": "success",
-      "statusAtDelivery": "completed",
-      "conclusionAtDelivery": "success",
-      "hardware": "skipped",
-      "hostedCoreTests": 54,
-      "hostedCoreTestSeconds": 50.06,
-      "p0Checks": 25,
-      "buildAndCoreSeconds": 255
+    "executionHold": {
+      "since": "2026-11-04",
+      "active": false,
+      "requiresExplicitUserResumption": false,
+      "resumedOn": "2026-11-07",
+      "resumptionInstruction": "填补空缺，完成迁移。对于macOS无用的iOS专属功能你直接放弃",
+      "restartGate": "Resolve background activation and fail-stop on unexpected Runner exits before resuming the full suite",
+      "disallowedUntilResumption": [
+        "CTest and Runner tests",
+        "build or packaging",
+        "Husk and any Runner launch"
+      ],
+      "projectProcessesStopped": true,
+      "otherProjectVMUntouched": true,
+      "readOnlyEvidence": "build/logs/current-upstream-nov4-stop-readonly-check.json",
+      "systemLogEvidence": "build/logs/current-upstream-nov4-system-stop-diagnostics.log",
+      "signalReportAbsenceDoesNotExcludeFaults": true
+    },
+    "checkedOn": "2026-11-07",
+    "readOnlyRemoteObservation": {
+      "observedAt": "2026-11-07",
+      "mainRevision": "afe83d45b31194c4cc9f7b3db7ec2c757db8346e",
+      "releaseTag": "3.4",
+      "releaseRevision": "acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a",
+      "historicalTag3_0": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139",
+      "sinceIntegratedRevision": "d92d0a112a391833584ac61f21296e566e404cb8",
+      "pendingToReleaseTag": {
+        "commits": 7,
+        "paths": 36
+      },
+      "pendingToMain": {
+        "commits": 8,
+        "paths": 37
+      },
+      "localSourceFrom3_0": {
+        "commits": 96,
+        "paths": 851,
+        "note": "full local Git ancestry/diff counts; GitHub compare caps its file list at 300; not a count of independent Mac user features"
+      },
+      "deliveredSourceFrom3_0": {
+        "commits": 80,
+        "paths": 167,
+        "note": "full local Git counts through the delivered source 89b0f87; not a count of independent Mac user features"
+      },
+      "originDeliveredThrough": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
+      "status": "observed-only-not-merged-or-validated",
+      "themes": [
+        "JNI initialization and iOS 27 build fix",
+        "Japanese localization",
+        "short-address-space thread stacks and Unity systemallocator",
+        "Unity Swappy/vsync pacing",
+        "Godot 3 touch natives and empty MIDI list",
+        "3.4 release/project regeneration and altsource metadata"
+      ]
+    },
+    "upstreamPendingAfterIntegratedRevision": 8,
+    "upstreamPendingPathsAfterIntegratedRevision": 37,
+    "upstreamPendingReleaseTag": "3.4",
+    "resumedValidation": {
+      "defaultTests": 205,
+      "passed": 205,
+      "seconds": 469.56,
+      "runnerSessions": 151,
+      "signalOrHandlerFaults": 0,
+      "guiStarted": false,
+      "evidence": "build/logs/current-migration-session-audit.json"
     }
   },
   "forkContribution": {
@@ -306,7 +311,9 @@
     "staticCodeAliases": "Only exact source ELF bytes and an unambiguous caller namespace may map pure signed code pages. PT_LOAD translates file offsets; writable/mixed pages, bad alignment/range and unknown copies are rejected. Fixed mapping requires an existing guest anonymous reservation; alias max protection is RX, and anon bookkeeping excludes replaced/released signed pages.",
     "luaInterpreter": "Java, Java NativeActivity and SDL profiles install the shared interpreter hook under TL_NO_XMEM. Real ELF/DEX ABI fixtures verify openlibs/setmode ordering before app code; real third-party LuaJIT/JNA apps remain unverified.",
     "conversionCancellation": "Stop after aot-progress and before aot-ready reaps preparation, retains the prior checkpoint, publishes no partial cache and emits no storage-closed. A later process recovers temporary preparation and completes normal save/warm-cache reopen. Abrupt host/process loss remains open.",
-    "unwind": "Validate copied pages, overflow and complete header/FDE/CIE patch plan before publishing changes. Literal loads return to the correct PC, and Mono narrowing retains ELF PLT. Unsupported or malformed unwind tables reject loading."
+    "unwind": "Validate copied pages, overflow and complete header/FDE/CIE patch plan before publishing changes. Literal loads return to the correct PC, and Mono narrowing retains ELF PLT. Unsupported or malformed unwind tables reject loading.",
+    "cacheRevision": "mac-aot-4",
+    "forkAOTABI": 65546
   },
   "ciAttempts": [
     {
@@ -411,7 +418,7 @@
   },
   "previousCandidate": {
     "version": "3.3.0",
-    "build": "27",
+    "build": "28",
     "deliveryStatus": "verified-and-pushed",
     "bundleMachO": 18,
     "javaResources": 407,
@@ -426,29 +433,29 @@
       }
     },
     "frameworkSHA256": "a3670652d53b629942684e0a411589ce5d0c7d09496258da4be40e73b0ca36bc",
-    "defaultTests": 196,
-    "defaultTestSeconds": 308.42,
-    "pid": 20372,
-    "gui": "Final build 27 Product launched once through CUA as PID 20372. Full executable path, AX and screenshots confirmed original icon/TabView, all 11 library entries and icons, selected app JIT-less off, fully wrapped language/import-save help in general Settings, and the complete separate Play without JIT sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Visible inspection used the existing English interface; other locale/device acceptance remains separate.",
-    "appSHA256": "51c4b33370f46084bc76d94cecf0a91b27f7491ce8e5d19e5bd033c3378cd194",
-    "nativeRunnerSHA256": "1be5de3fb985ccd11eaf5c4c8d3c1f3d54fcc2524099be0f4f44f205b9811992",
+    "defaultTests": 200,
+    "defaultTestSeconds": 329.88,
+    "pid": 76748,
+    "gui": "Final build 28 Product launched once through CUA as PID 76748. Full executable path, AX and screenshots confirmed original icon/TabView, all 11 library entries and icons, selected app JIT-less off, fully wrapped language/import-save help in general Settings, and the complete separate Play without JIT sheet. Closed Settings and returned Home. No preferences changed, user games/VMs launched, authentication or uploads. Visible inspection used the existing English interface; other locale/device acceptance remains separate.",
+    "appSHA256": "865d22b3a03b9d8053e8d57ffe599ab7ac74e2d5a42a379ddcb347adb89bdd8a",
+    "nativeRunnerSHA256": "409a38c8a326d7d29b821725cfbe461e9abe28304b26e8835f4104075bda9287",
     "webRunnerSHA256": "a1714d4c40618b7cf2979fa23a7de473fabd0edb126d42450f3017d9279d32a6",
     "vmRunnerSHA256": "b6d73a49a9e3be6d621625a6d0ff9f7915cbaec96d17063f7ace09a6b1040c4a",
-    "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
-    "productSourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+    "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
+    "productSourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
     "ci": {
-      "run": 41390256558,
-      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41390256558",
-      "sourceRevision": "d121f6e10bdd3614110547b3b2511d9339aebed3",
+      "run": 41561530389,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/41561530389",
+      "sourceRevision": "9ee971d919618cb55d2e229404470ebd5aa3be24",
       "statusAtLastCheck": "completed",
       "conclusionAtLastCheck": "success",
       "statusAtDelivery": "completed",
       "conclusionAtDelivery": "success",
       "hardware": "skipped",
       "hostedCoreTests": 54,
-      "hostedCoreTestSeconds": 53.24,
+      "hostedCoreTestSeconds": 50.06,
       "p0Checks": 25,
-      "buildAndCoreSeconds": 365
+      "buildAndCoreSeconds": 255
     }
   },
   "arm32Integration": {
@@ -495,5 +502,14 @@
     "removedImplicitExternalCheckoutWrite": true,
     "offlineAppsVerified": 5,
     "networkPublishingPerformed": false
+  },
+  "observedRemoteRelease": {
+    "main": "afe83d45b31194c4cc9f7b3db7ec2c757db8346e",
+    "tag": "3.4",
+    "tagRevision": "acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a",
+    "previousTag": "3.3",
+    "previousTagRevision": "6e7f32572f19e7085686d5dd71ca58c02b725177",
+    "historical3_0Tag": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139",
+    "observedBy": "read-only git ls-remote; local upstream ref not updated"
   }
 }

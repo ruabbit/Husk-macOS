@@ -544,6 +544,7 @@ static int androidKey(unsigned code)
 {
     OrbitSave save={0};if(self.loaded&&!guestRuntime())self.save(&save);
     NSMutableDictionary *detail=[@{@"game":saveDictionary(save),@"headless":@(headless),@"windowVisible":@(self.window.visible),
+        @"activationPolicy":@(NSApp.activationPolicy),@"applicationActive":@(NSApp.active),
         @"jitless":@(jitless),@"executableRegionBytes":@(tl_xmem_size()),@"runtime":runtimeName(),@"presentedFrames":@(tl_egl_frames_presented()+tl_vk_frames_presented()),@"surfaceWidth":@(surfaceWidth),@"surfaceHeight":@(surfaceHeight),@"pauseWhenInactive":@(pauseInactive),@"audioFrames":@(guestRuntime()?tl_audio_frames():self.audio.sampleFrames),@"audioNonzero":@(guestRuntime()?tl_audio_nonzero_samples():self.audio.nonzeroSamples),@"controllers":@(GCController.controllers.count),
         @"keys":@(self.keyEvents),@"pointer":@(self.pointerEvents),@"lastClick":self.lastClick?:@{},@"controller":@(self.controllerEvents),@"textActive":@(self.textInput.textInputActive),@"captureRequested":@(self.captureRequested),@"cursorCaptured":@(self.cursorCaptured),@"heldKeys":@(self.heldKeys.count)} mutableCopy];
     // Automation status replies must be distinguishable from periodic heartbeats.
@@ -1015,7 +1016,13 @@ int main(int argc,const char **argv)
         NSMutableDictionary *arguments=[[defaults volatileDomainForName:NSArgumentDomain] mutableCopy]?:[NSMutableDictionary new];
         arguments[@"ApplePersistenceIgnoreState"]=@YES;arguments[@"NSQuitAlwaysKeepsWindows"]=@NO;
         [defaults setVolatileDomain:arguments forName:NSArgumentDomain];
-        if(!headless){[NSApplication sharedApplication];[NSApp disableRelaunchOnLogin];[NSApp setActivationPolicy:hiddenWindow?NSApplicationActivationPolicyProhibited:NSApplicationActivationPolicyRegular];NSApp.delegate=runner;}
+        // WebKit and guest UI code can initialize AppKit even without a host
+        // window. Establish the policy before either path starts, so each
+        // background session cannot briefly become a foreground Dock app.
+        [NSApplication sharedApplication];[NSApp disableRelaunchOnLogin];
+        NSApplicationActivationPolicy policy=(headless||hiddenWindow)?NSApplicationActivationPolicyProhibited:NSApplicationActivationPolicyRegular;
+        if(![NSApp setActivationPolicy:policy]){fprintf(stderr,"cannot establish Runner activation policy\n");return 71;}
+        if(!headless)NSApp.delegate=runner;
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{
             char line[8192];while(fgets(line,sizeof(line),stdin)) {@autoreleasepool{
                 NSData *data=[NSData dataWithBytes:line length:strlen(line)];

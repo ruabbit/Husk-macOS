@@ -1,5 +1,52 @@
 # 上游功能与 macOS 接入现况
 
+## 2026-11-07：恢复迁移范围
+
+用户已明确要求填补空缺并完成迁移。iOS独有的StikDebug/JIT配对与attach、TrollStore/SideStore/IPA分发、p12证书导入、iPhone/iPad专用界面及iOS签名/真机发行不再是macOS迁移交付项；保留上游共享源码，不额外移植无用流程。共享JNI/内存/图形/Java修复仍需Mac接入。PS4、ARM32/AOSP/VM和正常窗口/输入/存档关闭仍是开放产品链路，不能划为iOS专属。先处理Runner异常退出与后台激活，再恢复受保护的验证和交付。
+
+## 2026-11-07：远端已到 3.4，当前只读、尚未合入
+
+远端只读引用显示 upstream `main=afe83d45`，最新标签 `3.4=acfd7bcb`；`3.0=cffaf8b7` 是 2026-10-17 的历史标签。当前来源锁/本地合入点是 `d92d0a1`，所以 `d92d0a1..3.4` 的 **7 提交/36 路径**（到 main 为 **8/37**）全部列为待合并，不计入已接入功能。
+
+从3.0到已交付来源89b0f87为80个上游提交/167个净变更路径，到本地d92d0a1为96提交/851路径，均由本机Git读取。GitHub compare的300文件上限不能当作总量。3.0祖先已包含在两条origin分支；后续已交付Mac范围含账户/资料库、Godot/Cocos/Flutter/Java运行接线、AOT/JIT-less/Unity/ELF、WebView/Play详情、受控ARM32/Binder/JobService/AOSP准备层。各项保留受控测试、真实应用和实体设备边界，不能由版本号或提交数推导全部功能完成。
+
+| 用户功能 | 已进入macOS的部分 | 当前缺口 |
+| --- | --- | --- |
+| 3.0首页、资料库与外观 | 原生首页选中应用、启动/显示窗口、应用图标和资料库；随3.1后续变更保留原图标/TabView | 不等同于逐像素复刻iOS页面；剩余动态文本本地化见下文 |
+| Android引擎与新Java框架 | Unity/Minecraft、Cocos/FMOD、Godot4/NativeBridge、GameMaker、SDL/DXVK、Rockstar、Unreal/NativeActivity；Python/Flutter/libGDX/.NET等走Java；独立窗口/输入/暂停/关闭已接线 | 受控ELF/DEX不等于上游宣称的数百个游戏逐一兼容；各真实失败样本仍开放 |
+| 导入、OBB、文字与字体 | Store/XAPK OBB、48APK签名分包、流式取消、受限文件选择；旧Unity文本输入、固定CJK字体 | 实体IME/手柄与认证Play下载另验；不是上游每种Android服务的完整实现 |
+| 3.1至3.3扩展 | Geode缓存/注入、Java内嵌WebView与独立WebRunner、账户/Play详情、中英文资源、JIT-less转换/签名/加载和受控保存重开 | 真实Geode模组、第三方HTTP插件、账号/Google认证、真实JIT-less游戏尚需独立验收 |
+| PS4 | ConsoleHostRuntime/MacConsoleProbe及宿主ABI、JIT区域、输入/暂停/停止契约检查 | **真实核心未打包；资料库导入、独立ConsoleRunner、窗口和worker/storage完成协议未交付**，不是可忽略的iOS专属项 |
+| ARM32 / AOSP / VM | 解释器与Binder/AOSP准备源码、独立VM框架已有部分实现 | ARM32产品入口仍关闭、完整AOSP系统未完成；VM游戏、存档与发行门槛仍开放 |
+
+相对d92d0a1的3.4待合并增量为：JNI对象分配前初始化/构建修复；日文本地化；短地址空间线程栈和Unity -systemallocator；Unity Swappy/vsync；Godot3触摸native与空MIDI列表；release/project regeneration及altsource metadata。这些增量尚未合入。3.4发布说明中其他Java/KeyInfo/WAL/字体/NativeActivity修复有一部分已在本地build29源码，不能整批记为缺失，也不能因为部分针对性通过就记为已交付。上游3.4说明中的约97%/472个F-Droid、约90%/169个Play应用是上游自己的Mac样本结果，不是本fork兼容率；其Known Issues仍列Godot3触摸、无Java GC、浏览器多进程和Play服务等限制。本轮继续保持停止。
+
+## 2026-11-04：用户要求停止执行，build 29 未交付
+
+用户反馈 NativeRunner 反复闪退后，已停止本轮 CTest、WebView测试与NativeRunner，复核无本项目残留进程。默认205项仅完成前149项，第150项被中止；最终默认验证、GUI启动、提交和推送未完成。最后扫描器顺序/vm_region_64源码修改尚未重建，不能沿用之前包验证结果。保留全部本地工作与失败证据，用户明确恢复执行前禁止自动构建/打包、跑测试或启动候选/Runner。
+
+只读检查有amfid ad-hoc签名记录；当前主包/Runner签名完整、三个检查对象无quarantine属性，最近24小时匹配名称的系统诊断报告为空。这些结果不排除崩溃或系统执行限制：Runner既有信号处理器会记录后以128+信号退出。headless分支未显式禁止AppKit激活属于待核对线索，未做运行验证；不能以此把用户观察定性为正常。详细停止状态与证据见progress.md首节。
+
+## 2026-11-04：重写历史后的兼容性接入，以下为停止前完成的部分与待验证修改
+
+上游 main 从 `89b0f87` 强制更新为 `d92d0a1`，共同祖先 `d30e12e`。range-diff 逐一对应原六提交，重写本身只移除两份本地规则/说明文件；其后新增十六提交，净变更712路径（576为生成类）。fork保留原历史，普通合并 main=`59c38af8`、macOS=`c5282f89`。main与Mac各四文件冲突逐处处理，保留Vulkan配置、Python构建入口、线程所有权/失败关闭、AOT地址边界与ELF身份；未用ours策略或force push。
+
+重新对照 TLReport.nativeEngine、TLUnityView、project.yml、Store/登录和图形依赖。共享扫描、JNI/loader/bionic/Dalvik源已经编入 Mac CMake；Models、MacJavaRuntime和NativeRunner使用同一分类，Java NativeActivity保持AppMain/独立进程、固定画布、输入/暂停、正常销毁/storage-closed。Store仍只请求arm64；本批没有Play认证或图形pin变化。
+
+| 本批增量 | macOS 接线和验证内容 | 保留边界 |
+| --- | --- | --- |
+| NativeActivity subclass | 大于64KiB真实DEX的子类扫描为Java；小DEX继续原入口。修正ZIP/split顺序影响manifest优先级，保留直接NativeActivity优先。新增签名split APK普通/JIT-less打包会话，核对真实Application/ClassLoader/provider/native入口、输入、默认失焦继续、暂停恢复、正常销毁与第二进程读回存档 | 控制样本不是商业游戏；上游阈值为启发式，ARM32仍不可产品启动 |
+| AOT v10/库表发布 | mac-aot-4 / fork ABI65546；acquire/release库表，保留数据/执行地址与范围验证。2048个指向只读数据的ADR、现有Go/Mono/混合页/异常展开表、旧缓存身份拒绝 | 不等于真实IL2CPP异常catch、动态库/模组或进程丢失恢复 |
+| SVC/浮点trap/futex | 普通模式生成代码登记页范围，PC由安全VM读取，仅处理guest；撤销执行/释放会清登记。FP无enable时不循环重试；WAKE_OP校验参数/操作/比较在修改前。使用保存上下文验证转换/PC/结果及host/stale/overflow拒绝，不注入非法指令或崩溃 | 原始信号的真实第三方应用运行未验收；requeue仍沿用唤醒近似，非完整Linux futex语义 |
+| KeyInfo/密钥工厂 | 复用opaque导入句柄和当前Entry身份，准确导入来源、用途/有效期/GCM/NoPadding、软件安全等级；不可变日期/数组，不以等值字节接受外来key，拒绝过期句柄和私钥spec导出。真实DEX/多进程AES持久化回归扩展 | 旧软件生成key没有完整KeyGenParameterSpec策略执行；硬件/认证/Play密钥服务仍未实现，不能伪造 |
+| SQLite WAL只读 | 原query_only回退能被SQL关闭已复现。直接READONLY在本机缺sidecar时报CANTOPEN，故保留窄范围回退，检查query_only设置成功并持续authorizer拒绝写入/DDL/ATTACH/写PRAGMA，关闭不checkpoint。真实DEX读正常checkpoint后文件及含未checkpoint提交的WAL副本，核对内容和原DB字节 | 有明确写限制的读取连接，不声称文件系统绝无sidecar写入；未改用户数据库 |
+| JNI/boot DEX与框架 | GetMethod/Field及static变体触发真实DEX初始化；stored boot DEX保留mmap至进程退出并释放ZIP索引/fd。DocumentsContract编码ID/tree/search、Color sRGB、ALPHA_8/RGB565缓冲区、ContextWrapper路径转发与CREATOR类型数组有专门回归 | 生成CREATOR仍是stand-in空对象/类型数组，非完整Parcel读写；Documents URI构建不授予文件权限，原授权负向回归保留 |
+| NDK字体/网络/JSC | 实际打包字体枚举、路径可读和matcher对象生命周期；loopback接口ioctl和IPv4/IPv6多播参数转换，无网络发包。JavaScriptCore关闭JIT选项，保留每游戏JIT-less限制 | FontMatcher仍以Roboto回退，family/text/locales/variable axes非完整匹配；真实Firefox/React Native/UPnP未验收 |
+
+首轮KeyStore扩展通过。WAL fixture对Darwin空WAL保留行为的假设、query_only可写绕过、直接READONLY的CANTOPEN，以及新用例未列入测试成功名单的误判均保留具体日志；适配构建的API声明/测试日志链接错误已修正。iOS语法检查另发现上游mach_vm.h不可用，改vm_region_64后14个共享C文件语法通过（无链接/签名/设备证据）；首轮针对性21/21（18.97秒）、P0 25项和包检查通过。当前最终全套/GUI启动/推送仍待完成。证据使用 `build/logs/current-upstream-nov4-*`。
+
+继续开放：未封闭新历史文档检查/关闭交叠、Activity replacement/recreate更多顺序、加载中/跨源及真实第三方HTTP插件；真实游戏/JNA/Lua/IL2CPP、实体IME/手柄/电源、个人账号/Play、VM/P6。之前build27/28已交付的WebView顺序回归保持，不重新记成未实现；本轮新增上游接入优先于这些后续验证。
+
 ## 2026-11-03：历史恢复检查与关闭交叠，build 28 已交付
 
 两远端 fetch 无新增；upstream/main=`89b0f87`、fork main=`eeef229`，Git 祖先与来源锁一致，从干净 macOS=`6089a9d` 起步。重新对照 TLReport.nativeEngine、TLUnityView/project.yml、CMake 源文件、资料库能力、独立 Runner 分发/输入/暂停/关闭、Store 登录与图形 pin。没有上游功能增量，ARM32 产品入口和完整 AOSP、真实游戏/服务/设备等既有边界保留。

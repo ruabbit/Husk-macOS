@@ -29,6 +29,24 @@ int main(int argc,char **argv) { @autoreleasepool {
         CHECK(!memcmp(header,expected.bytes,sizeof(header)));
     }
     CHECK(guest_open("/system/fonts/husk-nonexistent-font.ttf",0)<0);
+    void *(*iterator_open)(void)=tl_bionic_find("ASystemFontIterator_open");
+    void *(*iterator_next)(void *)=tl_bionic_find("ASystemFontIterator_next");
+    void (*iterator_close)(void *)=tl_bionic_find("ASystemFontIterator_close");
+    const char *(*font_path)(void *)=tl_bionic_find("AFont_getFontFilePath");
+    void (*font_close)(void *)=tl_bionic_find("AFont_close");
+    CHECK(iterator_open && iterator_next && iterator_close && font_path && font_close);
+    void *iterator=iterator_open();CHECK(iterator);NSUInteger count=0;void *font;
+    while((font=iterator_next(iterator))){int file=guest_open(font_path(font),0);CHECK(file>=0);guest_close(file);font_close(font);count++;}
+    CHECK(count==fonts.count && !iterator_next(iterator));iterator_close(iterator);
+    void *(*matcher_create)(void)=tl_bionic_find("AFontMatcher_create");
+    void (*matcher_style)(void *,uint16_t,bool)=tl_bionic_find("AFontMatcher_setStyle");
+    void *(*matcher_match)(void *,const char *,const uint16_t *,uint32_t,uint32_t *)=tl_bionic_find("AFontMatcher_match");
+    void (*matcher_destroy)(void *)=tl_bionic_find("AFontMatcher_destroy");
+    CHECK(matcher_create && matcher_style && matcher_match && matcher_destroy);
+    void *matcher=matcher_create();CHECK(matcher);matcher_style(matcher,700,true);
+    uint16_t text[]={65,66};uint32_t run=0;font=matcher_match(matcher,"sans-serif",text,2,&run);
+    CHECK(font && run==2);int fontfd=guest_open(font_path(font),0);CHECK(fontfd>=0);guest_close(fontfd);
+    font_close(font);matcher_destroy(matcher);
     NSString *temporary=[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
     NSString *obb=[temporary stringByAppendingPathComponent:@"obb"];
     CHECK([NSFileManager.defaultManager createDirectoryAtPath:obb withIntermediateDirectories:YES attributes:nil error:NULL]);

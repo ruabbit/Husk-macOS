@@ -44,6 +44,19 @@ import Darwin
                     "sourceName": "test.apk", "apkNames": ["test.apk"], "digest": "test", "engine": "NativeActivity",
                     "abis": ["arm64-v8a"], "settings": ["muted": true]]
                 let game = try JSONDecoder().decode(LibraryGame.self, from: JSONSerialization.data(withJSONObject: object))
+                if title == "flood" {
+                    let latch = root.appendingPathComponent("fault.json")
+                    let previous = ProcessInfo.processInfo.environment["HUSK_TEST_FAILURE_LATCH"]
+                    try Data("{\"exitStatus\":139}".utf8).write(to: latch)
+                    setenv("HUSK_TEST_FAILURE_LATCH", latch.path, 1)
+                    var refused = false
+                    do {
+                        try session.start(executable: URL(fileURLWithPath: args[0]), game: game, apk: root.appendingPathComponent("test.apk"),
+                                          checkpoint: root.appendingPathComponent("checkpoint.json"), logs: root, headless: true)
+                    } catch { refused = error.localizedDescription.contains("异常退出停止") }
+                    if let previous { setenv("HUSK_TEST_FAILURE_LATCH", previous, 1) } else { unsetenv("HUSK_TEST_FAILURE_LATCH") }
+                    try check(refused && !session.active && session.pid == 0, "recorded Runner fault blocks the next launch without fault injection")
+                }
                 try session.start(executable: URL(fileURLWithPath: args[0]), game: game, apk: root.appendingPathComponent("test.apk"),
                                   checkpoint: root.appendingPathComponent("checkpoint.json"), logs: root, headless: true)
                 let started = Date()

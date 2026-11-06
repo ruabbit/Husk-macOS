@@ -457,6 +457,10 @@ foreach(order app-first system-first)
     set_tests_properties(java-runtime-crypto-${order} PROPERTIES TIMEOUT 60 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
 endforeach()
 add_executable(MacSystemResourceTests tests/macos/SystemResources.m ${MAC}/NativeRunner/MacJavaRuntime.m ${MAC}/NativeRunner/MacDiagnostics.c)
+add_executable(RuntimeCompatTests tests/macos/RuntimeCompat.c ${MAC}/NativeRunner/MacDiagnostics.c)
+target_link_libraries(RuntimeCompatTests PRIVATE NativeRuntime)
+add_test(NAME core-runtime-compat33 COMMAND RuntimeCompatTests)
+set_tests_properties(core-runtime-compat33 PROPERTIES TIMEOUT 20)
 target_include_directories(MacSystemResourceTests PRIVATE ${MAC}/NativeRunner)
 target_compile_options(MacSystemResourceTests PRIVATE -fobjc-arc)
 target_link_libraries(MacSystemResourceTests PRIVATE NativeRuntime)
@@ -465,7 +469,7 @@ add_test(NAME macos-system-resources COMMAND MacSystemResourceTests ${HUSK_JAVA_
 set_tests_properties(macos-system-resources PROPERTIES TIMEOUT 30)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaTests"
-    DEPENDS tests/macos/java/JobChecks.java tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java tests/macos/fixture/runtime_java.c tests/macos/fixture/runtime_plugin.c scripts/build_java_framework.py VERBATIM)
+    DEPENDS tests/macos/java/Compat33Checks.java tests/macos/java/ReadOnlyWALChecks.java tests/macos/java/JobChecks.java tests/macos/java/Runtime31Checks.java tests/macos/prepare_java_case.py tests/macos/java/LifecycleActivity.java tests/macos/java/FrameworkChecks.java tests/macos/java/HostEnvironmentChecks.java tests/macos/java/DocumentChecks.java tests/macos/java/MissingOptional.java tests/macos/java/unicode/例.java tests/macos/fixture/runtime_java.c tests/macos/fixture/runtime_plugin.c scripts/build_java_framework.py VERBATIM)
 add_custom_target(JavaLifecycleFixture DEPENDS "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk")
 add_executable(JavaLifecycleTests tests/macos/JavaLifecycle.c ${MAC}/NativeRunner/MacDiagnostics.c)
 target_include_directories(JavaLifecycleTests PRIVATE ${MAC}/NativeRunner)
@@ -473,7 +477,7 @@ target_link_libraries(JavaLifecycleTests PRIVATE NativeRuntime)
 add_dependencies(JavaLifecycleTests JavaRuntimeResources JavaLifecycleFixture)
 add_custom_command(TARGET JavaLifecycleTests POST_BUILD COMMAND codesign --force --sign - --timestamp=none --options runtime
     --entitlements ${MAC}/NativeRunner/NativeRunner.development.entitlements "$<TARGET_FILE:JavaLifecycleTests>" VERBATIM)
-foreach(case runtime31 normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework documents)
+foreach(case compat33 readonly-wal runtime31 normal destroy-failed storage-failed live-thread sqlite-uncommitted controller preferences-idle framework documents)
     add_test(NAME java-lifecycle-${case} COMMAND JavaLifecycleTests "${HUSK_JAVA_RUNTIME}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk"
         "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/JavaLifecycle" ${case})
     set_tests_properties(java-lifecycle-${case} PROPERTIES TIMEOUT 30 ENVIRONMENT "TL_AUDIO_MUTE=1;TL_XMEM_MIB=1024")
@@ -498,12 +502,12 @@ add_test(NAME java-keystore-import-persistence COMMAND ${Python3_EXECUTABLE} ${C
     "${HUSK_DEPS}/lib/libANGLE-shared.dylib" "${CMAKE_BINARY_DIR}/TestResults/KeyStore")
 set_tests_properties(java-keystore-import-persistence PROPERTIES TIMEOUT 180)
 add_executable(MacJavaSessionTests tests/macos/JavaSession.swift)
-add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks"
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/NativeBootstrap/LargeStartup.apks"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_native_bootstrap.py "${CMAKE_BINARY_DIR}/NativeBootstrap"
     DEPENDS tests/macos/prepare_native_bootstrap.py tests/macos/java/nativeactivity/Bootstrap.java tests/macos/java/nativeactivity/Provider.java tests/macos/java/nativeactivity/Factory.java
         tests/macos/java/nativeactivity/Game.java tests/macos/fixture/native_bootstrap.c tests/macos/fixture/java_nativeactivity.c
         ${NEXT}/husk-tl-nativeactivity-abi.h VERBATIM)
-add_custom_target(NativeBootstrapFixture DEPENDS "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks")
+add_custom_target(NativeBootstrapFixture DEPENDS "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/split.apk" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/NativeBootstrap/LargeStartup.apks")
 
 # Shared AOT conversion tool; NativeRunner uses the same converter and loader.
 add_executable(Elf2MachOProbe tools/elf2macho-test.c)
@@ -551,6 +555,9 @@ foreach(language en zh-Hans)
 endforeach()
 add_test(NAME macos-java-nativeactivity-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/Startup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity)
 set_tests_properties(macos-java-nativeactivity-session PROPERTIES TIMEOUT 95)
+add_test(NAME macos-java-nativeactivity-subclass-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/LargeStartup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity-java)
+add_test(NAME macos-aot-nativeactivity-subclass-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeBootstrap/LargeStartup.apks" "${CMAKE_BINARY_DIR}/TestResults" nativeactivity-java-jitless)
+set_tests_properties(macos-java-nativeactivity-subclass-session macos-aot-nativeactivity-subclass-session PROPERTIES TIMEOUT 240)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/JavaWebTests/WebStorage.apk"
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/macos/prepare_java_case.py "${CMAKE_BINARY_DIR}/JavaWebTests" web
     DEPENDS tests/macos/prepare_java_case.py tests/macos/java/WebStorageActivity.java tests/macos/java/storage.html

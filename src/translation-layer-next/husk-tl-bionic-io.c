@@ -47,7 +47,7 @@ bool tl_ld_covers(const void *addr, size_t bytes);
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
 #include <time.h>
 #include <search.h>
 #include <dlfcn.h>
@@ -1162,6 +1162,7 @@ static pthread_mutex_t g_anon_lock = PTHREAD_MUTEX_INITIALIZER;
 /* Stop treating replaced/released pages as anonymous: madvise must not overwrite a signed alias. */
 static void anon_remove(void *addr, size_t len)
 {
+    tl_ld_forget_generated(addr,len);
     pthread_mutex_lock(&g_anon_lock);
     uintptr_t start = (uintptr_t)addr, end = start + len;
     for (int i = 0; i < g_nanon; i++) {
@@ -1176,6 +1177,7 @@ static void anon_remove(void *addr, size_t len)
 
 static void anon_add(void *addr, size_t len)
 {
+    tl_ld_forget_generated(addr,len);
     pthread_mutex_lock(&g_anon_lock);
     for (int i = 0; i < g_nanon; i++) {                      /* replace anything this overlaps */
         uintptr_t a = g_anon[i].addr, e = a + g_anon[i].len;
@@ -1511,10 +1513,12 @@ const char *tl_ld_symbol_at(const void *addr, const char **lib_name, const void 
 /* Whether all of [a, a+l) can be written now (vm_region), so a scan that rewrites words in it does not fault. */
 static bool b_mprotect_writable(void *a, size_t l)
 {
-    mach_vm_address_t at = (mach_vm_address_t)(uintptr_t)a; mach_vm_size_t sz = 0;
+    if(!a || !l || l>UINTPTR_MAX-(uintptr_t)a)return false;
+    vm_address_t at = (vm_address_t)(uintptr_t)a; vm_size_t sz = 0;
     vm_region_basic_info_data_64_t info; mach_msg_type_number_t cnt = VM_REGION_BASIC_INFO_COUNT_64; mach_port_t obj = MACH_PORT_NULL;
-    if (mach_vm_region(mach_task_self(), &at, &sz, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &cnt, &obj) != KERN_SUCCESS) return false;
-    return at <= (mach_vm_address_t)(uintptr_t)a && at + sz >= (mach_vm_address_t)(uintptr_t)a + l && (info.protection & VM_PROT_WRITE);
+    if (vm_region_64(mach_task_self(), &at, &sz, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &cnt, &obj) != KERN_SUCCESS) return false;
+    if(obj!=MACH_PORT_NULL)mach_port_deallocate(mach_task_self(),obj);
+    return at <= (vm_address_t)(uintptr_t)a && sz >= (uintptr_t)a-at && sz-((uintptr_t)a-at) >= l && (info.protection & VM_PROT_WRITE);
 }
 static int b_mprotect(void *a, size_t l, int prot)
 {
@@ -1552,7 +1556,7 @@ static int b_mprotect(void *a, size_t l, int prot)
         static int allow = -1;
         if (allow < 0) allow = getenv("TL_NO_GUEST_JIT") || getenv("TL_NO_XMEM") ? 0 : 1;   /* JIT-less: as a phone with no debugger */
         int r = -1;
-        if (allow) {
+        if (allow && tl_ld_track_generated(a,l)) {
             /* its raw system calls, before it can run them (the memory is still the guest's to write) */
             { void tl_ld_mark_svcs(void *, size_t); if (b_mprotect_writable(a, l)) tl_ld_mark_svcs(a, l); }
             TL_ERRNO_BEGIN();
@@ -1560,6 +1564,7 @@ static int b_mprotect(void *a, size_t l, int prot)
             if (r != 0 && (prot & PROT_WRITE)) r = mprotect(a, l, (prot & ~PROT_WRITE) & (PROT_READ | PROT_EXEC));
             TL_ERRNO_END();
             if (r == 0) { sys_icache_invalidate(a, l); tl_note_once("the guest made memory of its own executable (generated code)"); }
+            else tl_ld_forget_generated(a,l);
         }
         if (r != 0) {
             tl_note_once("mprotect asked to make the guest's own memory executable: refused");
@@ -1569,7 +1574,7 @@ static int b_mprotect(void *a, size_t l, int prot)
         mm_trace("mprotect", a, l, prot, 0);
         return 0;
     }
-    TL_ERRNO_BEGIN(); int r = mprotect(a, l, prot_filter(prot, "mprotect")); int e = errno; TL_ERRNO_END(); mm_trace("mprotect", a, l, prot, r ? e : 0); return r; }
+    TL_ERRNO_BEGIN(); int r = mprotect(a, l, prot_filter(prot, "mprotect")); int e = errno; TL_ERRNO_END(); if(!r)tl_ld_forget_generated(a,l); mm_trace("mprotect", a, l, prot, r ? e : 0); return r; }
 static int b_madvise(void *a, size_t l, int adv)
 {
     mm_trace("madvise", a, l, adv, 0);
@@ -1826,6 +1831,7 @@ static long futex_wake(uint32_t *addr, long n)
 static long futex_call(uint32_t *addr, int op, uint32_t val, const struct timespec *to, uint32_t *addr2, uint32_t val3)
 {
     int cmd = op & 127;
+    if(!addr || ((uintptr_t)addr&3))return -22;
     if (g_futex_trace < 0) g_futex_trace = getenv("TL_FUTEX_TRACE") ? 1 : 0;
     size_t h = ((uintptr_t)addr >> 2) % FUT_BUCKETS;
     /* FUTEX_WAKE_OP: change *addr2, wake on addr, and on addr2 too if its old value passes the test. Qt's QSemaphore releases
@@ -1833,7 +1839,9 @@ static long futex_call(uint32_t *addr, int op, uint32_t val, const struct timesp
     if (cmd == 5) {
         uint32_t opk = (val3 >> 28) & 7, cmp = (val3 >> 24) & 15;
         int32_t oparg = (int32_t)(val3 << 8) >> 20, cmparg = (int32_t)(val3 << 20) >> 20;
-        if ((val3 >> 31) & 1) oparg = 1 << (oparg & 31);                         /* FUTEX_OP_OPARG_SHIFT */
+        if(!addr2 || ((uintptr_t)addr2&3) || (int32_t)val<0 || (intptr_t)to<0)return -22;
+        if(opk>4 || cmp>5)return -38; // Validate before modifying addr2.
+        if ((val3 >> 31) & 1) { if(oparg<0 || oparg>31)return -22; oparg = (int32_t)(1u << oparg); }
         uint32_t old = __atomic_load_n(addr2, __ATOMIC_SEQ_CST), nw;
         do {
             switch (opk) { case 0: nw = (uint32_t)oparg; break; case 1: nw = old + (uint32_t)oparg; break; case 2: nw = old | (uint32_t)oparg; break;

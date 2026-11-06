@@ -31,6 +31,16 @@ android=Path(os.environ['ANDROID_JAR']) if 'ANDROID_JAR' in os.environ else sort
 subprocess.run([jdk/'bin/javac','--release','8','-cp',android,'-d',out/'classes',*sorted((root/'tests/macos/java/nativeactivity').glob('*.java'))],check=True)
 jar_classes(out/'classes',out/'classes.jar')
 subprocess.run([jdk/'bin/java','-cp',d8,'com.android.tools.r8.D8','--min-api','26','--lib',android,'--output',out,out/'classes.jar'],check=True)
+# Real additional DEX methods exercise the upstream >64 KiB subclass dispatch.
+# Keep the small NativeActivity case as a separate, signed fixture.
+payload=out/'ActivityPayload.java'
+payload.write_text('package org.husk.nativeboot; public final class ActivityPayload {\n'+''.join(
+    f'public static String method{i}() {{ return "nativeactivity-payload-{i:04d}"; }}\n' for i in range(1800))+'}\n')
+subprocess.run([jdk/'bin/javac','--release','8','-d',out/'payload-classes',payload],check=True)
+jar_classes(out/'payload-classes',out/'payload.jar')
+(out/'large-dex').mkdir(exist_ok=True)
+subprocess.run([jdk/'bin/java','-cp',d8,'com.android.tools.r8.D8','--min-api','26','--lib',android,'--output',out/'large-dex',out/'classes.jar',out/'payload.jar'],check=True)
+assert (out/'classes.dex').stat().st_size < 65536 < (out/'large-dex/classes.dex').stat().st_size
 strings=['manifest','package','org.husk.nativeboot','application','activity','name','org.husk.nativeboot.Game',
     'intent-filter','action','android.intent.action.MAIN','category','android.intent.category.LAUNCHER',
     'http://schemas.android.com/apk/res/android','org.husk.nativeboot.Bootstrap','provider','org.husk.nativeboot.Provider',
@@ -53,6 +63,9 @@ body+=end('intent-filter')+end('activity')+end('application')+end('manifest')
 with zipfile.ZipFile(out/'Startup.apk','w') as z:
     z.writestr('AndroidManifest.xml',struct.pack('<HHI',3,8,len(body)+8)+body)
     z.write(out/'classes.dex','classes.dex')
+with zipfile.ZipFile(out/'LargeStartup.apk','w') as z:
+    z.writestr('AndroidManifest.xml',struct.pack('<HHI',3,8,len(body)+8)+body)
+    z.write(out/'large-dex/classes.dex','classes.dex')
 with zipfile.ZipFile(out/'split.apk','w') as z:
     split=pool+begin('manifest',[('package','org.husk.nativeboot'),('versionCode',1),('split','config.arm64_v8a')])+end('manifest')
     z.writestr('AndroidManifest.xml',struct.pack('<HHI',3,8,len(split)+8)+split)
@@ -63,10 +76,12 @@ with tempfile.TemporaryDirectory(prefix='sign-',dir=out) as temporary:
     key=Path(temporary)/'fixture.p12'
     subprocess.run([jdk/'bin/keytool','-genkeypair','-keystore',key,'-storepass','fixture-only','-alias','fixture',
         '-keyalg','RSA','-keysize','2048','-dname','CN=Husk NativeActivity Test','-validity','3650'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    for name in ['Startup.apk','split.apk']:
+    for name in ['Startup.apk','LargeStartup.apk','split.apk']:
         subprocess.run([jdk/'bin/java','-jar',d8.parent/'apksigner.jar','sign','--ks',key,'--ks-pass','pass:fixture-only',
             '--min-sdk-version','26','--v1-signing-enabled','false','--v2-signing-enabled','true',
             '--v3-signing-enabled','true','--v4-signing-enabled','false',out/name],check=True)
 with zipfile.ZipFile(out/'Startup.apks','w') as z:
     z.write(out/'Startup.apk','base.apk');z.write(out/'split.apk','split_config.arm64_v8a.apk')
+with zipfile.ZipFile(out/'LargeStartup.apks','w') as z:
+    z.write(out/'LargeStartup.apk','base.apk');z.write(out/'split.apk','split_config.arm64_v8a.apk')
 print('Prepared Java NativeActivity initialization fixture')

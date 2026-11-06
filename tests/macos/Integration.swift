@@ -160,6 +160,8 @@ struct CheckFailure: Error { let message: String }
             try check(session.state == "exited", "new-session-works-after-child-failure")
             try await start(first.id, label: "NativeWindow", window: true)
             try check(session.latest["headless"] as? Bool == false && session.latest["windowVisible"] as? Bool == false, "AppKit-window-host-stays-hidden")
+            try check(session.latest["activationPolicy"] as? Int == 2 && session.latest["applicationActive"] as? Bool == false,
+                      "hidden-AppKit-host-cannot-activate")
             try await event("capture", values: ["name": "window-surface.png"], kind: "capture")
             try check(session.latest["saved"] as? Bool == true, "ANGLE-CAMetalLayer-window-surface-renders")
             try await stop()

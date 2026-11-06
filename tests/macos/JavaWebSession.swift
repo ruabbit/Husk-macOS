@@ -64,6 +64,12 @@ import SharedLibrary
                     try await Task.sleep(for: .milliseconds(50))
                 }
                 try check(ready, "real Java WebView loaded APK assets")
+                let request = UUID().uuidString
+                session.send("status", values: ["request": request])
+                try await session.wait(until: { session.events.contains { $0["request"] as? String == request } || !session.active })
+                let status = session.events.first { $0["request"] as? String == request }
+                try check(status?["activationPolicy"] as? Int == 2 && status?["applicationActive"] as? Bool == false
+                          && status?["windowVisible"] as? Bool == false, "headless WebKit host cannot activate or show a window")
             }
             func waitForStop(success: Bool = true) async throws {
                 try await session.wait(until: { !session.active }, timeout: 35)

@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sqlite3.h>
+#include <copyfile.h>
 
 static int rebound_first(void *env,void *cls){(void)env;(void)cls;return 17;}
 static int rebound_second(void *env,void *cls){(void)env;(void)cls;return 41;}
@@ -42,6 +43,22 @@ static void *run(void *unused)
     (void)unused;mac_runtime_diagnostics_install();
     char data[1200],fw[1200],frames[1200];
     snprintf(data,sizeof(data),"%s/run-XXXXXX",args[4]);CHECK(mkdtemp(data));
+    if (!strcmp(args[5], "readonly-wal")) {
+        char seed[1400], snapshot[1400], wal[1400], snapshot_wal[1400]; sqlite3 *db = NULL;
+        snprintf(seed,sizeof(seed),"%s/readonly.db",data);
+        snprintf(snapshot,sizeof(snapshot),"%s/wal-copy.db",data);
+        snprintf(wal,sizeof(wal),"%s/readonly.db-wal",data);
+        snprintf(snapshot_wal,sizeof(snapshot_wal),"%s/wal-copy.db-wal",data);
+        CHECK(sqlite3_open(seed,&db)==SQLITE_OK);
+        CHECK(sqlite3_exec(db,"PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE evidence(value); INSERT INTO evidence VALUES(29)",NULL,NULL,NULL)==SQLITE_OK);
+        // Copy a quiescent committed WAL pair, without an shm file. No process is killed.
+        CHECK(copyfile(seed,snapshot,NULL,COPYFILE_DATA)==0 && copyfile(wal,snapshot_wal,NULL,COPYFILE_DATA)==0);
+        CHECK(sqlite3_wal_checkpoint_v2(db,NULL,SQLITE_CHECKPOINT_TRUNCATE,NULL,NULL)==SQLITE_OK);
+        CHECK(sqlite3_close(db)==SQLITE_OK);
+        unlink(wal); // Darwin may retain empty WAL sidecars after a clean checkpoint.
+        char shm[1400]; snprintf(shm,sizeof(shm),"%s/readonly.db-shm",data); unlink(shm);
+        CHECK(access(wal,F_OK)!=0); // Checkpointed WAL database, also missing its sidecars.
+    }
     snprintf(fw,sizeof(fw),"%s/framework-res.apk",args[1]);snprintf(frames,sizeof(frames),"%s/frames",data);mkdir(frames,0700);
     bool documents=!strcmp(args[5],"documents");
     if(documents)for(int n=0;n<2;n++) {
@@ -56,6 +73,19 @@ static void *run(void *unused)
     tl_javaapp_config config={.apk_path=args[2],.data_dir=data,.package_name="org.husk.lifecycle",.width=320,.height=240,
         .density=1,.angle_egl=args[3],.framework_res=fw,.frame_dir=frames,.frame_every=-1,.pick_documents=documents?picked:NULL};
     CHECK(tl_javaapp_start(&config));CHECK(wait_state(TL_JAVA_RUNNING));
+    if (!strcmp(args[5],"compat33")) {
+        void *env=tl_jni_env();const void **jni=*(const void ***)env;
+        const int slots[]={33,113,94,144};jvalue value={0};
+        for(int n=0;n<4;n++) {
+            jvalue index={.i=n},cls={0};
+            CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","deferred","(I)Ljava/lang/Class;",&index,&cls));
+            CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","count","()I",NULL,&value) && value.i==(1<<n)-1);
+            void *(*lookup)(void *,void *,const char *,const char *)=(void *)jni[slots[n]];
+            CHECK(lookup(env,cls.l,n<2?"method":"field",n<2?"()V":"I"));
+            CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","count","()I",NULL,&value) && value.i==(1<<(n+1))-1);
+        }
+        puts("PASS JNI method/field ID lookup initializes deferred DEX classes exactly once");
+    }
     for(int i=0;i<3000&&!tl_javaapp_frames();i++)usleep(1000);
     CHECK(tl_javaapp_frames()>0);
     if(documents) {
@@ -114,7 +144,7 @@ static void *run(void *unused)
         }
         CHECK(result.i==1);
     }
-    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||!strcmp(args[5],"framework")||controller||documents||runtime31;
+    bool ok=tl_javaapp_stop(), success=!strcmp(args[5],"normal")||!strcmp(args[5],"preferences-idle")||!strcmp(args[5],"framework")||!strcmp(args[5],"compat33")||!strcmp(args[5],"readonly-wal")||controller||documents||runtime31;
     CHECK(ok==success);CHECK(tl_javaapp_get_state()==(success?TL_JAVA_DESTROYED:TL_JAVA_FAILED));
     if(success){
         if(documents){jvalue result;CHECK(tl_dvm_call_static("org/husk/lifecycle/LifecycleActivity","documentResult","()I",NULL,&result));CHECK(result.i==15);}

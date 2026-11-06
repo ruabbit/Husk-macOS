@@ -49,6 +49,15 @@ code_relocation:
 view_export:
     b view_address
 .size view_export,.-view_export
+/* AOT v10 must budget stubs for ADRs into read-only data as well as writable data. */
+.global many_rodata_adrs
+.type many_rodata_adrs,%function
+many_rodata_adrs:
+    .rept 2048
+    adr x0, view_value
+    .endr
+    ret
+.size many_rodata_adrs,.-many_rodata_adrs
 /* Literal loads must read the relocated data copy and return past the load. */
 .global literal_pointer
 .type literal_pointer,%function

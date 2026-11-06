@@ -33,8 +33,8 @@ final class KeyStoreImport {
 
     static final class Handle implements SecretKey {
         private static final long serialVersionUID = 1;
-        private final String alias;
-        private final transient KeyStoreProvider.Entry entry;
+        final String alias;
+        final transient KeyStoreProvider.Entry entry;
         Handle(String alias, KeyStoreProvider.Entry entry) { this.alias = alias; this.entry = entry; }
         public String getAlgorithm() { return "AES"; }
         public String getFormat() { return null; }

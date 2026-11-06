@@ -179,6 +179,20 @@ def lib(report, name):
 
 # --------------------------------------------------------------------- checks
 
+# Classification only: minimal scanner metadata, not a runnable Java fixture.
+na = build("libactivity.so", "native_activity.c", extra=(P16,))
+large_dex = DEX + b"Landroid/app/NativeActivity;" + bytes(65536)
+manifest_na = MANIFEST + b"android.app.NativeActivity"
+for dex_first in (False, True):
+    entries = [("AndroidManifest.xml", manifest_na, True), ("classes.dex", large_dex, True)]
+    if dex_first: entries.reverse()
+    direct = apk(f"direct-{dex_first}.apk", [*entries, ("lib/arm64-v8a/libactivity.so", na, False)])
+    check(f"NativeActivity manifest independent of ZIP order {dex_first}", scan(direct)["engine"] == "NativeActivity")
+subclass = apk("subclass.apk", [("classes.dex", large_dex, True), ("AndroidManifest.xml", MANIFEST, True), ("lib/arm64-v8a/libactivity.so", na, False)])
+check("large Java subclass uses Java classification", scan(subclass).get("engine") != "NativeActivity")
+direct_split = apk("direct-split.apk", [("AndroidManifest.xml", manifest_na, True)])
+check("NativeActivity manifest after subclass split", scan(subclass, direct_split)["engine"] == "NativeActivity")
+
 r = scan(java_apk)
 check("java: verdict", r["verdict"] == "java", r["verdict"])
 check("java: dex counted", r["dexCount"] == 2 and r["dexBytes"] == 2 * len(DEX), r)

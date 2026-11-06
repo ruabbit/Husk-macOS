@@ -62,6 +62,21 @@ final class PipeReader: @unchecked Sendable {
     private var guestManagedStorage = false
     private var runtime: String?
     private var javaWebStore: WebStorage.JavaStore?
+    private var bundledRunner = false
+    private var testFaultDetected = false
+
+    // Set only by the local test launcher. A fault must stop subsequent
+    // sessions, including negative tests that otherwise accept any failure.
+    private var testFailureLatch: URL? {
+        guard let path = ProcessInfo.processInfo.environment["HUSK_TEST_FAILURE_LATCH"], path.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+    private func checkTestFailureLatch() throws {
+        if testFaultDetected { throw LibraryFailure("Runner 验证已因异常退出停止，请先检查会话日志。") }
+        if let latch = testFailureLatch, FileManager.default.fileExists(atPath: latch.path) {
+            throw LibraryFailure("Runner 验证已因异常退出停止。先检查记录：\(latch.path)")
+        }
+    }
 
     private let languageDefaults: UserDefaults
     public init(languageDefaults: UserDefaults = .standard) { self.languageDefaults = languageDefaults; signal(SIGPIPE, SIG_IGN) }
@@ -69,6 +84,7 @@ final class PipeReader: @unchecked Sendable {
     public func start(executable: URL, game: LibraryGame, apk: URL, checkpoint: URL,
                       logs: URL, headless: Bool = false, automation: Bool = false,
                       diagnostics: URL? = nil, hiddenWindow: Bool = false) throws {
+        try checkTestFailureLatch()
         guard !active else { throw LibraryFailure("请先结束当前游戏。") }
         guard game.playable, let runtime = game.runtime else { throw LibraryFailure("此游戏尚未支持。") }
         if game.settings.jitless, let reason = game.jitlessUnavailableReason { throw LibraryFailure(reason) }
@@ -91,6 +107,7 @@ final class PipeReader: @unchecked Sendable {
         startDate = Date(); lastEvent = startDate
         let child = Process(), input = Pipe(), output = Pipe(), errors = Pipe()
         child.executableURL = executable
+        bundledRunner = ["NativeRunner", "WebRunner"].contains(executable.lastPathComponent)
         child.arguments = ["--session", id, "--apk", apk.path, "--checkpoint", checkpoint.path,
                            "--apk-sha256", game.digest,
                            "--runtime", runtime, "--variant", String(game.fixture?.variant ?? 0), "--title", game.title]
@@ -274,11 +291,22 @@ final class PipeReader: @unchecked Sendable {
     private func fail(_ reason: String) {
         error = error ?? reason
         startStopDeadline()
-        if let child = process, child.isRunning { child.terminate() }
+        // Closing our control writer requests orderly teardown even when an
+        // untrusted receipt or protocol message is rejected. Keep the failure
+        // and the original deadline; never manufacture a successful save.
+        try? commandPipe?.fileHandleForWriting.close()
     }
 
     private func finishIfReaped() {
         guard let exited, stdoutEnded, stderrEnded else { return }
+        if let latch = testFailureLatch, bundledRunner, signalExit || (128...192).contains(exited) {
+            testFaultDetected = true
+            let evidence: [String: Any] = ["session": sessionID ?? "", "pid": pid, "runtime": runtime ?? "",
+                "exitStatus": exited, "terminationReason": signalExit ? "signal" : "signal-handler-exit",
+                "recordedAt": Date().timeIntervalSince1970]
+            do { try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]).write(to: latch, options: .atomic) }
+            catch { self.error = "无法保存 Runner 异常退出记录：\(error.localizedDescription)" }
+        }
         let success = exited == 0 && !signalExit && checkpointReceived && terminalEvent == "exited" && error == nil
         if !success { error = error ?? "游戏进程意外退出（\(exited)）。资料库仍可使用；之前的存档保留。" }
         state = success ? "exited" : "failed"
@@ -309,7 +337,11 @@ final class PipeReader: @unchecked Sendable {
 
     public func wait(until predicate: @MainActor () -> Bool, timeout: Double = 10) async throws {
         let limit = Date().addingTimeInterval(timeout)
-        while !predicate() && Date() < limit { try await Task.sleep(nanoseconds: 20_000_000) }
+        while !predicate() && Date() < limit {
+            try checkTestFailureLatch()
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        try checkTestFailureLatch()
         guard predicate() else { throw LibraryFailure("等待运行状态超时：\(state) / \(error ?? "无错误消息")") }
     }
 }

@@ -1021,6 +1021,55 @@ long tl_linux_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long
  * answered here as the Linux kernel would: tl_linux_syscall with x8 and x0-x5, the result in x0, everything else as it was.
  */
 #define SVC_MARK 0x000005C5u                       /* udf #0x5c5 */
+#define GENERATED_PAGES 8192
+static _Atomic(uintptr_t) g_generated_pages[GENERATED_PAGES];
+static pthread_mutex_t g_generated_lock = PTHREAD_MUTEX_INITIALIZER;
+bool tl_ld_track_generated(void *addr, size_t len)
+{
+    uintptr_t start=(uintptr_t)addr;
+    if (!start || start%PAGE || !len || len>UINTPTR_MAX-start || len>GENERATED_PAGES*PAGE) return false;
+    size_t pages=(len+PAGE-1)/PAGE, needed=0, free_slots=0;
+    pthread_mutex_lock(&g_generated_lock);
+    for(size_t i=0;i<GENERATED_PAGES;i++) if(!atomic_load(&g_generated_pages[i]))free_slots++;
+    for(size_t n=0;n<pages;n++) {
+        bool found=false;
+        for(size_t i=0;i<GENERATED_PAGES;i++) if(atomic_load(&g_generated_pages[i])==start+n*PAGE){found=true;break;}
+        if(!found)needed++;
+    }
+    if(needed>free_slots){pthread_mutex_unlock(&g_generated_lock);return false;}
+    for(size_t n=0;n<pages;n++) {
+        bool found=false;
+        for(size_t i=0;i<GENERATED_PAGES;i++) if(atomic_load(&g_generated_pages[i])==start+n*PAGE){found=true;break;}
+        if(!found)for(size_t i=0;i<GENERATED_PAGES;i++)if(!atomic_load(&g_generated_pages[i])){atomic_store(&g_generated_pages[i],start+n*PAGE);break;}
+    }
+    pthread_mutex_unlock(&g_generated_lock);return true;
+}
+void tl_ld_forget_generated(void *addr,size_t len)
+{
+    uintptr_t start=(uintptr_t)addr;
+    if(!len || len>UINTPTR_MAX-start)return;
+    pthread_mutex_lock(&g_generated_lock);
+    for(size_t i=0;i<GENERATED_PAGES;i++) {
+        uintptr_t page=atomic_load(&g_generated_pages[i]);
+        if(page && page<start+len && (start<=page || start-page<PAGE))atomic_store(&g_generated_pages[i],0);
+    }
+    pthread_mutex_unlock(&g_generated_lock);
+}
+static bool guest_instruction(uintptr_t pc,uint32_t *instruction)
+{
+    if(!pc || pc%4 || pc>UINTPTR_MAX-4)return false;
+    bool guest=tl_xmem_is_rx((void *)pc);
+    for(int i=0;!guest && i<nlibs_acq();i++) {
+        tl_lib *L=G.libs[i];uintptr_t base=(uintptr_t)L->rx;
+        if(base && pc>=base && pc-base<L->npages*PAGE && in_code(L,L->base_vaddr+pc-base))guest=true;
+    }
+    uintptr_t page=pc&~(uintptr_t)(PAGE-1);
+    for(size_t i=0;!guest && i<GENERATED_PAGES;i++)guest=atomic_load(&g_generated_pages[i])==page;
+    if(!guest)return false;
+    // A concurrent unmap or invalid PC must not fault recursively in the handler.
+    vm_size_t copied=0;
+    return vm_read_overwrite(mach_task_self(),pc,4,(vm_address_t)instruction,&copied)==KERN_SUCCESS && copied==4;
+}
 static struct sigaction g_prev_sys, g_prev_ill;
 static bool svc_answer(ucontext_t *uc, uint64_t at, uint64_t next)
 {
@@ -1031,23 +1080,30 @@ static bool svc_answer(ucontext_t *uc, uint64_t at, uint64_t next)
     __darwin_arm_thread_state64_set_pc_fptr(*ss, (void *)(uintptr_t)next);
     return true;
 }
-static void svc_signal(int sig, siginfo_t *si, void *ucv)
+bool tl_ld_handle_guest_trap(int sig, void *ucv)
 {
     ucontext_t *uc = ucv;
+    if(!uc || !uc->uc_mcontext)return false;
     uint64_t pc = (uint64_t)__darwin_arm_thread_state64_get_pc(uc->uc_mcontext->__ss);
-    if (sig == SIGILL && pc && *(const uint32_t *)pc == SVC_MARK) { svc_answer(uc, pc, pc + 4); return; }
+    uint32_t instruction=0;
+    bool known=guest_instruction(pc,&instruction);
+    if (sig == SIGILL && known && instruction == SVC_MARK) { svc_answer(uc, pc, pc + 4); return true; }
     /* a trapped floating-point exception (EC 0x2c): the guest turned FPCR's trap enables on (Colorful's SDL_mixer divides and
        traps on inexact). Android's cores ignore those bits, Apple's do not: they are cleared and the instruction runs again. */
-    if (sig == SIGILL && ((uc->uc_mcontext->__es.__esr >> 26) & 0x3f) == 0x2c) {
-        static int said; if (!said++) tl_log_line("ld: the guest enabled floating-point traps (fpcr %#x): turned off, as on Android", (unsigned)uc->uc_mcontext->__ns.__fpcr);
+    if (sig == SIGILL && known && ((uc->uc_mcontext->__es.__esr >> 26) & 0x3f) == 0x2c && (uc->uc_mcontext->__ns.__fpcr & 0x9f00u)) {
         uc->uc_mcontext->__ns.__fpcr &= ~0x9f00u;
-        return;
+        return true;
     }
-    if (sig == SIGSYS && pc >= 4 && *(const uint32_t *)(pc - 4) == 0xD4000001u) {
-        static int said; if (!said++) tl_log_line("ld: a raw svc in code the loader never saw (pc %#llx): answered as Linux", (unsigned long long)pc);
-        svc_answer(uc, pc - 4, pc); return;
+    if (sig == SIGSYS && pc >= 4 && guest_instruction(pc-4,&instruction) && instruction == 0xD4000001u) {
+        svc_answer(uc, pc - 4, pc); return true;
     }
+    return false;
+}
+static void svc_signal(int sig, siginfo_t *si, void *ucv)
+{
+    if(tl_ld_handle_guest_trap(sig,ucv))return;
     struct sigaction *prev = sig == SIGSYS ? &g_prev_sys : &g_prev_ill;
+    if(prev->sa_handler==SIG_IGN)return;
     if (prev->sa_flags & SA_SIGINFO) { if (prev->sa_sigaction) { prev->sa_sigaction(sig, si, ucv); return; } }
     else if (prev->sa_handler != SIG_DFL && prev->sa_handler != SIG_IGN) { prev->sa_handler(sig); return; }
     signal(sig, SIG_DFL); raise(sig);

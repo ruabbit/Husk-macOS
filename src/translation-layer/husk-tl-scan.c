@@ -101,20 +101,23 @@ static bool starts_native_activity(const char *const *paths, int count, bool *by
     char name16[2 * (sizeof(name8) - 1)];
     for (size_t i = 0; i < sizeof(name8) - 1; i++) { name16[2 * i] = name8[i]; name16[2 * i + 1] = 0; }
     bool found = false;
-    for (int p = 0; p < count && !found; p++) {
+    for (int p = 0; p < count; p++) {
         tl_zip z;
         char zerr[160] = "";
         if (!tl_zip_open(&z, paths[p], zerr, sizeof(zerr))) continue;
-        for (size_t i = 0; i < z.count && !found; i++) {
+        for (size_t i = 0; i < z.count; i++) {
             const tl_zip_entry *e = &z.entries[i];
             bool man = !strcmp(e->name, "AndroidManifest.xml");
             if (!man && !is_dex(e->name)) continue;
+            if (!man && found) continue; // Still inspect manifests after a DEX subclass, regardless of ZIP/split order.
             const uint8_t *data; size_t len; bool owned; char derr[160] = "";
             if (!tl_zip_data(&z, e, (size_t)256 << 20, &data, &len, &owned, derr, sizeof(derr))) continue;
-            found = man ? (memmem(data, len, name16, sizeof(name16)) || memmem(data, len, name8, sizeof(name8) - 1))
+            bool match = man ? (memmem(data, len, name16, sizeof(name16)) || memmem(data, len, name8, sizeof(name8) - 1))
                         : memmem(data, len, desc, sizeof(desc) - 1) != NULL;
-            if (found && man && by_manifest) *by_manifest = true;
+            found |= match;
+            if (match && man && by_manifest) *by_manifest = true;
             if (owned) free((void *)data);
+            if (match && man) { tl_zip_close(&z); return true; }
         }
         tl_zip_close(&z);
     }

@@ -193,6 +193,11 @@ void tl_ld_aot_free(tl_ld_aot_image *img);
 
 /* Before the guest's own memory becomes executable: its raw `svc #0` are marked and answered as Linux system calls. */
 void tl_ld_mark_svcs(void *addr, size_t len);
+/* Generated executable pages are registered before publishing execute access.
+   Trap decoding never treats arbitrary host memory as Android instructions. */
+bool tl_ld_track_generated(void *addr, size_t len);
+void tl_ld_forget_generated(void *addr, size_t len);
+bool tl_ld_handle_guest_trap(int sig, void *context);
 
 #ifdef __cplusplus
 }

@@ -185,7 +185,8 @@ static bool open_path(const char *path)
         snprintf(label, sizeof(label), "%s!%s", slash ? slash + 1 : path, name);
         any |= dex_add(copy, len, label);
     }
-    if (!mapped) tl_zip_close(&z);          /* else the mapping stays: the dexes above point into it */
+    if (mapped) z.map = NULL; // Boot DEX owns the mapping until process exit, not the ZIP index or fd.
+    tl_zip_close(&z);
     return any;
 }
 

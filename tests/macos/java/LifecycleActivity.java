@@ -32,6 +32,8 @@ public final class LifecycleActivity extends Activity {
         System.out.println("HUSK_REOPEN_DESTROYED " + getSharedPreferences("lifecycle", 0).getInt("destroyed", 0));
         HostEnvironmentChecks.run(this);
         if ("framework".equals(System.getenv("HUSK_JAVA_CASE"))) FrameworkChecks.run(this);
+        if ("compat33".equals(System.getenv("HUSK_JAVA_CASE"))) Compat33Checks.run(this);
+        if ("readonly-wal".equals(System.getenv("HUSK_JAVA_CASE"))) ReadOnlyWALChecks.run(this);
         if ("documents".equals(System.getenv("HUSK_JAVA_CASE"))) DocumentChecks.start(this);
         View view = new View(this) {
             @Override protected void onDraw(Canvas canvas) { canvas.drawColor(0xff2864a0); }

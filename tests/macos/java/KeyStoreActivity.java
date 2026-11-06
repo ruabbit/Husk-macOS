@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProtection;
 import android.security.keystore.KeyProperties;
+import android.security.keystore.KeyInfo;
 import android.security.keystore.WrappedKeyEntry;
 import java.io.File;
 import java.nio.file.Files;
@@ -18,6 +19,7 @@ import java.util.Date;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -33,6 +35,40 @@ public final class KeyStoreActivity extends Activity {
     }
     private static KeyStore load() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null); return store;
+    }
+    private static KeyInfo info(Key key) throws Exception {
+        return (KeyInfo)SecretKeyFactory.getInstance("AES", "AndroidKeyStore").getKeySpec((SecretKey)key, KeyInfo.class);
+    }
+    private static void refusedInfo(Key key) throws Exception {
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("AES", "AndroidKeyStore");
+        boolean refused = false;
+        try { factory.getKeySpec((SecretKey)key, KeyInfo.class); }
+        catch (java.security.spec.InvalidKeySpecException expected) { refused = true; }
+        check(refused, "foreign or stale key must not acquire store metadata");
+        refused = false;
+        try { factory.translateKey((SecretKey)key); }
+        catch (java.security.InvalidKeyException expected) { refused = true; }
+        check(refused, "foreign or stale key must not translate into a store key");
+    }
+    private static void importedInfo(Key key, String alias, int purposes) throws Exception {
+        KeyInfo info = info(key);
+        check(alias.equals(info.getKeystoreAlias()) && info.getKeySize() == 256 && info.getOrigin() == KeyProperties.ORIGIN_IMPORTED,
+                "imported metadata survives handles and process restart");
+        check(info.getPurposes() == purposes && Arrays.equals(info.getBlockModes(), new String[]{"GCM"}) &&
+                Arrays.equals(info.getEncryptionPaddings(), new String[]{"NoPadding"}), "metadata matches enforced import policy");
+        check(!info.isInsideSecureHardware() && info.getSecurityLevel() == KeyProperties.SECURITY_LEVEL_SOFTWARE &&
+                !info.isUserAuthenticationRequired(), "software metadata does not promise hardware or authentication");
+        String[] modes = info.getBlockModes(); modes[0] = "CBC";
+        check(info.getBlockModes()[0].equals("GCM"), "immutable policy arrays");
+        check(SecretKeyFactory.getInstance("AES", "AndroidKeyStore").translateKey((SecretKey)key) == key, "translate retains opaque handle");
+        boolean refused = false;
+        try { SecretKeyFactory.getInstance("AES", "AndroidKeyStore").getKeySpec((SecretKey)key, SecretKeySpec.class); }
+        catch (java.security.spec.InvalidKeySpecException expected) { refused = true; }
+        check(refused && key.getEncoded() == null, "KeyInfo factory cannot export imported bytes");
+        refused = false;
+        try { SecretKeyFactory.getInstance("HmacSHA256", "AndroidKeyStore").getKeySpec((SecretKey)key, KeyInfo.class); }
+        catch (java.security.spec.InvalidKeySpecException expected) { refused = true; }
+        check(refused, "factory checks algorithm");
     }
     private static void importKey(KeyStore store, String alias, SecretKey key, KeyProtection protection) throws Exception {
         store.setEntry(alias, new KeyStore.SecretKeyEntry(key), protection);
@@ -94,6 +130,8 @@ public final class KeyStoreActivity extends Activity {
         }
         if ("reopen".equals(phase)) {
             Key key = store.getKey("imported", null);
+            importedInfo(key, "imported", 3);
+            check(info(store.getKey("legacy", null)).getOrigin() == KeyProperties.ORIGIN_GENERATED, "generated origin persisted");
             check(key != null && key.getEncoded() == null && key.getFormat() == null, "opaque key after process restart");
             check(Arrays.equals(decrypt(key, Files.readAllBytes(new File(root, "iv").toPath()),
                     Files.readAllBytes(new File(root, "ciphertext").toPath())), MESSAGE), "reopened key decrypts earlier ciphertext");
@@ -107,6 +145,8 @@ public final class KeyStoreActivity extends Activity {
         check(protection.getMaxUsageCount() == -1 && protection.isRandomizedEncryptionRequired(), "Android policy defaults");
         importKey(store, "imported", raw, protection);
         Key key = store.getKey("imported", null);
+        importedInfo(key, "imported", 3);
+        refusedInfo(raw); // Even identical bytes are not an AndroidKeyStore handle.
         check(key != null && key.getEncoded() == null && key.getFormat() == null, "import does not expose raw key bytes");
         check(store.getEntry("imported", null) instanceof KeyStore.SecretKeyEntry, "getEntry type");
         Cipher encrypt = Cipher.getInstance("AES/GCM/NoPadding"); encrypt.init(Cipher.ENCRYPT_MODE, key); encrypt.updateAAD(AAD);
@@ -120,11 +160,20 @@ public final class KeyStoreActivity extends Activity {
         forbiddenInit(key, "AES/GCM/NoPadding", Cipher.ENCRYPT_MODE, new GCMParameterSpec(128, iv));
         forbiddenInit(key, "AES/CBC/NoPadding", Cipher.DECRYPT_MODE, null);
         importKey(store, "decrypt-only", raw, policy(KeyProperties.PURPOSE_DECRYPT).build());
+        importedInfo(store.getKey("decrypt-only", null), "decrypt-only", KeyProperties.PURPOSE_DECRYPT);
         forbiddenInit(store.getKey("decrypt-only", null), "AES/GCM/NoPadding", Cipher.ENCRYPT_MODE, null);
         importKey(store, "expired", raw, policy(3).setKeyValidityEnd(new Date(1)).build());
+        KeyInfo expired = info(store.getKey("expired", null));
+        check(expired.getKeyValidityForConsumptionEnd().getTime() == 1 && expired.getKeyValidityForOriginationEnd().getTime() == 1,
+                "validity metadata is not discarded");
+        expired.getKeyValidityForConsumptionEnd().setTime(Long.MAX_VALUE);
+        check(expired.getKeyValidityForConsumptionEnd().getTime() == 1, "immutable validity date");
         forbiddenInit(store.getKey("expired", null), "AES/GCM/NoPadding", Cipher.DECRYPT_MODE, new GCMParameterSpec(128, iv));
         Key deleted = store.getKey("decrypt-only", null); store.deleteEntry("decrypt-only"); store.deleteEntry("expired");
         forbiddenInit(deleted, "AES/GCM/NoPadding", Cipher.DECRYPT_MODE, new GCMParameterSpec(128, iv));
+        refusedInfo(deleted);
+        importKey(store, "replaced", raw, policy(3).build()); Key replaced = store.getKey("replaced", null);
+        importKey(store, "replaced", raw, policy(2).build()); refusedInfo(replaced); store.deleteEntry("replaced");
         for (KeyProtection unsupported : new KeyProtection[] { policy(3).setUserAuthenticationRequired(true).build(),
                 policy(3).setIsStrongBoxBacked(true).build(), policy(3).setMaxUsageCount(1).build() }) {
             rejected = false;
@@ -142,6 +191,23 @@ public final class KeyStoreActivity extends Activity {
         check(Arrays.equals(decrypt(key, iv, encrypted), MESSAGE), "failed import preserves handle");
         KeyGenerator legacy = KeyGenerator.getInstance("AES", "AndroidKeyStore");
         legacy.init(new KeyGenParameterSpec.Builder("legacy", 3).setKeySize(128).build()); legacy.generateKey();
+        Key generated = store.getKey("legacy", null);
+        check(info(generated).getOrigin() == KeyProperties.ORIGIN_GENERATED && info(generated).getKeySize() == 128,
+                "generated key metadata");
+        refusedInfo(new SecretKeySpec(generated.getEncoded(), "AES"));
+        java.security.KeyPairGenerator pairs = java.security.KeyPairGenerator.getInstance("EC", "AndroidKeyStore");
+        pairs.initialize(new KeyGenParameterSpec.Builder("pair", KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY).build());
+        java.security.KeyPair pair = pairs.generateKeyPair();
+        java.security.KeyFactory factory = java.security.KeyFactory.getInstance("EC", "AndroidKeyStore");
+        KeyInfo pairInfo = factory.getKeySpec(pair.getPrivate(), KeyInfo.class);
+        check(pairInfo.getOrigin() == KeyProperties.ORIGIN_GENERATED && pairInfo.getKeySize() == 256, "pair metadata");
+        rejected = false;
+        try { factory.getKeySpec(pair.getPrivate(), java.security.spec.PKCS8EncodedKeySpec.class); }
+        catch (java.security.spec.InvalidKeySpecException expected) { rejected = true; }
+        check(rejected, "new key factory does not export private key specs");
+        byte[] publicBytes = factory.getKeySpec(pair.getPublic(), java.security.spec.X509EncodedKeySpec.class).getEncoded();
+        check(Arrays.equals(factory.generatePublic(new java.security.spec.X509EncodedKeySpec(publicBytes)).getEncoded(), publicBytes), "public key factory delegates");
+        store.deleteEntry("pair");
     }
     public static int result() { return result; }
 }

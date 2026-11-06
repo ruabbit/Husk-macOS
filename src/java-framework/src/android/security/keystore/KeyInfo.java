@@ -21,8 +21,8 @@ public class KeyInfo implements java.security.spec.KeySpec {
                    boolean unlockedDeviceRequired, boolean trustedUserPresenceRequired, boolean invalidatedByBiometricEnrollment,
                    boolean userConfirmationRequired, int securityLevel, int remainingUsageCount) {
         mAlias = keystoreKeyAlias; mInsideSecureHardware = insideSecureHardware; mOrigin = origin; mKeySize = keySize;
-        mKeyValidityStart = keyValidityStart; mKeyValidityForOriginationEnd = keyValidityForOriginationEnd;
-        mKeyValidityForConsumptionEnd = keyValidityForConsumptionEnd; mPurposes = purposes;
+        mKeyValidityStart = copy(keyValidityStart); mKeyValidityForOriginationEnd = copy(keyValidityForOriginationEnd);
+        mKeyValidityForConsumptionEnd = copy(keyValidityForConsumptionEnd); mPurposes = purposes;
         mEncryptionPaddings = copy(encryptionPaddings); mSignaturePaddings = copy(signaturePaddings); mDigests = copy(digests);
         mBlockModes = copy(blockModes); mUserAuthenticationRequired = userAuthenticationRequired;
         mUserAuthenticationValidityDurationSeconds = userAuthenticationValidityDurationSeconds; mUserAuthenticationType = userAuthenticationType;
@@ -32,14 +32,15 @@ public class KeyInfo implements java.security.spec.KeySpec {
         mUserConfirmationRequired = userConfirmationRequired; mSecurityLevel = securityLevel; mRemainingUsageCount = remainingUsageCount;
     }
     private static String[] copy(String[] a) { return a == null ? new String[0] : a.clone(); }
+    private static Date copy(Date date) { return date == null ? null : new Date(date.getTime()); }
 
     public String getKeystoreAlias() { return mAlias; }
     @Deprecated public boolean isInsideSecureHardware() { return mInsideSecureHardware; }
     public int getOrigin() { return mOrigin; }
     public int getKeySize() { return mKeySize; }
-    public Date getKeyValidityStart() { return mKeyValidityStart; }
-    public Date getKeyValidityForConsumptionEnd() { return mKeyValidityForConsumptionEnd; }
-    public Date getKeyValidityForOriginationEnd() { return mKeyValidityForOriginationEnd; }
+    public Date getKeyValidityStart() { return copy(mKeyValidityStart); }
+    public Date getKeyValidityForConsumptionEnd() { return copy(mKeyValidityForConsumptionEnd); }
+    public Date getKeyValidityForOriginationEnd() { return copy(mKeyValidityForOriginationEnd); }
     public int getPurposes() { return mPurposes; }
     public String[] getBlockModes() { return mBlockModes.clone(); }
     public String[] getEncryptionPaddings() { return mEncryptionPaddings.clone(); }
