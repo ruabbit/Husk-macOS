@@ -72,6 +72,12 @@ bool tl_path_install_apks(const char *base, const char *package);
 const char *tl_path_guest_apk(const char *host);
 const char *tl_path_resolve(const char *path, char *buf, size_t n);
 
+/* Whether the process is short of address space (an iOS app without the extended-virtual-addressing entitlement):
+ * husk-tl-bionic-io.c. */
+bool  tl_mm_address_space_short(void);
+/* The address space mapped outside the shared system libraries; *guest (if given): the guest's own anonymous part. */
+size_t tl_mm_address_space_used(size_t *guest);
+
 /* ----------------------------------------------------------------- errno */
 
 /*
