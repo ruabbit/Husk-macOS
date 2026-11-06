@@ -4,7 +4,7 @@ import Foundation
 /// An application preference. Never changes the system language or a running guest.
 public enum AppLanguage {
     public static let key = "husk.guest.language"
-    public static let supported = ["system", "en", "zh-Hans"]
+    public static let supported = ["system", "en", "zh-Hans", "ja"]
     public static func selected(_ defaults: UserDefaults = .standard) -> String {
         let value = defaults.string(forKey: key) ?? "system"
         return supported.contains(value) ? value : "system"

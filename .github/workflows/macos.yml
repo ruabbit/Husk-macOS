@@ -57,8 +57,9 @@ jobs:
       - name: Shared core and Hardened Runtime loader checks
         env:
           ELF_LD: /opt/homebrew/opt/llvm/bin/ld.lld
+          HUSK_TEST_FAILURE_LATCH: ${{ github.workspace }}/build/logs/current-macos-runner-fault.json
         run: |
-          ctest --test-dir build/macos -R '^(core-|console-|macos-vm-controller$|java-runtime-|java-framework-core$|java-native-thread-|opensl-lifecycle$|macos-native-launch$|macos-text-input$|macos-document-picker$|android-jni-text$|macos-play-support$|macos-play-details$|macos-elf2macho-layout$|macos-account-language$|macos-community-compatibility$|java-manifest-gles$|native-godot-kotlin-files$|macos-archive-streaming$|macos-host-environment$|macos-apk-icons$|macos-session-(diagnostics|guest-stop)$|macos-system-resources$)' --output-on-failure
+          ctest --test-dir build/macos -R '^(core-|console-|macos-vm-controller$|java-runtime-|java-framework-core$|java-native-thread-|opensl-lifecycle$|macos-native-launch$|macos-text-input$|macos-document-picker$|android-jni-text$|macos-play-support$|macos-play-details$|macos-elf2macho-layout$|macos-account-language$|macos-community-compatibility$|java-manifest-gles$|native-godot-kotlin-files$|macos-archive-streaming$|macos-host-environment$|macos-apk-icons$|macos-session-(diagnostics|guest-stop)$|macos-system-resources$)' --output-on-failure --stop-on-failure
           ./scripts/test_macos_p0.sh --suite memory-core --output build/macos/P0Validation
       - name: Build evidence
         if: always()
@@ -70,6 +71,7 @@ jobs:
             build/macos/Fixtures/provenance.json
             build/macos/P0Validation/results.json
             build/logs/*.log
+            build/logs/*fault*.json
   hardware:
     if: github.event_name == 'workflow_dispatch' && inputs.hardware
     runs-on: [self-hosted, macOS, ARM64, husk-metal]

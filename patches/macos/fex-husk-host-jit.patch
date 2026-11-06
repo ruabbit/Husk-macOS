@@ -1,0 +1,154 @@
+diff --git a/runtime/sources/fexcore-darwin/FEXCore/Source/Interface/Core/CodeCache.cpp b/runtime/sources/fexcore-darwin/FEXCore/Source/Interface/Core/CodeCache.cpp
+index f2c7067..5f87521 100644
+--- a/runtime/sources/fexcore-darwin/FEXCore/Source/Interface/Core/CodeCache.cpp
++++ b/runtime/sources/fexcore-darwin/FEXCore/Source/Interface/Core/CodeCache.cpp
+@@ -25,6 +25,7 @@
+ #include <git_version.h>
+ 
+ #include <span>
++#include <fmt/std.h>
+ #include <xxhash.h>
+ 
+ #ifdef __APPLE__
+diff --git a/runtime/sources/fexcore-darwin/FEXCore/Source/Utils/Allocator.cpp b/runtime/sources/fexcore-darwin/FEXCore/Source/Utils/Allocator.cpp
+index 39f99de..c547f12 100644
+--- a/runtime/sources/fexcore-darwin/FEXCore/Source/Utils/Allocator.cpp
++++ b/runtime/sources/fexcore-darwin/FEXCore/Source/Utils/Allocator.cpp
+@@ -430,6 +430,13 @@ struct JITMappingTable {
+   std::map<uintptr_t, MappedRegion> ExecToWrite;
+ };
+ 
++JITHostHooks HostHooks {};
++std::atomic<bool> HostHooksPublished {false};
++
++bool HostRange(uintptr_t Address, uintptr_t Base, size_t Size = 1) {
++  return Address >= Base && Size != 0 && Size <= HostHooks.Size && Address - Base <= HostHooks.Size - Size;
++}
++
+ JITMappingTable& GetJITMappingTable() {
+   static JITMappingTable Table;
+   return Table;
+@@ -457,13 +464,39 @@ void* TranslateAddressLocked(const std::map<uintptr_t, MappedRegion>& Table, voi
+ }
+ } // namespace
+ 
++void SetJITHostHooks(const JITHostHooks& Hooks) {
++  auto& Table = GetJITMappingTable();
++  std::lock_guard<std::mutex> Lock(Table.Mutex);
++  if (HostHooksPublished.load(std::memory_order_relaxed)) {
++    LogMan::Msg::EFmt("FEX JIT host already installed; refusing replacement");
++    return;
++  }
++  const uintptr_t RXBase = Hooks.RWBase + static_cast<uintptr_t>(Hooks.Delta);
++  const bool Valid = Hooks.Alloc && Hooks.Free && Hooks.RWBase && RXBase && Hooks.Size &&
++                     Hooks.Size <= UINTPTR_MAX - Hooks.RWBase && Hooks.Size <= UINTPTR_MAX - RXBase &&
++                     Table.WriteToExec.empty();
++  // An invalid attempted host binding stays failed, never falls back to a
++  // private executable mapping beyond the host's memory limit.
++  HostHooks = Valid ? Hooks : JITHostHooks {};
++  HostHooksPublished.store(true, std::memory_order_release);
++  if (!Valid) LogMan::Msg::EFmt("invalid or late FEX JIT host binding");
++}
++
+ void* GetExecutableAddress(void* WriteAddr) {
++  if (HostHooksPublished.load(std::memory_order_acquire) &&
++      HostRange(reinterpret_cast<uintptr_t>(WriteAddr), HostHooks.RWBase)) {
++    return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(WriteAddr) + static_cast<uintptr_t>(HostHooks.Delta));
++  }
+   auto& Table = GetJITMappingTable();
+   std::lock_guard<std::mutex> Lock(Table.Mutex);
+   return TranslateAddressLocked(Table.WriteToExec, WriteAddr);
+ }
+ 
+ void* GetWritableAddress(void* ExecAddr) {
++  if (HostHooksPublished.load(std::memory_order_acquire) &&
++      HostRange(reinterpret_cast<uintptr_t>(ExecAddr), HostHooks.RWBase + static_cast<uintptr_t>(HostHooks.Delta))) {
++    return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ExecAddr) - static_cast<uintptr_t>(HostHooks.Delta));
++  }
+   auto& Table = GetJITMappingTable();
+   std::lock_guard<std::mutex> Lock(Table.Mutex);
+   return TranslateAddressLocked(Table.ExecToWrite, ExecAddr);
+@@ -479,6 +512,23 @@ void* GetWritableAddress(void* ExecAddr) {
+ std::atomic<uint64_t> AllocationCounter{0};
+ 
+ void* iOSJITAlloc(size_t Size) {
++  if (HostHooksPublished.load(std::memory_order_acquire)) {
++    if (!HostHooks.Alloc || !Size || Size > HostHooks.Size) return nullptr;
++    void* RX = nullptr;
++    void* RW = HostHooks.Alloc(Size, &RX);
++    if (!RW) return nullptr;
++    if (!HostRange(reinterpret_cast<uintptr_t>(RW), HostHooks.RWBase, Size) ||
++        reinterpret_cast<uintptr_t>(RX) != reinterpret_cast<uintptr_t>(RW) + static_cast<uintptr_t>(HostHooks.Delta)) {
++      HostHooks.Free(RW, Size);
++      LogMan::Msg::EFmt("FEX JIT host returned an invalid mapping");
++      return nullptr;
++    }
++    return RW;
++  }
++#ifdef FEX_REQUIRE_JIT_HOST
++  LogMan::Msg::EFmt("FEX JIT allocation refused before host binding");
++  return nullptr;
++#endif
+   const uint64_t RequestNumber = AllocationCounter.fetch_add(1, std::memory_order_relaxed) + 1;
+   const auto& Symbols = GetBreakpointJITSymbols();
+   if (Symbols.get_jit_mapping == nullptr) {
+@@ -536,6 +586,11 @@ void* iOSJITAlloc(size_t Size) {
+ }
+ 
+ bool iOSJITFreeIfOwned(void* WriteAddr, size_t Size) {
++  if (HostHooksPublished.load(std::memory_order_acquire) &&
++      HostRange(reinterpret_cast<uintptr_t>(WriteAddr), HostHooks.RWBase)) {
++    if (!HostHooks.Free(WriteAddr, Size)) LogMan::Msg::EFmt("FEX JIT host refused release");
++    return true; // Owned even if rejected: never unmap a host arena subrange.
++  }
+   auto& Table = GetJITMappingTable();
+   std::lock_guard<std::mutex> Lock(Table.Mutex);
+   const auto It = Table.WriteToExec.find(reinterpret_cast<uintptr_t>(WriteAddr));
+@@ -555,6 +610,17 @@ bool iOSJITFreeIfOwned(void* WriteAddr, size_t Size) {
+ // either) so a SIGSEGV/SIGBUS handler can log what it actually was, rather than just its raw
+ // bytes.
+ iOSJITAddressKind iOSJITDescribeAddress(void* Addr, uintptr_t* OutRegionBase, size_t* OutOffset, size_t* OutSize) {
++  if (HostHooksPublished.load(std::memory_order_acquire)) {
++    const uintptr_t Address = reinterpret_cast<uintptr_t>(Addr);
++    for (uintptr_t Base : {HostHooks.RWBase, HostHooks.RWBase + static_cast<uintptr_t>(HostHooks.Delta)}) {
++      if (HostRange(Address, Base)) {
++        if (OutRegionBase) *OutRegionBase = Base;
++        if (OutOffset) *OutOffset = Address - Base;
++        if (OutSize) *OutSize = HostHooks.Size;
++        return iOSJITAddressKind::HostRegion;
++      }
++    }
++  }
+   auto& Table = GetJITMappingTable();
+   std::lock_guard<std::mutex> Lock(Table.Mutex);
+   const auto A = reinterpret_cast<uintptr_t>(Addr);
+diff --git a/runtime/sources/fexcore-darwin/FEXCore/include/FEXCore/Utils/AllocatorHooks.h b/runtime/sources/fexcore-darwin/FEXCore/include/FEXCore/Utils/AllocatorHooks.h
+index dc50f27..8ec79f5 100644
+--- a/runtime/sources/fexcore-darwin/FEXCore/include/FEXCore/Utils/AllocatorHooks.h
++++ b/runtime/sources/fexcore-darwin/FEXCore/include/FEXCore/Utils/AllocatorHooks.h
+@@ -152,6 +152,17 @@ FEX_DEFAULT_VISIBILITY extern void VirtualName(const char* Name, void* Ptr, size
+ // No special mmap flag is needed, so this stays 0 rather than MAP_JIT.
+ constexpr int PlatformExecuteFlag = 0;
+ 
++// Installed once, before the embedding core creates any guest threads. The
++// complete arena stays owned by the host; FEX never munmaps its suballocations.
++struct JITHostHooks {
++  void* (*Alloc)(size_t, void**);
++  int (*Free)(void*, size_t);
++  intptr_t Delta;
++  uintptr_t RWBase;
++  size_t Size;
++};
++void SetJITHostHooks(const JITHostHooks& Hooks);
++
+ // Returns the WRITABLE address of a fresh dual-mapped JIT region (write code through this
+ // pointer; use GetExecutableAddress() on it to get the address to branch/call into).
+ void* iOSJITAlloc(size_t Size);
+@@ -172,6 +183,7 @@ void* GetWritableAddress(void* ExecAddr);
+ enum class iOSJITAddressKind {
+   NotTracked, // Not inside any currently-live JIT allocation.
+   LiveAllocation,
++  HostRegion, // In the immutable host arena; individual allocation lifetime is host-owned.
+ };
+ // Crash-diagnostic only -- see Allocator.cpp's definition for what each result means.
+ iOSJITAddressKind iOSJITDescribeAddress(void* Addr, uintptr_t* OutRegionBase, size_t* OutOffset, size_t* OutSize);

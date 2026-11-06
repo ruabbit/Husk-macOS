@@ -922,7 +922,7 @@ int main(int argc,const char **argv)
     atexit(husk_release_unused_compressed_heap);
     @autoreleasepool {
         const char *language=getenv("HUSK_APP_LANGUAGE");
-        if(language&&(!strcmp(language,"en")||!strcmp(language,"zh-Hans"))){
+        if(language&&(!strcmp(language,"en")||!strcmp(language,"zh-Hans")||!strcmp(language,"ja"))){
             NSMutableDictionary *domain=[[NSUserDefaults.standardUserDefaults volatileDomainForName:NSArgumentDomain] mutableCopy];
             domain[@"AppleLanguages"]=@[@(language)];
             [NSUserDefaults.standardUserDefaults setVolatileDomain:domain forName:NSArgumentDomain];

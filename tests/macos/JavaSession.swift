@@ -5,7 +5,7 @@ import SharedLibrary
 @main struct JavaSession {
     @MainActor static func main() async {
         let args = CommandLine.arguments
-        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "nativeactivity-java", "nativeactivity-java-jitless", "en", "zh-Hans", "jitless", "nativeactivity-jitless", "cancel-jitless"].contains(args[4])) else { exit(64) }
+        guard args.count == 4 || (args.count == 5 && ["nativeactivity", "nativeactivity-java", "nativeactivity-java-jitless", "en", "zh-Hans", "ja", "jitless", "nativeactivity-jitless", "cancel-jitless"].contains(args[4])) else { exit(64) }
         let nativeActivity = args.count == 5 && args[4].hasPrefix("nativeactivity")
         let largeSubclass = args.count == 5 && args[4].hasPrefix("nativeactivity-java")
         let jitless = args.count == 5 && args[4].hasSuffix("jitless")
@@ -14,7 +14,7 @@ import SharedLibrary
         let suite = "org.husk.java.language." + UUID().uuidString
         let defaults = UserDefaults(suiteName:suite)!
         defer { defaults.removePersistentDomain(forName:suite) }
-        let language = args.count > 4 && ["en","zh-Hans"].contains(args[4]) ? args[4] : "system"
+        let language = args.count > 4 && ["en","zh-Hans","ja"].contains(args[4]) ? args[4] : "system"
         AppLanguage.set(language,defaults:defaults)
         let session = SessionController(languageDefaults:defaults)
         func check(_ condition: Bool, _ message: String) throws {

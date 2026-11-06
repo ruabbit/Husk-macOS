@@ -14,13 +14,23 @@ public final class Compat33Checks {
     public static final class StaticMethodClass { static { initialized |= 2; } public static void method() {} }
     public static final class FieldClass { static { initialized |= 4; } public int field; }
     public static final class StaticFieldClass { static { initialized |= 8; } public static int field; }
+    public static final class AllocClass {
+        static { initialized |= 16; }
+        public AllocClass() { throw new AssertionError("AllocObject must not call a constructor"); }
+    }
+    public static final class FailedAllocClass {
+        static { if (initialized != 0) throw new IllegalStateException("expected initialization failure"); }
+    }
     public static Class<?> deferred(int index) throws Exception {
-        String[] names = {"MethodClass", "StaticMethodClass", "FieldClass", "StaticFieldClass"};
+        String[] names = {"MethodClass", "StaticMethodClass", "FieldClass", "StaticFieldClass", "AllocClass", "FailedAllocClass"};
         return Class.forName("org.husk.lifecycle.Compat33Checks$" + names[index], false, Compat33Checks.class.getClassLoader());
     }
     public static int count() { return initialized; }
     static void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); }
     static void run(Activity activity) {
+        android.media.midi.MidiManager midi = (android.media.midi.MidiManager) activity.getSystemService("midi");
+        check(midi != null && midi.getDevices() != null && midi.getDevices().length == 0,
+                "MIDI service reports an empty device list without inventing hardware");
         String id = "folder/a b%中文";
         Uri doc = DocumentsContract.buildDocumentUri("org.husk.documents", id);
         check(DocumentsContract.getDocumentId(doc).equals(id), "document IDs retain encoded separators");

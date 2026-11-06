@@ -6,6 +6,7 @@
 #include <unistd.h>
 void tl_mc_hle_install(const char *,const char *,const char *,int,int);
 void tl_hle_configure(const char *,const char *,const char *,int,int);
+void tl_hle_set_intent_extra(const char *, const char *);
 void tl_jni_hle_install(void);
 void tl_fmod_install(void);
 void tl_log_line(const char *format,...){(void)format;}
@@ -14,6 +15,23 @@ int main(void) {
     tl_jni_init();tl_hle_configure("com.husk.text-test","","/tmp",1280,720);tl_jni_hle_install();
     tl_mc_hle_install("com.husk.text-test","","/tmp",1280,720);
     tl_fmod_install();
+    jobj *intent=tl_jni_new_object(tl_jni_class("android/content/Intent"));
+    CHECK(!tl_jni_call(intent,"getExtras","()Landroid/os/Bundle;",NULL).l);
+    tl_hle_set_intent_extra("unity","-systemallocator");
+    jvalue extra[2]={{.l=tl_jni_new_string("unity")},{.l=tl_jni_new_string("fallback")}};
+    jobj *bundle=tl_jni_call(intent,"getExtras","()Landroid/os/Bundle;",NULL).l;
+    CHECK(bundle && tl_jni_call(bundle,"containsKey","(Ljava/lang/String;)Z",extra).z);
+    CHECK(!strcmp(tl_jni_string(tl_jni_call(intent,"getStringExtra","(Ljava/lang/String;)Ljava/lang/String;",extra).l),"-systemallocator"));
+    tl_hle_set_intent_extra("unity","replacement");
+    CHECK(!strcmp(tl_jni_string(tl_jni_call(bundle,"getString","(Ljava/lang/String;)Ljava/lang/String;",extra).l),"replacement"));
+    extra[0].l=tl_jni_new_string("absent");
+    CHECK(!tl_jni_call(bundle,"containsKey","(Ljava/lang/String;)Z",extra).z);
+    CHECK(!strcmp(tl_jni_string(tl_jni_call(bundle,"getString","(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",extra).l),"fallback"));
+    jobj *display34=tl_jni_new_object(tl_jni_class("android/view/Display"));
+    int64_t offset=tl_jni_call(display34,"getAppVsyncOffsetNanos","()J",NULL).j;
+    int64_t deadline=tl_jni_call(display34,"getPresentationDeadlineNanos","()J",NULL).j;
+    CHECK(offset>0 && deadline>offset && deadline<1000000000/60);
+    CHECK(!tl_jni_pending());
     jobj *fmod=tl_jni_class_object("org/fmod/FMOD");
     jvalue input={.i=3};
     jobj *devices=tl_jni_call(fmod,"getAudioDevices","(I)[Landroid/media/AudioDeviceInfo;",&input).l;

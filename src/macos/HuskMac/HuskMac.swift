@@ -453,7 +453,7 @@ struct SettingsView: View {
                 HStack { Label("Play without JIT", systemImage: "bolt.slash.fill"); Spacer(); Image(systemName: "chevron.right") }
             }.buttonStyle(.plain)
             Picker("Language", selection: $language) {
-                Text("System default").tag("system"); Text("English").tag("en"); Text("简体中文").tag("zh-Hans")
+                Text("System default").tag("system"); Text("English").tag("en"); Text("简体中文").tag("zh-Hans"); Text(verbatim: "日本語").tag("ja")
             }.onChange(of: language) { _, value in AppLanguage.set(value) }
             Text("Restart Husk to apply the language to every screen. Applications use it on their next launch.").font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

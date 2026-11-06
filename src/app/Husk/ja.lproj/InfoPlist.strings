@@ -18,4 +18,3 @@
 
 /* Privacy - Local Network Usage Description */
 "NSLocalNetworkUsageDescription" = "HuskはPCを使わずにJITを有効化するため、ローカルネットワーク経由でこのiPhoneとペアリングを行います。";
-

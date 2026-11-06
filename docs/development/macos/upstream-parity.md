@@ -4,22 +4,21 @@
 
 用户已明确要求填补空缺并完成迁移。iOS独有的StikDebug/JIT配对与attach、TrollStore/SideStore/IPA分发、p12证书导入、iPhone/iPad专用界面及iOS签名/真机发行不再是macOS迁移交付项；保留上游共享源码，不额外移植无用流程。共享JNI/内存/图形/Java修复仍需Mac接入。PS4、ARM32/AOSP/VM和正常窗口/输入/存档关闭仍是开放产品链路，不能划为iOS专属。先处理Runner异常退出与后台激活，再恢复受保护的验证和交付。
 
-## 2026-11-07：远端已到 3.4，当前只读、尚未合入
+## 2026-11-07：3.4 已合入并完成候选验证，完整迁移继续开放
 
-远端只读引用显示 upstream `main=afe83d45`，最新标签 `3.4=acfd7bcb`；`3.0=cffaf8b7` 是 2026-10-17 的历史标签。当前来源锁/本地合入点是 `d92d0a1`，所以 `d92d0a1..3.4` 的 **7 提交/36 路径**（到 main 为 **8/37**）全部列为待合并，不计入已接入功能。
+upstream main=`afe83d45`、3.4 tag=`acfd7bcb` 已普通合并为 fork main=`add16673`、macOS merge=`dd96a0ab`；本批8提交/37路径，main无冲突，Mac四处按内存映射、线程所有权和JNI语义合并。收尾fetch无新增。从3.0到当前上游为104提交，不能把提交比例当功能完成率。11月4日保留的适配已在c3895210重建验证，205/205与包检查通过；之后的最终3.4.0/build30默认 **212/212（391.48秒）**、独立P0 **25/25**、18个arm64 Mach-O / 407个Java资源 / 三语言各784条的包检查通过。最终GUI已确认，推送与CI正在收尾；不能提前记为已推送。
 
-从3.0到已交付来源89b0f87为80个上游提交/167个净变更路径，到本地d92d0a1为96提交/851路径，均由本机Git读取。GitHub compare的300文件上限不能当作总量。3.0祖先已包含在两条origin分支；后续已交付Mac范围含账户/资料库、Godot/Cocos/Flutter/Java运行接线、AOT/JIT-less/Unity/ELF、WebView/Play详情、受控ARM32/Binder/JobService/AOSP准备层。各项保留受控测试、真实应用和实体设备边界，不能由版本号或提交数推导全部功能完成。
-
-| 用户功能 | 已进入macOS的部分 | 当前缺口 |
+| 变化/产品能力 | macOS 实际接入和证据 | 仍有的边界 |
 | --- | --- | --- |
-| 3.0首页、资料库与外观 | 原生首页选中应用、启动/显示窗口、应用图标和资料库；随3.1后续变更保留原图标/TabView | 不等同于逐像素复刻iOS页面；剩余动态文本本地化见下文 |
-| Android引擎与新Java框架 | Unity/Minecraft、Cocos/FMOD、Godot4/NativeBridge、GameMaker、SDL/DXVK、Rockstar、Unreal/NativeActivity；Python/Flutter/libGDX/.NET等走Java；独立窗口/输入/暂停/关闭已接线 | 受控ELF/DEX不等于上游宣称的数百个游戏逐一兼容；各真实失败样本仍开放 |
-| 导入、OBB、文字与字体 | Store/XAPK OBB、48APK签名分包、流式取消、受限文件选择；旧Unity文本输入、固定CJK字体 | 实体IME/手柄与认证Play下载另验；不是上游每种Android服务的完整实现 |
-| 3.1至3.3扩展 | Geode缓存/注入、Java内嵌WebView与独立WebRunner、账户/Play详情、中英文资源、JIT-less转换/签名/加载和受控保存重开 | 真实Geode模组、第三方HTTP插件、账号/Google认证、真实JIT-less游戏尚需独立验收 |
-| PS4 | ConsoleHostRuntime/MacConsoleProbe及宿主ABI、JIT区域、输入/暂停/停止契约检查 | **真实核心未打包；资料库导入、独立ConsoleRunner、窗口和worker/storage完成协议未交付**，不是可忽略的iOS专属项 |
-| ARM32 / AOSP / VM | 解释器与Binder/AOSP准备源码、独立VM框架已有部分实现 | ARM32产品入口仍关闭、完整AOSP系统未完成；VM游戏、存档与发行门槛仍开放 |
+| Runner后台与退出保护 | Native/Web helper采用LSUIElement；NativeRunner在guest/WebKit前明确设置headless/hidden为prohibited，可见游戏为regular。真实后台会话检查inactive/无窗口；协议错误先关闭控制写端请求正常退出，错误与原期限保留。测试遇到signal/128+signal写latch并阻止下一次启动，CTest失败即停；最终146份真实Runner记录为119次exit0、27次预期exit70，无信号退出、无latch | 这是本轮受控验证，不能反推11月4日用户观察只是正常退出，也没有改系统保护 |
+| 3.4 Java/JNI/Unity/内存 | JNI AllocObject先初始化真实DEX类且不调用构造函数，失败初始化保持异常；MIDI服务返回非null空列表；Unity Intent/Bundle extras与vsync期限、VA映射/拆分/固定替换统计均有回归。栈重试保留Mac线程所有权 | 非真实商业Unity/Godot应用验收 |
+| Godot 3触摸 | 三种长JNI签名使用真实Android ELF，普通和JIT-less共六条打包会话验证三浮点触摸布局、源设备、按钮/滚轮参数、owner线程、输入/暂停/恢复/销毁与storage-closed | 不是上游全部Godot 3游戏触摸兼容率 |
+| 日语与Mac界面 | 589条复用上游、195条Mac专用翻译；英文/简中/日语各784条，键和格式占位符集合检查，Java/Runner语言白名单与启动传递通过 | 部分旧动态计数/帮助/诊断仍未翻译，真实运行中guest语言变化与其他语言可见验收单列 |
+| 既有Android产品链路 | Unity/Minecraft、Cocos/FMOD、Godot4/NativeBridge、GameMaker、SDL/DXVK、Rockstar、Unreal/NativeActivity，Java/Dalvik/Flutter/Python/.NET，WebView/WebRunner、Geode、OBB/分包、账号/Play详情、AOT/JIT-less沿用当前接线和相应回归 | 真实游戏/服务/设备的未验收项仍见具体开放项，不由构建或上游宣传成功率推导 |
+| PS4 | 真实公开核心/FEX和45个子模块已固定；实现缺失宿主JIT hooks，真实arm64核心编译/加载、独占导出与系统依赖验证通过。真实备份队列已修复排空/拒绝新增/失败回执/保留旧备份，并跨进程读回 | 核心尚未进入Product；guest线程停止/回收、完整storage回执、资料库/PKG事务与ConsoleRunner/窗口输入仍未交付 |
+| ARM32 / AOSP / VM | 解释器/Binder/AOSP准备层已编译；独立VM框架与生命周期工具已有实现 | ARM32产品启动仍关闭，完整AOSP服务与VM游戏/存档/发行门槛仍开放 |
 
-相对d92d0a1的3.4待合并增量为：JNI对象分配前初始化/构建修复；日文本地化；短地址空间线程栈和Unity -systemallocator；Unity Swappy/vsync；Godot3触摸native与空MIDI列表；release/project regeneration及altsource metadata。这些增量尚未合入。3.4发布说明中其他Java/KeyInfo/WAL/字体/NativeActivity修复有一部分已在本地build29源码，不能整批记为缺失，也不能因为部分针对性通过就记为已交付。上游3.4说明中的约97%/472个F-Droid、约90%/169个Play应用是上游自己的Mac样本结果，不是本fork兼容率；其Known Issues仍列Godot3触摸、无Java GC、浏览器多进程和Play服务等限制。本轮继续保持停止。
+Mac不移植StikDebug/attach、TrollStore/SideStore/IPA分发、p12导入、iPhone/iPad布局和iOS发行流程。3.4只涉及这些平台流程的改动保留在共享源码，不成为Mac待办；PS4/Android/ARM32/AOSP/VM并非iOS专属。
 
 ## 2026-11-04：用户要求停止执行，build 29 未交付
 
@@ -369,8 +368,9 @@ Java 内嵌 WebView 使用 `Saves/<id>/java-web-store.json`，数据归 NativeRu
 6. Play：个人账号/passkey 仍被 Google 拒绝；只有本人真实登录成功且 Play 会话可用才通过。OBB 的 Play/XAPK 安装和原生读取已由 build 12 fixture 验证；真实网络 OBB/PAD、设备配置和已购交付仍待验收。当前同一 APK 版本增补/替换 OBB 被明确拒绝，保留原安装；下一步需让安装事务同时记录 APK 与资源代际，再接单独 OBB 导入，不能复用仅 APK 摘要的恢复判断。压缩包单条仍限 512 MiB（现有解包器上限），Play 流式下载总量限 4 GiB。
 7. VM/P6：VM Minecraft 黑屏与持续 PCM 未通过；上游新增的 Android 删除/快照空间预检尚未映射到 Mac 独立 VM 数据管理，需先划清共享基础镜像与用户 overlay，再提供明确确认的删除入口并做隔离磁盘测试；QEMU/libssh/OpenSSL 许可、Android 对应源码和发行签名仍按发行门槛处理。
 8. Hole.io（2026-10-13）：InputEvent.getDevice 的父类 JNI 查找与 Java Vulkan 合成已修复，最终 build 5 的后台真实游戏确认拖动、计分、正常黑色洞口以及暂停/恢复。证据在 `build/macos/TestResults/HoleCandidate/`，会话 E86FC7A5。仍需完成可见 AppKit 窗口鼠标拖动验收（CUA 详情导航 native pipe closed）、Unity 进程退出与 SharedPreferences/worker 关闭、保存重开和长期性能。UnityPlayerForActivityOrService 的销毁路径在 mProcessKillRequested 时调用 onUnityPlayerQuitted 后进入 UnityPlayer.kill → Process.killProcess；当前 host 如实保持失败状态。下一步核对该退出请求的真实时序与写入/worker 所有权，补覆盖该行为的 DEX fixture，再运行真实保存重开；不能忽略 killProcess 或直接发 storage-closed。Vulkan 目前同步读回到 Java 合成器，可进一步评估 GPU 共享纹理，但要保留 present 等待和独立 layer 所有权。
-9. PS4：核心源码公开位于 [Leviidev/AetherPS4 的 husk 分支](https://github.com/Leviidev/AetherPS4/tree/d953592114581cf3e5bdb20229769ec2f69b2359)，已核对 macOS 模块入口。公开 [fex-snapshot](https://github.com/Leviidev/AetherPS4/tree/220ab1e6d5aec14e43428f97c75530fc0113ce08) 的 `FEXCore/include/FEXCore/Utils/AllocatorHooks.h` 没有核心 CMake 检测的 `SetJITHostHooks`，会关闭 `AETHER_FEX_HAS_JIT_HOST`；不能把退回自行分配 JIT 当作 Husk 宿主区域/上限已生效。上游脚本要求作者本地 `husk-fex` 分支，本次公开同名仓库接口返回 404，并非核心源码整体不可获取。
-   - 下一步先固定公开核心、FEX 和子模块版本，取得或实现匹配的 host JIT hooks；FEX 与核心同时使用 `FEX_MAC_PHONE_PATH=1`，核心开启 `ENABLE_FEX_GUEST_CPU`、`ENABLE_SHADPS4_IOS_LIB`、`ENABLE_HUSK_MODULE`、`AETHER_MAC_PHONE_PATH`。在现有依赖缓存内验证 arm64 模块、单导出符号、依赖闭包和许可，不另建候选或降低权限约束。
-   - 模块启动线程目前 detach，`shadps4_run_loop()` 返回后即报告 STOPPED，ABI v1 没有 worker join / 存档刷写回执。继续追到核心 `src/emulator.cpp:665–698`：RunLoop 创建周期写入游玩时长的 jthread，事件循环结束只更新游玩时长并关闭 Storage::DataBase，再调用 onRuntimeStopped；这段返回路径没有停止/join 该 jthread 或 guest workers。停止入口仅推送 SDL_EVENT_QUIT。需要补清楚各 worker 与游戏存档的所有权和完成信号，本轮 `husk_console_join()` 只回收宿主输入线程，不能据此发 native storage-closed。之后再接独立 ConsoleRunner、资料库导入/分发、固定画布与键鼠/手柄/暂停/退出，并验真实游戏保存重开。源码证据在 `build/logs/current-ps4-core-contract.log`、`current-ps4-fex-contract.log`，未运行真实 PS4 游戏。
+9. PS4：真实核心 `03c2deba16f6450f651a51b0e6ae45b66305022b`、FEX `220ab1e6d5aec14e43428f97c75530fc0113ce08` 和45个子模块由 `dependencies/macos-console.lock.json` 固定。`scripts/build_macos_console.py` 在唯一 `build/macos/Console` 可复现构建；匹配补丁在 `patches/macos/`。已完成实际FEX宿主JIT钩子、未绑定/错误范围拒绝、上限、双重释放和RX执行验证，模块arm64/单导出/系统依赖/无StikDebug导入检查及真实dlopen、ABI和非法PKG拒绝。不得再把核心写成未取得或未编译。
+   - 本轮修复真实SaveData备份队列：停止先关闭准入并排空已接收工作，移除停止时丢弃队列的行为；有界流式复制、短读写/flush/fsync错误、符号链接拒绝、先完整新备份后替换、失败保留旧备份，错误事件不再恒成功。真实核心链接测试完成12个不同title同名slot排空、第二进程读回、重启工作批次、写入失败及sticky失败。周期playtime jthread在最后更新/关闭数据库前request_stop并join，已编译；真实游戏时序尚未验证。备份drain不等于完整游戏storage-closed。
+   - 当前关键阻塞：模块游戏线程仍detach；RunMainEntry在正常/主动halt后永久sleep，某些失败走abort；GuestEngine只在Threads为空时允许Shutdown，没有安全的stop-all。仍需区分正常返回与guest fatal halt，处理owner线程上的FEX释放、HLE阻塞/纯CPU线程停止、TLS/清理回调、最终worker join；不能用kill或任意线程取消换取成功回执。
+   - 之后把经过验证的guest结束、SaveMemory/已挂载存档及备份队列排空、数据库关闭统一成带失败状态的模块回执，再接独立ConsoleRunner、资料库导入/PKG事务、固定画布/键鼠/手柄/暂停和独立存档重开。ABI v1 STOPPED与现有husk_console_join（仅宿主输入pump）不足以发storage-closed。合法真实PS4游戏、玩法和完整保存尚无验收；没有自动运行游戏。证据：`build/logs/current-ps4-*` 与 `build/macos/Console/dependency-verification.json`。
 
 检查入口：CMakeLists.txt、Models/NativeLaunch/SessionController、MacNativeDrivers、NativeRunner、WebRunner、WebApp.swift、build_macos_graphics.py；对照上游 TLReport.nativeEngine、TLUnityView.swift、AppWindows.swift、src/app/project.yml 和 Play。后续每日同步须同时交付平台适配、当前候选与相应验证，不能以 Git 祖先或旧测试替代。

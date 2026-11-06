@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Supported native architecture")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0 CACHE STRING "Provisional deployment floor; requires separate machine validation")
-project(HuskMac VERSION 3.3.0 LANGUAGES C OBJC Swift)
+project(HuskMac VERSION 3.4.0 LANGUAGES C OBJC Swift)
 if(NOT APPLE OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
     message(FATAL_ERROR "HuskMac currently targets native macOS arm64")
 endif()
@@ -303,6 +303,12 @@ foreach(kind capacitor cordova)
     set_tests_properties(macos-web-${kind} PROPERTIES TIMEOUT 150)
 endforeach()
 add_executable(MacNativeDriverSessionTests tests/macos/NativeDriverSession.swift)
+foreach(variant godot3a godot3b godot3c)
+    add_test(NAME macos-native-${variant} COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/godot-${variant}.apk" godot "${CMAKE_BINARY_DIR}/TestResults")
+    add_test(NAME macos-aot-${variant} COMMAND MacNativeDriverSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/NativeTests/godot-${variant}.apk" godot "${CMAKE_BINARY_DIR}/TestResults" jitless)
+    set_tests_properties(macos-native-${variant} macos-aot-${variant} PROPERTIES TIMEOUT 150)
+endforeach()
+
 target_compile_options(MacNativeDriverSessionTests PRIVATE -parse-as-library -I ${MAC}/SharedCore)
 target_link_libraries(MacNativeDriverSessionTests PRIVATE SharedLibrary)
 add_dependencies(MacNativeDriverSessionTests PackageMac NativeDriverFixtures)
@@ -320,6 +326,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/NativeTests/gamemaker.apk" "${CMA
     "${CMAKE_BINARY_DIR}/NativeTests/gamemaker-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-missing.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/ue4.apk" "${CMAKE_BINARY_DIR}/NativeTests/cocos-v8.apk"
+    "${CMAKE_BINARY_DIR}/NativeTests/godot-godot3a.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-godot3b.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-godot3c.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/godot-pause-failed.apk" "${CMAKE_BINARY_DIR}/NativeTests/godot-godot4.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/sdl-missing.apk" "${CMAKE_BINARY_DIR}/NativeTests/gta-missing.apk"
     "${CMAKE_BINARY_DIR}/NativeTests/unity.apk" "${CMAKE_BINARY_DIR}/NativeTests/minecraft.apk" "${CMAKE_BINARY_DIR}/NativeTests/sdl-luajit.apk"
@@ -549,7 +556,7 @@ add_test(NAME macos-aot-nativeactivity-session COMMAND MacJavaSessionTests "${HU
 set_tests_properties(macos-aot-java-session macos-aot-nativeactivity-session PROPERTIES TIMEOUT 240)
 add_test(NAME macos-java-session COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults")
 set_tests_properties(macos-java-session PROPERTIES TIMEOUT 95)
-foreach(language en zh-Hans)
+foreach(language en zh-Hans ja)
     add_test(NAME macos-java-language-${language} COMMAND MacJavaSessionTests "${HUSK_PRODUCT}" "${CMAKE_BINARY_DIR}/JavaTests/Lifecycle.apk" "${CMAKE_BINARY_DIR}/TestResults" ${language})
     set_tests_properties(macos-java-language-${language} PROPERTIES TIMEOUT 60)
 endforeach()

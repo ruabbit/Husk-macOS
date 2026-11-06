@@ -95,7 +95,7 @@ private final class AccountHTTP: URLProtocol, @unchecked Sendable {
         let failed = Account(session:session,sites:sites,defaults:defaults,avatarFile:root.appendingPathComponent("other.png"),readToken:{nil},writeToken:{_ in throw AccountError(message:"fixture storage failure")},deleteToken:{})
         do { try await failed.signIn(username:"fixture",password:"fixture-only"); throw AccountError(message:"FAIL accepted a missing credential") }
         catch { try check(failed.user == nil && !failed.signedIn, "credential persistence failure does not publish a signed-in identity") }
-        for language in ["en","zh-Hans"] {
+        for language in ["en","zh-Hans","ja"] {
             AppLanguage.set(language,defaults:defaults)
             try check(AppLanguage.runnerEnvironment(defaults)["HUSK_APP_LANGUAGE"] == language && defaults.stringArray(forKey:"AppleLanguages") == [language], "selected language reaches new Runner environment")
         }

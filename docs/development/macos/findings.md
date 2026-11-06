@@ -1,12 +1,19 @@
 # 审计发现
 
+## 2026-11-07：3.4与真实PS4依赖验证
+
+- 3.4已普通合并并完成build30默认212/212、P0 25/25和包检查；详细范围与边界见progress首节，不再沿用下方只读观察时的待合并结论。
+- PS4公开核心与FEX可以在Mac构建，但FEX公开快照缺host hooks；自己的补丁实现不可变绑定/范围/上限/无回退，真实核心与实际执行测试通过。
+- 原备份停止在队列完成前就退出，IO复制错误又被吞掉；已修排空/失败回执和保留旧备份，真实核心跨进程验证通过。playtime周期线程与Close竞争已加stop/join。
+- 仍存在模块detach、主guest返回后无限sleep、FEX忙线程不能Shutdown及失败abort路径；不能用模块STOPPED或宿主pump join当作所有guest与存储已关闭。未运行PS4游戏，完整PS4产品接入继续开放。
+
 ## 2026-11-07：恢复迁移，后台启动与异常退出保护
 
 - 用户直接要求填补空缺、完成迁移，已更新executionHold和每日任务并全文读回；不再沿用暂停状态。明确排除macOS无用的iOS签名/分发/配对/attach和移动设备专用界面。
 - AppKit官方文档确认prohibited策略不显示Dock图标、不得激活。NativeRunner原普通headless路径没有设置该策略，而WebKit会用到AppKit；现改为所有路径在guest启动前显式设policy，Native/Web helper以LSUIElement启动。可见游戏路径仍显式选择regular。
 - SessionController原fail()对无效关闭回执直接SIGTERM，这与旧日志里Java store mismatch后的SIGTERM一致。改为关闭私有控制写端请求正常退出，保留错误及原有限关闭期限，不接受后续回执为成功。
 - 测试入口增加stop-on-failure；HUSK_TEST_FAILURE_LATCH在真实Native/Web Runner信号或128+signal退出后记录并阻止后续启动，隔离诊断mock的预期停止。新增静态故障记录阻止启动检查，不注入信号；Java/WebKit与隐藏窗口会话验证实际activationPolicy/active/windowVisible。
-- 当前这些修改尚未构建/运行验证，不能先称为已解决反复退出根因。
+- 后续c3895210默认205/205、build30默认212/212与真实后台激活断言通过，异常即停已启用；这些新证据不能反推11月4日全部退出根因。
 
 ## 2026-11-07：上游 3.4 远端观察与“已合并功能”边界
 

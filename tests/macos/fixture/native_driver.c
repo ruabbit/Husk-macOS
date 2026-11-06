@@ -115,7 +115,27 @@ void GODOT(onRendererPaused)(void *e,void *c){
 #endif
 }
 void GODOT(onRendererResumed)(void *e,void *c){record(16);}
+#ifdef GODOT3_TOUCH
+static void touch3(void *e,int dev,int action,int pointer,int count,void *pos) {
+    const void **jni=*(const void ***)e;float values[3]={0};
+    if(dev!=0x1002 || count!=1 || ((int(*)(void*,void*))jni[171])(e,pos)!=3)wrong_thread=1;
+    else {
+        ((void(*)(void*,void*,int,int,float*))jni[205])(e,pos,0,3,values);
+        const float coordinate=action==3?0:100; // Host cancellation clears the held touch.
+        if(values[0]!=pointer || values[1]!=coordinate || values[2]!=coordinate)wrong_thread=1;
+    }
+    record(action==0?2:action==3?64:4);
+}
+#if GODOT3_TOUCH == 1
+void GODOT(touch__IIII_3F)(void *e,void *c,int dev,int action,int pointer,int count,void *pos){touch3(e,dev,action,pointer,count,pos);}
+#elif GODOT3_TOUCH == 2
+void GODOT(touch__IIII_3FI)(void *e,void *c,int dev,int action,int pointer,int count,void *pos,int buttons){if(buttons)wrong_thread=1;touch3(e,dev,action,pointer,count,pos);}
+#else
+void GODOT(touch__IIII_3FIFF)(void *e,void *c,int dev,int action,int pointer,int count,void *pos,int buttons,float vertical,float horizontal){if(buttons||vertical||horizontal)wrong_thread=1;touch3(e,dev,action,pointer,count,pos);}
+#endif
+#else
 void GODOT(dispatchTouchEvent)(void *e,void *c,int action,int pointer,int count,void *pos,unsigned char dbl){record(action==0?2:action==3?64:4);}
+#endif
 #ifdef GODOT4
 void GODOT(key)(void *e,void *c,int code,int uni,int label,unsigned char down,unsigned char echo){record(32);}
 #else

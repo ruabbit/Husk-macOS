@@ -17,10 +17,22 @@ def command(*args):
 def verify(app):
     command('codesign','--verify','--deep','--strict',app)
     localizations = {}
-    for language, home, account in [('en', 'Home', 'Husk Account'), ('zh-Hans', '首页', 'Husk 账号')]:
+    baseline = None
+    def arguments(value):
+        # Translators may reorder arguments with %1$@. Keep their types and
+        # multiplicity while permitting that standard positional spelling.
+        tokens = re.findall(r'%(?:\d+\$)?[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:ll|l|h|z)?[@diuoxXfFeEgGcCsSp%]', value)
+        return sorted(re.sub(r'^%\d+\$', '%', token) for token in tokens)
+    for language, home, account in [('en', 'Home', 'Husk Account'), ('zh-Hans', '首页', 'Husk 账号'), ('ja', 'ホーム', 'Husk アカウント')]:
         strings = app/'Contents/Resources'/f'{language}.lproj/Localizable.strings'
         values = json.loads(command('plutil', '-convert', 'json', '-o', '-', strings).stdout)
         assert values['首页'] == home and values['Husk Account'] == account, ('Missing application localization', language)
+        if baseline is None:
+            baseline = values
+        else:
+            assert values.keys() == baseline.keys(), ('Localization keys differ', language)
+            for key, value in values.items():
+                assert arguments(value) == arguments(baseline[key]), ('Localization arguments differ', language, key)
         localizations[language] = {'entries': len(values), 'sha256': hashlib.sha256(strings.read_bytes()).hexdigest()}
     java = verify_java(app/'Contents/Resources/JavaRuntime', check_sources=True)
     graphics = json.loads((app/'Contents/Resources/Notices/moltenvk-build.json').read_text())

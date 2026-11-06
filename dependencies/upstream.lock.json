@@ -1,44 +1,65 @@
 {
   "repository": "https://github.com/Leviidev/Husk",
   "branch": "main",
-  "previousRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
-  "integratedRevision": "d92d0a112a391833584ac61f21296e566e404cb8",
+  "previousRevision": "d92d0a112a391833584ac61f21296e566e404cb8",
+  "integratedRevision": "afe83d45b31194c4cc9f7b3db7ec2c757db8346e",
   "checkedOn": "2026-11-07",
-  "commitCount": 22,
-  "integration": "Upstream rewrote six previously integrated commits and added sixteen new commits. Range-diff and trees checked; ordinary fork merges preserve both histories. Mac compatibility adaptation and validation in progress; nothing pushed this round.",
+  "commitCount": 8,
+  "integration": "Ordinary merges main=add16673 and macOS=dd96a0ab preserve both histories; four macOS conflicts resolved by behavior. Candidate 3.4/build30 is locally verified; PS4 product lifecycle remains open.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "resumed-migration-unverified",
+  "deliveryStatus": "validated-gui-pending-push",
   "release": {
-    "tag": "3.3",
-    "revision": "6e7f32572f19e7085686d5dd71ca58c02b725177",
-    "previousRevision": "9345aab21286735b5ba7acc9bf1c6b5fb864e075",
-    "note": "Remote 3.3 tag was rewritten with the equivalent upstream history; read back directly on 2026-11-04. Integrated d92d0a1 contains later compatibility commits."
+    "tag": "3.4",
+    "revision": "acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a",
+    "note": "main also contains the subsequent altsource metadata commit."
   },
   "candidate": {
-    "version": "3.3.0",
-    "build": "29",
-    "deliveryStatus": "validated-checkpoint-not-final-delivery",
-    "gui": "Not launched; final GUI verification will follow the latest upstream integration."
+    "version": "3.4.0",
+    "build": "30",
+    "deliveryStatus": "validated-gui-pending-push",
+    "gui": "Single CUA launch of Product; original icon/TabView, 11 apps and all library icons, JIT-less off on selected library entry, wrapped general Settings help and Japanese menu verified. No preferences changed or games/VM launched. Returned Home. Japanese screen rendering and real device input remain separate.",
+    "bundleMachO": 18,
+    "javaResources": 407,
+    "localizations": {
+      "en": {
+        "entries": 784,
+        "sha256": "d395cbfbafc63ecde4ff621367764fe6694e9aa583867dcccea2f6075e707bca"
+      },
+      "zh-Hans": {
+        "entries": 784,
+        "sha256": "2a0634fe72ef70a437f832a7ef862b3bc910d129078cd993b1214b31ae35e56a"
+      },
+      "ja": {
+        "entries": 784,
+        "sha256": "49c9c6a1dfc35df0630dd303cfb618d6cf0fa3ae3ff20320a680c312691c56cf"
+      }
+    },
+    "frameworkSHA256": "fd8a5f421d7bbd9bbae49cd3fd58975a594feeb815de9fde75c32112e8b20afd",
+    "defaultTests": 212,
+    "defaultTestSeconds": 391.48,
+    "pid": 2083,
+    "appSHA256": "2740b4a844baa1ee951e4744bbb4d2dc3d5fd13bdf87015d5bdcb95729014448",
+    "nativeRunnerSHA256": "4588b503436a812bf5f61baa0c9128fc27c4f74484c399175d0545990cb13259"
   },
   "lastCheck": {
-    "upstreamNewCommits": 16,
-    "upstreamRewrittenCommits": 6,
-    "upstreamChangedPaths": 712,
-    "generatedClassPaths": 576,
+    "upstreamNewCommits": 8,
+    "upstreamRewrittenCommits": 0,
+    "upstreamChangedPaths": 37,
+    "generatedClassPaths": 0,
     "originNewCommits": 0,
-    "mainRevision": "59c38af8bedd2e5adf1d5de4e33f4bc3dda5a7ef",
+    "mainRevision": "add16673d3d0775968a115fc004efafed75c4517",
     "macOSBaseRevision": "be7c1dd3b1a2358cefeb0486cb484cc2372d7b6f",
-    "mergeRevision": "c5282f89f3d002a85abe60d8f7d0b8b888652e8e",
+    "mergeRevision": "dd96a0ab",
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
-    "newCandidateRestarted": false,
+    "newCandidateRestarted": true,
     "pushed": false,
     "remoteSHAsVerified": false,
     "previousCI": 41561530389,
-    "blocker": "User resumed migration on 2026-11-07. Complete Runner background activation and fault-stop protection, then revalidate the unfinished candidate before delivery.",
+    "blocker": "No blocker to delivering the validated 3.4 candidate. Full migration remains open: PS4 guest worker/storage lifecycle and product routing, ARM32/AOSP, VM, and real sample/device acceptance.",
     "conflicts": {
-      "main": 4,
+      "main": 0,
       "macOS": 4
     },
     "interruptedDefaultSuite": {
@@ -55,20 +76,48 @@
       "requiresExplicitUserResumption": false,
       "resumedOn": "2026-11-07",
       "resumptionInstruction": "填补空缺，完成迁移。对于macOS无用的iOS专属功能你直接放弃",
-      "restartGate": "Resolve background activation and fail-stop on unexpected Runner exits before resuming the full suite",
-      "disallowedUntilResumption": [
-        "CTest and Runner tests",
-        "build or packaging",
-        "Husk and any Runner launch"
-      ],
-      "projectProcessesStopped": true,
+      "restartGate": "Satisfied by c3895210 minimal headless/diagnostic tests and the failure latch before full validation; user resumption remains effective.",
       "otherProjectVMUntouched": true,
       "readOnlyEvidence": "build/logs/current-upstream-nov4-stop-readonly-check.json",
       "systemLogEvidence": "build/logs/current-upstream-nov4-system-stop-diagnostics.log",
-      "signalReportAbsenceDoesNotExcludeFaults": true
+      "signalReportAbsenceDoesNotExcludeFaults": true,
+      "historicalProjectProcessesStopped": true
     },
     "checkedOn": "2026-11-07",
-    "readOnlyRemoteObservation": {
+    "upstreamPendingAfterIntegratedRevision": 0,
+    "upstreamPendingPathsAfterIntegratedRevision": 0,
+    "upstreamPendingReleaseTag": null,
+    "resumedValidation": {
+      "defaultTests": 205,
+      "passed": 205,
+      "seconds": 469.56,
+      "runnerSessions": 151,
+      "signalOrHandlerFaults": 0,
+      "guiStarted": false,
+      "evidence": "build/logs/current-migration-session-audit.json"
+    },
+    "defaultSuite": {
+      "total": 212,
+      "passed": 212,
+      "seconds": 391.48,
+      "evidence": "build/logs/current-migration34-ctest.log"
+    },
+    "runnerAudit": {
+      "realSupervisorRecords": 146,
+      "normalExits": 119,
+      "expectedFailureExits70": 27,
+      "signalOrHandlerFaults": 0,
+      "latchPresent": false,
+      "evidence": "build/logs/current-migration34-supervisor-audit.json"
+    },
+    "p0": {
+      "passed": 25,
+      "total": 25,
+      "summedTestSeconds": 6.337,
+      "output": "build/macos/P0Validation"
+    },
+    "finalFetchNoNewCommits": true,
+    "preResumeRemoteObservation": {
       "observedAt": "2026-11-07",
       "mainRevision": "afe83d45b31194c4cc9f7b3db7ec2c757db8346e",
       "releaseTag": "3.4",
@@ -94,7 +143,7 @@
         "note": "full local Git counts through the delivered source 89b0f87; not a count of independent Mac user features"
       },
       "originDeliveredThrough": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
-      "status": "observed-only-not-merged-or-validated",
+      "status": "historical pre-resumption snapshot; superseded by current integratedRevision and candidate",
       "themes": [
         "JNI initialization and iOS 27 build fix",
         "Japanese localization",
@@ -103,18 +152,6 @@
         "Godot 3 touch natives and empty MIDI list",
         "3.4 release/project regeneration and altsource metadata"
       ]
-    },
-    "upstreamPendingAfterIntegratedRevision": 8,
-    "upstreamPendingPathsAfterIntegratedRevision": 37,
-    "upstreamPendingReleaseTag": "3.4",
-    "resumedValidation": {
-      "defaultTests": 205,
-      "passed": 205,
-      "seconds": 469.56,
-      "runnerSessions": 151,
-      "signalOrHandlerFaults": 0,
-      "guiStarted": false,
-      "evidence": "build/logs/current-migration-session-audit.json"
     }
   },
   "forkContribution": {
@@ -129,17 +166,27 @@
     "validation": "Real MoltenVK same-queue and cross-family compositor regressions pass. iOS device validation remains outstanding."
   },
   "ps4Integration": {
-    "status": "host-contracts-only",
+    "status": "real-core-built-dependency-and-backup-verified-product-lifecycle-open",
     "coreRepository": "https://github.com/Leviidev/AetherPS4",
-    "coreRevision": "d953592114581cf3e5bdb20229769ec2f69b2359",
+    "coreRevision": "03c2deba16f6450f651a51b0e6ae45b66305022b",
     "fexSnapshotRevision": "220ab1e6d5aec14e43428f97c75530fc0113ce08",
-    "sourceInspection": "The public FEX AllocatorHooks.h lacks SetJITHostHooks checked by core CMake. The author-local husk-fex source in the upstream build script is not a reproducible pin. No actual PS4 module was built or packaged.",
+    "dependencyLock": "dependencies/macos-console.lock.json",
+    "recipe": "scripts/build_macos_console.py",
+    "moduleSHA256": "aeffc61ca69ffed86f341f7b953accdc71085c6a97be418d4c08e13bf030f8a1",
+    "patches": {
+      "patches/macos/ps4-storage-drain.patch": "9251bf80ae37ef3d342a6a5730329d27c26c9230bb15d47de0bc73df64f46de5",
+      "patches/macos/fex-husk-host-jit.patch": "f23d34bd2c9ec76ce9084a73188ab778c3003c69160b5f5b158f3fee6b3a3d55"
+    },
+    "productEnabled": false,
+    "validation": "Actual FEX host allocation/range/ceiling/rollback/double-release and RX execution; actual arm64 module dlopen, ABI and invalid-PKG refusal; actual core backup write/read/failure checks across separate processes. No PS4 game/audio initialized.",
+    "storage": "Backup admission closes before draining/join; 12 title-isolated slots and bounded IO, failure event/sticky result/old backup retention pass. Periodic playtime writer stop/join before database close compiles, real game lifecycle not verified.",
     "remaining": [
-      "Pin compatible FEX host JIT hooks and core/submodule sources, then build and verify the real module under existing entitlements.",
-      "Verify module worker/storage completion; host pump join and ABI v1 STOPPED alone do not prove it.",
-      "Add macOS library/import and independent ConsoleRunner routing, window/input/lifecycle, then validate a real game with isolated save reopen."
+      "Remove detached module ownership and implement safe owner-thread FEX/guest stop and join, distinguishing normal exit from fatal halt; current main entry can park forever and FEX Shutdown rejects live Threads.",
+      "Complete SaveMemory/mounted-save finalization plus backup/database completion and explicit failed/success storage receipt. Existing host input-pump join and ABI v1 STOPPED are insufficient.",
+      "Package the verified module and independent ConsoleRunner; add library/PKG transactions, fixed window/input/pause/normal close and independent save reopen.",
+      "Legal real PS4 game, gameplay, physical input and save acceptance."
     ],
-    "teardownInspection": "At the inspected core src/emulator.cpp:665-698, RunLoop starts a play-time jthread, then on window-loop exit updates play time and closes Storage::DataBase without stopping/joining that thread or guest workers in this return path. Stop only posts SDL_EVENT_QUIT; worker and game-save ownership still require an explicit completion contract."
+    "evidence": "build/logs/current-ps4-* and build/macos/Console/dependency-verification.json"
   },
   "javaWebIntegration": {
     "status": "host-guest-navigation-destroy-and-committed-history-check-fixture-verified",
@@ -179,7 +226,7 @@
       "realThirdPartyApp": false
     }
   },
-  "sourceVersion": "3.3",
+  "sourceVersion": "3.4",
   "legacyUnityTextInput": {
     "status": "packaged-driver-fixture-verified",
     "remaining": [
@@ -215,11 +262,12 @@
     ]
   },
   "lastUpstreamMerge": {
-    "date": "2026-11-02",
-    "previousRevision": "8f65f2f8f8ba927009d76f865c0411b06facc42b",
-    "integratedRevision": "89b0f8757da53e4dcef0e8eafdb888b343c638d0",
-    "commitCount": 2,
-    "mainRevision": "eeef229eae49a7136b71b67b4f7120e3d5c29eec"
+    "date": "2026-11-07",
+    "previousRevision": "d92d0a112a391833584ac61f21296e566e404cb8",
+    "integratedRevision": "afe83d45b31194c4cc9f7b3db7ec2c757db8346e",
+    "commitCount": 8,
+    "mainRevision": "add16673d3d0775968a115fc004efafed75c4517",
+    "macOSMergeRevision": "dd96a0ab66329b2eb0747b239b65da8d3987ef01"
   },
   "runtime31Integration": {
     "status": "macos-packaged-and-fixture-verified",
@@ -236,7 +284,7 @@
   "accountAndLanguage": {
     "status": "macos-ui-and-isolated-protocol-verified",
     "account": "Shared Account.swift protocol with AppKit 256px avatar, Mac library rows, playtime tracking, sign-in/signup/edit/sync/refresh/signout UI. Intercepted HTTP tests use disposable credentials/preferences; no real authentication or upload. Failed Keychain updates retain the prior token.",
-    "language": "Application-only language override; whitelisted HUSK_APP_LANGUAGE for new NativeRunner/WebRunner. Both packaged Java locales initialize before Application. en and zh-Hans resource dictionaries each contain 784 entries.",
+    "language": "Application-only system/en/zh-Hans/ja selection. Whitelisted language reaches new NativeRunner and Java guest before Application; three dictionaries each have 784 matching keys and format placeholders. Japanese menu visibly present; existing system-default preference unchanged.",
     "remaining": [
       "Real Husk account service and Keychain session acceptance, authenticated Google Play.",
       "Some dynamic counters, older help and diagnostics remain Chinese; complete translation and visible Chinese UI acceptance remain open.",
@@ -270,7 +318,11 @@
     "description": "Upstream removes H logo/splash/sidebar; Mac restores original bundled icon and native tabs. Home avatar menu and Settings open the independent account window. Original 11 apps and icons retained; Mac system appearance remains selected.",
     "website": "https://itslevii.dev",
     "fallback": "https://antiweb.lol",
-    "localizations": 784,
+    "localizations": [
+      "en",
+      "zh-Hans",
+      "ja"
+    ],
     "remaining": [
       "Real account/Keychain service sign-in and uploads.",
       "Visible Chinese UI acceptance and remaining Mac help/dynamic diagnostic translation."
@@ -280,8 +332,8 @@
   "jitlessIntegration": {
     "status": "macos-opt-in-fixture-and-visible-option-verified",
     "default": false,
-    "aotABI": 65545,
-    "cache": "Source SHA-256 plus mac-aot-3 and fork ABI 65545; private locked staging, signature/hash validation before publication and reuse; separate application/system install names.",
+    "aotABI": 65546,
+    "cache": "Source SHA-256 plus mac-aot-4 and fork ABI 65546; private locked staging, signature/hash validation before publication and reuse; separate application/system install names.",
     "enforcement": "TL_NO_XMEM and TL_NO_GUEST_JIT; missing converted libraries fail without fallback. Existing Runner entitlements retained.",
     "packagedProfiles": [
       "cocos",
@@ -510,6 +562,15 @@
     "previousTag": "3.3",
     "previousTagRevision": "6e7f32572f19e7085686d5dd71ca58c02b725177",
     "historical3_0Tag": "cffaf8b7b8eec773b4c69838e04c04b3d56b8139",
-    "observedBy": "read-only git ls-remote; local upstream ref not updated"
+    "observedBy": "Fetched both remotes and verified ancestry; final fetch had no new commits."
+  },
+  "runtime34Integration": {
+    "status": "macos-packaged-fixture-verified",
+    "jni": "AllocObject initializes deferred real DEX class without constructor, preserves failed initialization exception.",
+    "midi": "Non-null empty device list through real DEX getSystemService.",
+    "memory": "VA totals around mapping/middle unmap/fixed replacement/release; stack retry preserves owned guest threads.",
+    "unity": "Intent/Bundle extras and Display vsync deadline checks; existing normal/JIT-less lifecycle retained.",
+    "godot3": "Three long JNI touch signatures each verified with real Android ELF in normal/JIT-less packaged sessions, device/coordinate/button/scroll arguments, owner thread, input/pause/resume/normal destroy and storage receipt.",
+    "scope": "Controlled ELF/DEX, not commercial game compatibility."
   }
 }

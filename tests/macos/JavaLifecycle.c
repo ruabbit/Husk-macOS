@@ -85,6 +85,19 @@ static void *run(void *unused)
             CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","count","()I",NULL,&value) && value.i==(1<<(n+1))-1);
         }
         puts("PASS JNI method/field ID lookup initializes deferred DEX classes exactly once");
+        void *(*allocate)(void *,void *)=(void *)jni[27];
+        unsigned char (*exception_check)(void *)=(void *)jni[228];
+        void (*exception_clear)(void *)=(void *)jni[17];
+        jvalue index={.i=4},cls={0};
+        CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","deferred","(I)Ljava/lang/Class;",&index,&cls));
+        CHECK(allocate(env,cls.l) && !exception_check(env));
+        CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","count","()I",NULL,&value) && value.i==31);
+        CHECK(allocate(env,cls.l) && !exception_check(env));
+        index.i=5;
+        CHECK(tl_dvm_call_static("org/husk/lifecycle/Compat33Checks","deferred","(I)Ljava/lang/Class;",&index,&cls));
+        CHECK(!allocate(env,cls.l) && exception_check(env));exception_clear(env);
+        CHECK(!allocate(env,cls.l) && exception_check(env));exception_clear(env);
+        puts("PASS JNI AllocObject initializes DEX classes without constructors and rejects failed initialization");
     }
     for(int i=0;i<3000&&!tl_javaapp_frames();i++)usleep(1000);
     CHECK(tl_javaapp_frames()>0);
