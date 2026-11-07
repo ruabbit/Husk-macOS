@@ -8,7 +8,7 @@
   "integration": "Ordinary merges main=add16673 and macOS=dd96a0ab preserve both histories; four macOS conflicts resolved by behavior. Candidate 3.4/build30 is locally verified; PS4 product lifecycle remains open.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "verified-and-pushed",
+  "deliveryStatus": "locally-verified-push-pending",
   "release": {
     "tag": "3.4",
     "revision": "acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a",
@@ -18,7 +18,7 @@
     "version": "3.4.0",
     "build": "30",
     "deliveryStatus": "verified-and-pushed",
-    "gui": "Single CUA launch of Product; original icon/TabView, 11 apps and all library icons, JIT-less off on selected library entry, wrapped general Settings help and Japanese menu verified. No preferences changed or games/VM launched. Returned Home. Japanese screen rendering and real device input remain separate.",
+    "gui": "Single CUA launch and AX/screenshot verified Home, original icon/TabView and 12 existing library entries (HGhub included); no preference/game/VM action. Product main and NativeRunner SHA256 unchanged from delivered build30; PS4 dependency remains outside Product.",
     "bundleMachO": 18,
     "javaResources": 407,
     "localizations": {
@@ -36,32 +36,32 @@
       }
     },
     "frameworkSHA256": "fd8a5f421d7bbd9bbae49cd3fd58975a594feeb815de9fde75c32112e8b20afd",
-    "defaultTests": 212,
-    "defaultTestSeconds": 391.48,
-    "pid": 2083,
+    "defaultTests": 216,
+    "defaultTestSeconds": 372.49,
+    "pid": 73366,
     "appSHA256": "2740b4a844baa1ee951e4744bbb4d2dc3d5fd13bdf87015d5bdcb95729014448",
     "nativeRunnerSHA256": "4588b503436a812bf5f61baa0c9128fc27c4f74484c399175d0545990cb13259",
     "sourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95"
   },
   "lastCheck": {
-    "upstreamNewCommits": 8,
+    "upstreamNewCommits": 0,
     "upstreamRewrittenCommits": 0,
-    "upstreamChangedPaths": 37,
+    "upstreamChangedPaths": 0,
     "generatedClassPaths": 0,
     "originNewCommits": 0,
     "mainRevision": "add16673d3d0775968a115fc004efafed75c4517",
-    "macOSBaseRevision": "be7c1dd3b1a2358cefeb0486cb484cc2372d7b6f",
+    "macOSBaseRevision": "0f1a53f1391cc80850551883cfb0f8963a165152",
     "mergeRevision": "dd96a0ab",
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": true,
-    "remoteSHAsVerified": true,
-    "previousCI": 41561530389,
+    "pushed": false,
+    "remoteSHAsVerified": false,
+    "previousCI": 42276517688,
     "blocker": "No blocker to delivering the validated 3.4 candidate. Full migration remains open: PS4 guest worker/storage lifecycle and product routing, ARM32/AOSP, VM, and real sample/device acceptance.",
     "conflicts": {
       "main": 0,
-      "macOS": 4
+      "macOS": 0
     },
     "interruptedDefaultSuite": {
       "total": 205,
@@ -156,7 +156,8 @@
     },
     "sourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95",
     "remoteMainRevision": "add16673d3d0775968a115fc004efafed75c4517",
-    "remoteMacOSSourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95"
+    "remoteMacOSSourceRevision": "8d6c1eefadf7af8cde433987277a02d48d84ff95",
+    "note": "No new upstream/origin commits; no merge/conflict. PS4 module/native-thread ownership work verified locally. Full guest/storage lifecycle remains open."
   },
   "forkContribution": {
     "pullRequest": "https://github.com/ruabbit/Husk-macOS/pull/1",
@@ -170,27 +171,48 @@
     "validation": "Real MoltenVK same-queue and cross-family compositor regressions pass. iOS device validation remains outstanding."
   },
   "ps4Integration": {
-    "status": "real-core-built-dependency-and-backup-verified-product-lifecycle-open",
+    "status": "event-loop-worker-and-native-thread-reaping-verified-full-guest-storage-open",
     "coreRepository": "https://github.com/Leviidev/AetherPS4",
     "coreRevision": "03c2deba16f6450f651a51b0e6ae45b66305022b",
     "fexSnapshotRevision": "220ab1e6d5aec14e43428f97c75530fc0113ce08",
     "dependencyLock": "dependencies/macos-console.lock.json",
     "recipe": "scripts/build_macos_console.py",
-    "moduleSHA256": "aeffc61ca69ffed86f341f7b953accdc71085c6a97be418d4c08e13bf030f8a1",
+    "moduleSHA256": "a256e561d0e29ffa2268fceaa4dac0d6e7978ffcac40558230736f99e4498e13",
     "patches": {
-      "patches/macos/ps4-storage-drain.patch": "9251bf80ae37ef3d342a6a5730329d27c26c9230bb15d47de0bc73df64f46de5",
+      "patches/macos/ps4-storage-drain.patch": "b7494c634744a90de0046442743abb1eb71c30a36d0d20a21ca7d35223d8a10b",
       "patches/macos/fex-husk-host-jit.patch": "f23d34bd2c9ec76ce9084a73188ab778c3003c69160b5f5b158f3fee6b3a3d55"
     },
     "productEnabled": false,
-    "validation": "Actual FEX host allocation/range/ceiling/rollback/double-release and RX execution; actual arm64 module dlopen, ABI and invalid-PKG refusal; actual core backup write/read/failure checks across separate processes. No PS4 game/audio initialized.",
+    "validation": "8 controlled tests compile the actual module wrapper with stubbed backend boundaries; actual core unprepared-run/sticky failure and NativeThread TLS/join test; 9 host/JIT tests; real dylib ABI/invalid-PKG refusal, FEX JIT and three backup subprocesses pass. No PS4 guest, audio or game compatibility claim.",
     "storage": "Backup admission closes before draining/join; 12 title-isolated slots and bounded IO, failure event/sticky result/old backup retention pass. Periodic playtime writer stop/join before database close compiles, real game lifecycle not verified.",
     "remaining": [
-      "Remove detached module ownership and implement safe owner-thread FEX/guest stop and join, distinguishing normal exit from fatal halt; current main entry can park forever and FEX Shutdown rejects live Threads.",
-      "Complete SaveMemory/mounted-save finalization plus backup/database completion and explicit failed/success storage receipt. Existing host input-pump join and ABI v1 STOPPED are insufficient.",
+      "Implement safe owner-thread FEX/guest stop and join, distinguishing normal exit from fatal halt; main entry still parks forever, final guest-thread exit asserts, host kernel join needs g_curthread, and FEX Shutdown rejects live Threads. Main argv now has thread-owned storage.",
+      "Complete SaveMemory/mounted-save finalization plus backup/database completion and explicit failed/success storage receipt. ABI v1 STOPPED and event-loop/input-pump joins remain insufficient.",
       "Package the verified module and independent ConsoleRunner; add library/PKG transactions, fixed window/input/pause/normal close and independent save reopen.",
       "Legal real PS4 game, gameplay, physical input and save acceptance."
     ],
-    "evidence": "build/logs/current-ps4-* and build/macos/Console/dependency-verification.json"
+    "evidence": "build/logs/current-ps4-* and build/macos/Console/dependency-verification.json",
+    "worker": "No detach: optional ABI tail join_worker reaps the event-loop pthread, rejects self join and serializes concurrent joins. Host join rejects absent/legacy/pending/error acknowledgement. STOPPED/join are not guest or storage receipts. Preparation stop is latched; C API retains preparation/load failures and wrapper propagates errors/exceptions.",
+    "nativeThreads": "Apple guest join and GC now wait for native pthread/TLS completion before recycling Pthread or its stack, outside the global thread-list lock; join failure retains ownership. Actual NativeThread API test covers self rejection, TLS completion and repeat join. Complete guest-kernel and FEX shutdown remain unvalidated.",
+    "defaultSuite": {
+      "passed": 216,
+      "seconds": 372.49,
+      "hostConsoleTests": 9,
+      "hostConsoleSeconds": 1.38,
+      "dependencyValidationProcesses": 15,
+      "bundleMachO": 18,
+      "javaResources": 407,
+      "p0": "Not rerun locally: no loader/AOT/interpreter source dependencies changed; prior 25/25 is historical, CI will run its own P0."
+    },
+    "supervisorAudit": {
+      "records": 158,
+      "exit0": 128,
+      "expectedExit70": 29,
+      "expectedFixtureExit74": 1,
+      "signals": 0,
+      "faultLatch": false,
+      "evidence": "build/logs/current-ps4-lifecycle-supervisor-audit.json"
+    }
   },
   "javaWebIntegration": {
     "status": "host-guest-navigation-destroy-and-committed-history-check-fixture-verified",

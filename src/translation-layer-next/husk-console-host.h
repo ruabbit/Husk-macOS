@@ -43,8 +43,9 @@ void husk_console_set_paused(bool paused);
 void husk_console_set_pad(const HuskPadV1 *pad);
 void husk_console_resize(int width_px, int height_px);
 void husk_console_stop(void);
-/* Reap the host's controller pump after the module reports a terminal state.
- * This is not a module worker/storage flush acknowledgement. */
+/* Reap the controller pump and the module's event-loop worker after a terminal state.
+ * False while pending, on failure, or if the module lacks join_worker. This does NOT
+ * acknowledge guest workers, TLS callbacks or storage completion. */
 bool husk_console_join(void);
 /* After the game asked to start another executable: its path and args, for the next launch. */
 bool husk_console_take_pending_restart(char *path, int path_size, char *args, int args_size);

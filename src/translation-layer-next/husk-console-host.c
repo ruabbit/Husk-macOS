@@ -336,7 +336,10 @@ bool husk_console_join(void) {
         if (pthread_equal(pthread_self(), g_pad_thread) || pthread_join(g_pad_thread, NULL) != 0) return false;
         g_pad_started = false;
     }
-    return true;
+    /* A terminal state is only a report; it does not prove even the module's event-loop
+     * thread has returned. Legacy modules cannot acknowledge this narrower boundary. */
+    return g_module->struct_size >= offsetof(HuskConsoleModuleV1, join_worker) + sizeof(g_module->join_worker)
+        && g_module->join_worker && g_module->join_worker() == 0;
 }
 
 bool husk_console_take_pending_restart(char *path, int path_size, char *args, int args_size)

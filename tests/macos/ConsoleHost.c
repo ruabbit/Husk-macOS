@@ -70,6 +70,11 @@ int main(int argc, char **argv) {
         CHECK(husk_console_state() != HUSK_CONSOLE_STOPPED && !husk_console_join());
         puts("PASS stop request alone cannot acknowledge a stopped console module"); return 0;
     }
+    if (!strcmp(argv[2], "join-pending") || !strcmp(argv[2], "join-error") ||
+        !strcmp(argv[2], "legacy-join") || !strcmp(argv[2], "missing-join")) {
+        CHECK(husk_console_state() == HUSK_CONSOLE_STOPPED && !husk_console_join() && !husk_console_join());
+        puts("PASS terminal state cannot replace the module's worker join acknowledgement"); return 0;
+    }
     CHECK(husk_console_state() == HUSK_CONSOLE_STOPPED && husk_console_join() && husk_console_join());
     CHECK(husk_jit_arena_used_bytes() == 0);
     calls = pad_calls(); husk_console_set_pad(&(HuskPadV1){.buttons=0xffff});

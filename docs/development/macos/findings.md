@@ -1,5 +1,17 @@
 # 审计发现
 
+## 2026-11-07：继续检查 PS4 生命周期
+
+已修真实模块 detach/错误吞没，尾部可选 join_worker 经 struct_size 检查，宿主 join 同时要求模块回收；准备阶段 stop 保留到准备结束。8项直接编译实际 husk_module.cpp 的受控边界测试通过，包括两个并发 join 与 native TLS destructor；只替代底层 C API，不声称运行 PS4 guest。真实 NativeThread 增加 Apple pthread join，guest join 和 GC 都先等待 native TLS 完成再回收对象/栈，失败保留所有权，等待期间释放全局线程锁。实际核心测试覆盖未准备运行拒绝与 sticky 失败、NativeThread 自 join 拒绝和 native TLS 完成后回收。主 guest args 改为线程持有副本；无限 sleep、guest fatal/normal 区分、HLE/纯CPU stop、最后线程及宿主 join 语义仍开放。
+
+真实核心状态测试首次编译因缺少传递头文件(spdlog)失败；改为继承实际核心的 include/compile definitions 以保证结构一致，随后编译运行通过。保留 current-ps4-runtime-status-build-initial-failure.log。最终真实 dylib、FEX host JIT和三个备份进程复验通过；没有游戏/窗口/音频启动。
+
+
+首次新增 wrapper 测试编译失败：stub 的 touch input 用了 uint8_t，实际 C API 为 int。已按头文件修正，保留 current-ps4-lifecycle-build-initial-failure.log；未启动测试。实时构建前再查发现 Product/PID2083 仍运行，CUA 确认为空闲 Library/AIDA64，资料库已12条（含HGhub）；正常退出后系统确认PID消失。此实时证据覆盖早先摘要的无主进程记录。
+
+本轮两远端无新增，初始工作区干净且无项目进程。真实模块 `Launch` detach 线程并忽略 `shadps4_run_loop` 返回值，宿主只 join input pump。`RunMainEntry` 把 main 正常返回与模块内 fatal HLT 同列无限 sleep，失败分支 abort；主线程还引用 RunLoop 局部 args。`posix_pthread_join` 依赖当前 guest 线程的 cleanup list，不能直接由外层宿主调用；最后一个 guest 线程的退出存在断言。需要逐步完成 owner-thread teardown，不得直接删除 sleep 后以窗口退出充当全部 worker/storage 完成。
+
+
 ## 2026-11-07：3.4与真实PS4依赖验证
 
 - 3.4已普通合并并完成build30默认212/212、P0 25/25和包检查；详细范围与边界见progress首节，不再沿用下方只读观察时的待合并结论。

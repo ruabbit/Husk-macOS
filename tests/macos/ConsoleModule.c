@@ -41,14 +41,23 @@ static void stop(void) {
     code = NULL; atomic_store(&state, HUSK_CONSOLE_STOPPED);
 }
 static int restart(char *path, int n, char *args, int m) { (void)path; (void)n; (void)args; (void)m; return 0; }
+static int join_worker(void) {
+    const char *mode = getenv("HUSK_CONSOLE_FIXTURE_MODE");
+    if (mode && !strcmp(mode, "join-pending")) return 1;
+    if (mode && !strcmp(mode, "join-error")) return -1;
+    return 0;
+}
 
 void console_fixture_pad(HuskPadV1 *out) { pthread_mutex_lock(&lock); *out = pad; pthread_mutex_unlock(&lock); }
 int console_fixture_pad_calls(void) { return atomic_load(&pad_calls); }
 const HuskConsoleModuleV1 *husk_console_module_v1(void) {
     static HuskConsoleModuleV1 module;
     module = (HuskConsoleModuleV1){sizeof(module), 1, "ps4", 4u << 20, init, launch, get_state, frames, pause_game, set_pad, resize, stop, restart};
+    module.join_worker = join_worker;
     const char *mode = getenv("HUSK_CONSOLE_FIXTURE_MODE");
     if (mode && !strcmp(mode, "missing-callback")) module.stop = NULL;
     if (mode && !strcmp(mode, "wrong-abi")) module.version = 2;
+    if (mode && !strcmp(mode, "legacy-join")) module.struct_size = offsetof(HuskConsoleModuleV1, join_worker);
+    if (mode && !strcmp(mode, "missing-join")) module.join_worker = NULL;
     return &module;
 }

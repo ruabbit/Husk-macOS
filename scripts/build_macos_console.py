@@ -119,12 +119,16 @@ def build(fetch, jobs):
         '-DALSOFT_BACKEND_JACK=OFF', '-DALSOFT_BACKEND_PORTAUDIO=OFF', '-DALSOFT_BACKEND_PIPEWIRE=OFF',
         '-DALSOFT_BACKEND_PULSEAUDIO=OFF', '-DALSOFT_RTKIT=OFF',
         f'-DHUSK_STORAGE_VALIDATION_SOURCE={ROOT / "tests/macos/console/Storage.cpp"}',
+        f'-DHUSK_MODULE_LIFECYCLE_VALIDATION_SOURCE={ROOT / "tests/macos/console/ModuleLifecycle.cpp"}',
+        f'-DHUSK_RUNTIME_STATUS_VALIDATION_SOURCE={ROOT / "tests/macos/console/RuntimeStatus.cpp"}',
         f'-DFEXCORE_GUEST_CPU_BUILD_DIR={OUT / "FEX"}', f'-DFEXCORE_GUEST_CPU_SOURCE_DIR={fex}'],
         'current-ps4-recipe-core-configure.log')
-    run(['cmake', '--build', OUT/'Core', '--target', 'huskps4', 'husk_storage_validation', '--parallel', jobs], log='current-ps4-recipe-core-build.log')
+    run(['cmake', '--build', OUT/'Core', '--target', 'huskps4', 'husk_storage_validation', 'husk_module_lifecycle_validation', 'husk_runtime_status_validation', '--parallel', jobs], log='current-ps4-recipe-core-build.log')
 
 
 def verify():
+    if (CACHE/'aetherps4/src/platform/husk/husk_console_abi.h').read_bytes() != (ROOT/'src/translation-layer-next/husk-console-abi.h').read_bytes():
+        raise RuntimeError('Console host/module ABI headers differ')
     module = OUT/'Core/libhuskps4.dylib'
     for name, spec in [('aetherps4', LOCK['core']), ('fex-snapshot', LOCK['fex'])]:
         if run(['git', 'rev-parse', 'HEAD'], cwd=CACHE/name).strip() != spec['commit']:
@@ -178,6 +182,10 @@ def test():
     for binary in ('FEXHostTests', 'ModuleProbe'):
         run(['codesign', '--force', '--sign', '-', '--options', 'runtime', '--entitlements',
              ROOT/'src/macos/NativeRunner/NativeRunner.development.entitlements', target/binary])
+    run([OUT/'Core/husk_runtime_status_validation'], log='current-ps4-runtime-status.log', test=True)
+    for mode in ('normal', 'prepare-failure', 'run-failure', 'prepare-throw', 'run-throw', 'stop-prepare', 'stop-running', 'tls-join'):
+        run([OUT/'Core/husk_module_lifecycle_validation', mode],
+            log=f'current-ps4-module-lifecycle-{mode}.log', test=True)
     for mode in ('valid', 'invalid'):
         run([target/'FEXHostTests', mode], log=f'current-ps4-fex-host-{mode}.log', test=True)
     with tempfile.TemporaryDirectory(prefix='module-', dir=target) as directory:

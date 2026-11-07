@@ -1,11 +1,25 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 883833e..444417e 100644
+index 883833e..8978f94 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -1814,6 +1814,12 @@ if (ENABLE_SHADPS4_IOS_LIB)
+@@ -1814,6 +1814,26 @@ if (ENABLE_SHADPS4_IOS_LIB)
          endif()
      endif()
  
++    if (HUSK_MODULE_LIFECYCLE_VALIDATION_SOURCE)
++        add_executable(husk_module_lifecycle_validation
++            "${HUSK_MODULE_LIFECYCLE_VALIDATION_SOURCE}" src/platform/husk/husk_module.cpp)
++        target_include_directories(husk_module_lifecycle_validation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
++        target_compile_definitions(husk_module_lifecycle_validation PRIVATE AETHER_MAC_PHONE_PATH=1)
++        target_link_libraries(husk_module_lifecycle_validation PRIVATE SDL3::Headers)
++        add_executable(husk_runtime_status_validation "${HUSK_RUNTIME_STATUS_VALIDATION_SOURCE}")
++        target_include_directories(husk_runtime_status_validation PRIVATE
++            $<TARGET_PROPERTY:shadps4_ios,INCLUDE_DIRECTORIES>)
++        target_compile_definitions(husk_runtime_status_validation PRIVATE
++            $<TARGET_PROPERTY:shadps4_ios,COMPILE_DEFINITIONS>)
++        target_link_libraries(husk_runtime_status_validation PRIVATE shadps4_ios)
++    endif()
++
 +    if (HUSK_STORAGE_VALIDATION_SOURCE)
 +        add_executable(husk_storage_validation "${HUSK_STORAGE_VALIDATION_SOURCE}")
 +        target_include_directories(husk_storage_validation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -15,6 +29,55 @@ index 883833e..444417e 100644
      # Phase 1 verification harness: links only against shadps4_ios's public C API
      # header, proving the library is actually consumable standalone (CMake propagates
      # a static library's link dependencies transitively to its consumers even when
+diff --git a/src/core/libraries/kernel/threads/pthread.cpp b/src/core/libraries/kernel/threads/pthread.cpp
+index 882bc7d..6632900 100644
+--- a/src/core/libraries/kernel/threads/pthread.cpp
++++ b/src/core/libraries/kernel/threads/pthread.cpp
+@@ -195,6 +195,14 @@ static int JoinThread(PthreadT pthread, void** thread_return, const OrbisKernelT
+         return ret;
+     }
+ 
++#ifdef __APPLE__
++    // Do not report a guest join complete while native TLS can still access its state.
++    if (pthread->native_thr.Join() != 0) {
++        backout_join(pthread);
++        return POSIX_EBUSY;
++    }
++#endif
++
+     void* tmp = pthread->ret;
+     pthread->lock.lock();
+     pthread->flags |= ThreadFlags::Detached;
+diff --git a/src/core/libraries/kernel/threads/thread_state.cpp b/src/core/libraries/kernel/threads/thread_state.cpp
+index 1f76c25..6b94d45 100644
+--- a/src/core/libraries/kernel/threads/thread_state.cpp
++++ b/src/core/libraries/kernel/threads/thread_state.cpp
+@@ -41,12 +41,24 @@ void ThreadState::Collect(Pthread* curthread) {
+                 ++it;
+                 continue;
+             }
+-            FreeStack(&td->attr);
+             work_list.push_back(td);
+             it = gc_list.erase(it);
+         }
+     }
+     for (Pthread* td : work_list) {
++#ifdef __APPLE__
++        // TidTerminated is published before pthread_exit and native TLS destructors.
++        // Wait without thread_list_lock: a destructor can enter the guest thread API.
++        if (td->native_thr.Join() != 0) {
++            std::scoped_lock lk{thread_list_lock};
++            gc_list.push_back(td); // preserve ownership; never recycle on join failure
++            continue;
++        }
++#endif
++        {
++            std::scoped_lock lk{thread_list_lock};
++            FreeStack(&td->attr);
++        }
+         Free(curthread, td);
+     }
+ }
 diff --git a/src/core/libraries/save_data/save_backup.cpp b/src/core/libraries/save_data/save_backup.cpp
 index 3e0e344..cbb268e 100644
 --- a/src/core/libraries/save_data/save_backup.cpp
@@ -405,11 +468,101 @@ index 6e4b732..b94b923 100644
      event->userId = last_event->user_id;
      event->titleId.data.FromString(last_event->title_id);
      event->dirName.data.FromString(last_event->dir_name);
+diff --git a/src/core/linker.cpp b/src/core/linker.cpp
+index 74244f9..2e9f43a 100644
+--- a/src/core/linker.cpp
++++ b/src/core/linker.cpp
+@@ -625,7 +625,7 @@ void Linker::Execute(const std::vector<std::string>& args) {
+ 
+     memory->SetupMemoryRegions(fmem_size, use_extended_mem1, use_extended_mem2);
+ 
+-    main_thread.Run([this, module, &args](std::stop_token) {
++    main_thread.Run([this, module, args](std::stop_token) {
+         Common::SetCurrentThreadName("Game:Main");
+         LOG_CRITICAL(Core_Linker, "BACHATA_BOOT_TIMING: Game:Main thread started at {}ms",
+                     Common::BootElapsedMs());
+diff --git a/src/core/thread.cpp b/src/core/thread.cpp
+index 3ff47e4..2304fdc 100644
+--- a/src/core/thread.cpp
++++ b/src/core/thread.cpp
+@@ -39,6 +39,17 @@ int NativeThread::Create(ThreadFunc func, void* arg) {
+ #endif
+ }
+ 
++#ifdef __APPLE__
++int NativeThread::Join() {
++    if (!native_handle) return 0;
++    auto handle = reinterpret_cast<pthread_t>(native_handle);
++    if (pthread_equal(pthread_self(), handle)) return EDEADLK;
++    const int error = pthread_join(handle, nullptr);
++    if (error == 0) native_handle = 0;
++    return error;
++}
++#endif
++
+ void NativeThread::PrepareExit() {
+     if (!native_handle) {
+         return;
+diff --git a/src/core/thread.h b/src/core/thread.h
+index 0e19fdb..5691aba 100644
+--- a/src/core/thread.h
++++ b/src/core/thread.h
+@@ -22,6 +22,12 @@ public:
+     ~NativeThread();
+ 
+     int Create(ThreadFunc func, void* arg);
++#ifdef __APPLE__
++    // The exclusive collector/joiner must reap native TLS before reusing the guest
++    // stack or Pthread object. Idempotent after success; errors leave ownership intact.
++    int Join();
++#endif
++
+ 
+     /**
+      * Tears down everything this object itself owns (the alternate signal stack) --
 diff --git a/src/emulator.cpp b/src/emulator.cpp
-index 955b9d2..890df16 100644
+index 955b9d2..bad1f00 100644
 --- a/src/emulator.cpp
 +++ b/src/emulator.cpp
-@@ -694,6 +694,10 @@ void Emulator::RunLoop() {
+@@ -367,7 +367,8 @@ void Emulator::PrepareWindow(std::filesystem::path file, std::vector<std::string
+     if (!std::filesystem::exists(file)) {
+         LOG_CRITICAL(Loader, "eboot.bin does not exist: {}",
+                      std::filesystem::absolute(file).string());
+-        SHADPS4_TERMINATE_RUN(0);
++        runtime_result.store(1);
++        SHADPS4_TERMINATE_RUN(1);
+     }
+ 
+     LOG_INFO(Loader, "Starting shadps4 emulator v{} ", Common::g_version);
+@@ -568,6 +569,11 @@ void EnsureStikDebugDeathWatchdogStarted() {
+ #endif
+ 
+ void Emulator::RunLoop() {
++    if (runtime_result.load() != 0 || !window) {
++        runtime_result.store(1);
++        return;
++    }
++
+     const std::string& id = pending_game_id;
+     const auto& eboot_path = pending_eboot_path;
+     std::vector<std::string> args = std::move(pending_args);
+@@ -644,13 +650,14 @@ void Emulator::RunLoop() {
+     if (linker->LoadModule(eboot_path) == -1) {
+         LOG_CRITICAL(Loader, "Failed to load game's eboot.bin: {}",
+                      Common::FS::PathToUTF8String(std::filesystem::absolute(eboot_path)));
++        runtime_result.store(1);
+         if (onRuntimeError) {
+             onRuntimeError("CONTENT_INVALID");
+         }
+         if (onRuntimeStopped) {
+             onRuntimeStopped(1);
+         }
+-        SHADPS4_TERMINATE_RUN(0);
++        SHADPS4_TERMINATE_RUN(1);
+     }
+     LOG_CRITICAL(Core, "BACHATA_BOOT_TIMING: LoadModule done at {}ms", Common::BootElapsedMs());
+ 
+@@ -694,11 +701,15 @@ void Emulator::RunLoop() {
      }
      LOG_CRITICAL(Core, "BACHATA_RUNLOOP: window event loop exited, shutting down guest");
  
@@ -420,3 +573,217 @@ index 955b9d2..890df16 100644
      UpdatePlayTime(id);
      Storage::DataBase::Instance().Close();
  
+     if (onRuntimeStopped) {
+-        onRuntimeStopped(0);
++        onRuntimeStopped(runtime_result.load());
+     }
+     LOG_CRITICAL(Core, "BACHATA_RUNLOOP: returning from RunLoop()");
+     SHADPS4_TERMINATE_RUN(0);
+diff --git a/src/emulator.h b/src/emulator.h
+index a5b637e..e442092 100644
+--- a/src/emulator.h
++++ b/src/emulator.h
+@@ -3,6 +3,7 @@
+ 
+ #pragma once
+ 
++#include <atomic>
+ #include <filesystem>
+ #include <functional>
+ #include <optional>
+@@ -46,6 +47,7 @@ public:
+     void PrepareWindow(std::filesystem::path file, std::vector<std::string> args = {},
+                         std::optional<std::filesystem::path> game_folder = {});
+     void RunLoop();
++    int RuntimeResult() const { return runtime_result.load(); }
+ 
+     void UpdatePlayTime(const std::string& serial);
+     // from_crash_handler: true when called from assert_fail_impl(), i.e. potentially from
+@@ -110,6 +112,7 @@ public:
+     std::function<void(int)> onRuntimeStopped;
+ 
+ private:
++    std::atomic<int> runtime_result{0};
+     void LoadSystemModules(const std::string& game_serial);
+ 
+     Core::MemoryManager* memory;
+diff --git a/src/platform/husk/husk_console_abi.h b/src/platform/husk/husk_console_abi.h
+index 4e1f052..a3a3668 100644
+--- a/src/platform/husk/husk_console_abi.h
++++ b/src/platform/husk/husk_console_abi.h
+@@ -118,6 +118,13 @@ typedef struct HuskConsoleModuleV1 {
+     int (*install_package)(const char *package, const char *dest_dir,
+                            void (*progress)(void *ctx, uint64_t done, uint64_t total), void *ctx,
+                            char *err, int err_size);
++
++    /* Reap the module's event-loop worker after its body has returned. 0: joined (or never
++     * launched), 1: still running, -1: join failed or called by that worker. Repeated calls
++     * after a successful join return 0. Does not stop execution. Check struct_size before
++     * reading this optional tail. This is NOT guest-worker/TLS/storage completion, and must
++     * never authorize a storage-closed receipt or unloading the module. */
++    int (*join_worker)(void);
+ } HuskConsoleModuleV1;
+ 
+ /* The module's one exported symbol. Returns NULL when it cannot run in this process. */
+diff --git a/src/platform/husk/husk_module.cpp b/src/platform/husk/husk_module.cpp
+index 1118aaa..458376d 100644
+--- a/src/platform/husk/husk_module.cpp
++++ b/src/platform/husk/husk_module.cpp
+@@ -20,7 +20,9 @@
+ #include <unistd.h>
+ #include <mutex>
+ #include <string>
+-#include <thread>
++#include <memory>
++#include <pthread.h>
++#include <exception>
+ 
+ #include <SDL3/SDL_events.h>
+ 
+@@ -45,7 +47,20 @@ HuskHostV1 g_host{};
+ std::atomic<int> g_state{HUSK_CONSOLE_IDLE};
+ std::atomic<bool> g_initialized{false};
+ std::mutex g_launch_mutex;
+-std::thread g_game_thread;
++std::mutex g_join_mutex;
++// A joinable pthread has no process-exit destructor that would terminate the host if the
++// embedding application has not joined yet. The module is never unloaded while it owns work.
++pthread_t g_game_thread{};
++bool g_worker_started = false; // g_launch_mutex
++bool g_worker_joined = false;  // g_launch_mutex
++std::atomic<bool> g_worker_done{false};
++std::atomic<bool> g_stop_requested{false};
++bool g_loop_ready = false;     // g_launch_mutex; preparation no longer consumes SDL events
++
++struct LaunchRequest {
++    std::string eboot;
++    std::string args;
++};
+ 
+ void HostLog(const char* fmt, ...) {
+     char line[1024];
+@@ -144,17 +159,47 @@ int Launch(const char* game, const char* args, void* metal_layer, int width_px,
+     const std::string joined_args = args != nullptr ? args : "";
+     g_state.store(HUSK_CONSOLE_BOOTING);
+     HostLog("huskps4: launching %s (%dx%d px)", eboot.c_str(), width_px, height_px);
+-    g_game_thread = std::thread([eboot, joined_args] {
+-        if (shadps4_prepare_window_with_args(eboot.c_str(), joined_args.c_str()) != 0) {
+-            HostLog("huskps4: the game could not be prepared: %s", eboot.c_str());
+-            g_state.store(HUSK_CONSOLE_FAILED);
+-            return;
++    auto request = std::make_unique<LaunchRequest>(LaunchRequest{eboot, joined_args});
++    const int error = pthread_create(&g_game_thread, nullptr, +[](void* opaque) -> void* {
++        std::unique_ptr<LaunchRequest> request{static_cast<LaunchRequest*>(opaque)};
++        int result = -1;
++        try {
++            if (shadps4_prepare_window_with_args(request->eboot.c_str(), request->args.c_str()) != 0) {
++                HostLog("huskps4: the game could not be prepared: %s", request->eboot.c_str());
++            } else {
++                // Stop during preparation is latched, not sent into an SDL queue which
++                // preparation can replace. The same lock orders the later Stop() path.
++                {
++                    std::scoped_lock lock{g_launch_mutex};
++                    g_loop_ready = true;
++                    if (g_stop_requested.load()) shadps4_stop();
++                }
++                result = shadps4_run_loop();
++            }
++        } catch (const std::exception& exception) {
++            HostLog("huskps4: runtime exception: %s", exception.what());
++        } catch (...) {
++            HostLog("huskps4: unknown runtime exception");
+         }
+-        shadps4_run_loop();
+-        HostLog("huskps4: the game ended");
+-        g_state.store(HUSK_CONSOLE_STOPPED);
+-    });
+-    g_game_thread.detach();
++        {
++            std::scoped_lock lock{g_launch_mutex};
++            g_loop_ready = false;
++            // STOPPED describes the event loop only. Guest and storage teardown is a
++            // separate, still required contract; do not turn this into storage-closed.
++            g_state.store(result == 0 ? HUSK_CONSOLE_STOPPED : HUSK_CONSOLE_FAILED);
++        }
++        HostLog("huskps4: event loop returned (%d); guest/storage completion not acknowledged", result);
++        request.reset();
++        g_worker_done.store(true);
++        return nullptr;
++    }, request.get());
++    if (error != 0) {
++        HostLog("huskps4: could not create event-loop worker: %s", std::strerror(error));
++        g_state.store(HUSK_CONSOLE_FAILED);
++        return -1;
++    }
++    request.release();
++    g_worker_started = true;
+     return 0;
+ }
+ 
+@@ -202,10 +247,34 @@ void Resize(int width_px, int height_px) {
+ }
+ 
+ void Stop() {
+-    if (g_state.load() == HUSK_CONSOLE_IDLE) {
+-        return;
++    std::scoped_lock lock{g_launch_mutex};
++    const int state = g_state.load();
++    if (state == HUSK_CONSOLE_IDLE || state == HUSK_CONSOLE_STOPPED || state == HUSK_CONSOLE_FAILED) return;
++    if (g_stop_requested.exchange(true)) return;
++    if (g_loop_ready) shadps4_stop();
++}
++
++int JoinWorker() {
++    {
++        std::scoped_lock lock{g_launch_mutex};
++        if (!g_worker_started || g_worker_joined) return 0;
++        if (pthread_equal(pthread_self(), g_game_thread)) return -1;
+     }
+-    shadps4_stop();
++    std::unique_lock joining{g_join_mutex, std::try_to_lock};
++    if (!joining.owns_lock()) return 1;
++    std::unique_lock lock{g_launch_mutex};
++    if (g_worker_joined) return 0;
++    if (!g_worker_done.load()) return 1;
++    // Do not hold the API lock through native TLS destructors; they can call the host.
++    lock.unlock();
++    const int error = pthread_join(g_game_thread, nullptr);
++    lock.lock();
++    if (error != 0) {
++        HostLog("huskps4: event-loop worker join failed: %s", std::strerror(error));
++        return -1;
++    }
++    g_worker_joined = true;
++    return 0;
+ }
+ 
+ int TakePendingRestart(char* path, int path_size, char* args, int args_size) {
+@@ -281,6 +350,7 @@ const HuskConsoleModuleV1 kModule{
+     .stop = Stop,
+     .take_pending_restart = TakePendingRestart,
+     .install_package = InstallPackage,
++    .join_worker = JoinWorker,
+ };
+ 
+ } // namespace
+diff --git a/src/platform/ios/shadps4_ios_api.cpp b/src/platform/ios/shadps4_ios_api.cpp
+index b7dcdc3..2f0062e 100644
+--- a/src/platform/ios/shadps4_ios_api.cpp
++++ b/src/platform/ios/shadps4_ios_api.cpp
+@@ -176,6 +176,7 @@ int PrepareWindowImpl(const char* eboot_path, std::vector<std::string> args) {
+     auto* emulator = Common::Singleton<Core::Emulator>::Instance();
+     emulator->executableName = "AetherPS4";
+     emulator->PrepareWindow(*resolved, std::move(args));
++    if (emulator->RuntimeResult() != 0 || emulator->GetWindow() == nullptr) return -1;
+     // As early as possible, before any guest code runs at all -- see WarmUpIosSrtCodePool's
+     // own comment (srt.h) for why lazy, on-first-shader-use initialization was too late: by
+     // then StikDebug had already stopped responding to JIT-mapping requests on-device, every
+@@ -222,7 +223,7 @@ extern "C" int shadps4_run_loop(void) {
+     // (see emulator.cpp); SHADPS4_LIBRARY_BUILD makes it return here instead of
+     // quick_exit()-ing the host process.
+     emulator->RunLoop();
+-    return 0;
++    return emulator->RuntimeResult();
+ }
+ 
+ extern "C" int shadps4_take_pending_restart(char* path_buf, int path_buf_size, char* args_buf,

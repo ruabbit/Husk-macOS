@@ -118,6 +118,13 @@ typedef struct HuskConsoleModuleV1 {
     int (*install_package)(const char *package, const char *dest_dir,
                            void (*progress)(void *ctx, uint64_t done, uint64_t total), void *ctx,
                            char *err, int err_size);
+
+    /* Reap the module's event-loop worker after its body has returned. 0: joined (or never
+     * launched), 1: still running, -1: join failed or called by that worker. Repeated calls
+     * after a successful join return 0. Does not stop execution. Check struct_size before
+     * reading this optional tail. This is NOT guest-worker/TLS/storage completion, and must
+     * never authorize a storage-closed receipt or unloading the module. */
+    int (*join_worker)(void);
 } HuskConsoleModuleV1;
 
 /* The module's one exported symbol. Returns NULL when it cannot run in this process. */

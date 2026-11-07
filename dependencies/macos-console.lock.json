@@ -69,7 +69,7 @@
   "architecture": "arm64",
   "productEnabled": false,
   "releaseBlockers": [
-    "Guest worker shutdown and storage completion are not acknowledged by upstream module ABI v1.",
+    "Event-loop worker join is available, but guest stop/join, FEX owner teardown and complete storage acknowledgement remain open.",
     "ConsoleRunner, library/PKG transaction and independent game save reopen remain open."
   ]
 }
