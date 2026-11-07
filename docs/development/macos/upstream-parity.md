@@ -15,7 +15,7 @@ upstream main=`afe83d45`、3.4 tag=`acfd7bcb` 已普通合并为 fork main=`add1
 | Godot 3触摸 | 三种长JNI签名使用真实Android ELF，普通和JIT-less共六条打包会话验证三浮点触摸布局、源设备、按钮/滚轮参数、owner线程、输入/暂停/恢复/销毁与storage-closed | 不是上游全部Godot 3游戏触摸兼容率 |
 | 日语与Mac界面 | 589条复用上游、195条Mac专用翻译；英文/简中/日语各784条，键和格式占位符集合检查，Java/Runner语言白名单与启动传递通过 | 部分旧动态计数/帮助/诊断仍未翻译，真实运行中guest语言变化与其他语言可见验收单列 |
 | 既有Android产品链路 | Unity/Minecraft、Cocos/FMOD、Godot4/NativeBridge、GameMaker、SDL/DXVK、Rockstar、Unreal/NativeActivity，Java/Dalvik/Flutter/Python/.NET，WebView/WebRunner、Geode、OBB/分包、账号/Play详情、AOT/JIT-less沿用当前接线和相应回归 | 真实游戏/服务/设备的未验收项仍见具体开放项，不由构建或上游宣传成功率推导 |
-| PS4 | 真实公开核心/FEX和45个子模块已固定；实现缺失宿主JIT hooks，真实arm64核心编译/加载、独占导出与系统依赖验证通过。真实备份队列已修复排空/拒绝新增/失败回执/保留旧备份，并跨进程读回 | 核心尚未进入Product；guest线程停止/回收、完整storage回执、资料库/PKG事务与ConsoleRunner/窗口输入仍未交付 |
+| PS4 | 真实公开核心/FEX和45个子模块已固定；实现缺失宿主JIT hooks，真实arm64核心编译/加载、独占导出与系统依赖验证通过。真实备份队列已修复排空/拒绝新增/失败回执/保留旧备份，并跨进程读回；模块event-loop join、native pthread/TLS回收已有受控验证 | 核心尚未进入Product；guest线程停止/回收、完整storage回执、资料库/PKG事务与ConsoleRunner/窗口输入仍未交付 |
 | ARM32 / AOSP / VM | 解释器/Binder/AOSP准备层已编译；独立VM框架与生命周期工具已有实现 | ARM32产品启动仍关闭，完整AOSP服务与VM游戏/存档/发行门槛仍开放 |
 
 Mac不移植StikDebug/attach、TrollStore/SideStore/IPA分发、p12导入、iPhone/iPad布局和iOS发行流程。3.4只涉及这些平台流程的改动保留在共享源码，不成为Mac待办；PS4/Android/ARM32/AOSP/VM并非iOS专属。

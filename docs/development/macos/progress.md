@@ -1,6 +1,6 @@
 # 审计进度
 
-## 2026-11-07：PS4 模块线程与 native TLS 回收已验证，交付收尾
+## 2026-11-07：PS4 模块线程与 native TLS 回收已交付，完整guest/storage仍开放
 
 本轮从干净 `0f1a53f1` 开始，两远端fetch无新增：upstream=`afe83d45`、main=`add16673`，无需新合并，无冲突。再次实时枚举发现原Product/PID2083仍运行；CUA确认空闲资料库/AIDA64，当前12条目（含用户新增HGhub），无Runner或本项目VM。已正常退出，核对PID消失后才构建。此前摘要写无主程序被这次实时证据纠正。
 
@@ -10,7 +10,7 @@ PS4实际wrapper不再detach：保留pthread、显式join，拒绝self join并�
 
 默认 **216/216（372.49秒）**、包验证18 arm64 Mach-O/407 Java资源/英简中日各784条通过。158份本轮监督记录为128次exit0、29次预期70、1次已有Orbit负向夹具正常exit74，没有signal/128+signal，latch不存在。与先前记录的过滤口径不作等量比较；不能反推11月4日现象。没有新增loader/AOT/解释器源依赖，本机不重复P0，旧25/25不冒充本轮。
 
-Product主程序/NativeRunner摘要与原build30相同，PS4模块仍不打包，保留3.4.0/build30。CUA仅单次重新启动，AX/截图核对Home、原图标/TabView、12条目及首页图标，未改偏好、开游戏或VM，留在首页。实际PID见current-ps4-lifecycle-gui.json；尚待本批fork提交/推送与CI读回。
+Product主程序/NativeRunner摘要与原build30相同，PS4模块仍不打包，保留3.4.0/build30。CUA仅单次重新启动，AX/截图核对Home、原图标/TabView、12条目及首页图标，未改偏好、开游戏或VM，留在首页。实际PID73366见current-ps4-lifecycle-gui.json。源码 [2339cc78](https://github.com/ruabbit/Husk-macOS/commit/2339cc78394073271cec2c6bb6cda630a199be6b) 已正常推送origin/codex/macos-p0；main=add16673保持，两分支远端SHA读回一致。[CI 42348747864](https://github.com/ruabbit/Husk-macOS/actions/runs/42348747864)已completed/success：构建/包检查、59项hosted核心回归（51.00秒）和25项P0检查通过，build-and-core 8分9秒，hardware skipped。PS4依赖验证属于本机证据，CI中的iOS语法项不代表iOS链接/签名/真机。每日husk任务已实际更新并全文精确读回，保持09:00/ACTIVE/原名称与线程；接续新的PS4 guest/FEX/storage待办。
 
 完整迁移继续开放。模块event-loop和native pthread回收不等于FEX/guest正常停止或storage-closed。下一步仍是RunMainEntry正常返回/致命halt（当前无限sleep及abort）、最后guest退出断言/宿主join语义、FEX owner释放/HLE阻塞/纯CPU停止、guest回调/worker排空，再统一SaveMemory/挂载存档/备份/数据库，最后接ConsoleRunner/资料库/PKG/窗口输入及独立存档重开。未运行PS4游戏，不声称兼容；ARM32/AOSP/VM等其余具体缺口保持开放，iOS专属排除范围保持。证据复用build/logs/current-ps4-lifecycle-*、current-ps4-module-lifecycle-*及Console/dependency-verification.json。
 

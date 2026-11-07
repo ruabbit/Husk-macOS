@@ -8,7 +8,7 @@
   "integration": "Ordinary merges main=add16673 and macOS=dd96a0ab preserve both histories; four macOS conflicts resolved by behavior. Candidate 3.4/build30 is locally verified; PS4 product lifecycle remains open.",
   "topicBranch": "claude/epic-hypatia-2hsqfv",
   "topicRevision": "756c8d0c9d81ffcf7e282cac98a69af1ff299522",
-  "deliveryStatus": "locally-verified-push-pending",
+  "deliveryStatus": "verified-and-pushed",
   "release": {
     "tag": "3.4",
     "revision": "acfd7bcb6d1d2f6655a24e43d1d6f87cf142667a",
@@ -55,8 +55,8 @@
     "fullDefaultSuitePassed": true,
     "newBundleVerified": true,
     "newCandidateRestarted": true,
-    "pushed": false,
-    "remoteSHAsVerified": false,
+    "pushed": true,
+    "remoteSHAsVerified": true,
     "previousCI": 42276517688,
     "blocker": "No blocker to delivering the validated 3.4 candidate. Full migration remains open: PS4 guest worker/storage lifecycle and product routing, ARM32/AOSP, VM, and real sample/device acceptance.",
     "conflicts": {
@@ -212,6 +212,20 @@
       "signals": 0,
       "faultLatch": false,
       "evidence": "build/logs/current-ps4-lifecycle-supervisor-audit.json"
+    },
+    "sourceRevision": "2339cc78394073271cec2c6bb6cda630a199be6b",
+    "ci": {
+      "run": 42348747864,
+      "url": "https://github.com/ruabbit/Husk-macOS/actions/runs/42348747864",
+      "head": "2339cc78394073271cec2c6bb6cda630a199be6b",
+      "status": "completed",
+      "note": "Hosted build/core/P0 only; real PS4 dependency validation is local.",
+      "conclusion": "success",
+      "hostedCoreTests": 59,
+      "hostedCoreSeconds": 51.0,
+      "p0Checks": 25,
+      "buildAndCoreSeconds": 489,
+      "hardware": "skipped"
     }
   },
   "javaWebIntegration": {

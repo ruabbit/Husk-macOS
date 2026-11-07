@@ -2,12 +2,12 @@
 
 ## 2026-11-07：本轮继续 PS4 生命周期
 
-- [x] 复核干净 macOS=0f1a53f1、main=add16673、upstream=afe83d45；两远端 fetch 无新增，无本项目运行进程/构建/Git 操作，异常 latch 不存在。
+- [x] 复核干净 macOS=0f1a53f1、main=add16673、upstream=afe83d45；两轮双远端fetch无新增、无Runner/本项目VM/构建/Git操作，异常latch不存在。构建前实时发现空闲Product/PID2083，CUA正常退出并核对PID消失。
 - [x] 回收模块 event-loop worker，保持准备/运行错误，处理 boot/stop 交叠；宿主拒绝无 worker 回收能力的结束确认。
 - [x] 用实际 wrapper 源码的受控边界测试与真实 dylib ABI 检查验证；不代替真实 guest 生命周期。
 - [x] Apple NativeThread/guest join/GC先等待native TLS/pthread完成再回收，实际NativeThread与未准备core调用验证通过。
 - [ ] 继续主 guest 正常返回/致命 halt 区分、FEX owner/TLS/HLE/CPU 停止及最终 join；完整 storage-closed 仍不可发。
-- [ ] 通过对应回归、默认 CTest/包检查后保存 fork 提交、远端/CI 和单次候选 GUI 证据，更新自动化续跑状态。
+- [x] 对应host 9/9、Console依赖15进程、默认216/216（372.49秒）和包检查通过；源码2339cc78正常推送/远端SHA读回；CI42348747864 success（59 hosted/25 P0，hardware skipped）；单次CUA/Home/12条目及自动化全文读回。
 
 ## 2026-11-07：用户要求填补空缺、完成迁移，恢复实施
 
